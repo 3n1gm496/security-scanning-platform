@@ -147,6 +147,7 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 ├── systemd/
 │   ├── security-dashboard.service
 │   ├── security-scanner.service
+│   ├── security-scanner.timer
 │   ├── security-retention.service
 │   └── security-retention.timer
 ├── docker-compose.yml
@@ -307,6 +308,8 @@ LOG_LEVEL=INFO
 
 ### Scheduling con Cron
 
+> **Nota:** Per deployment production si raccomanda l'uso di systemd timers (vedi sezione [Systemd Service](#-deployment)).
+
 ```bash
 # Aggiungi a crontab
 0 2 * * * /opt/security-scanner/scripts/schedule_scan.sh >> /var/log/security-scanner/cron.log 2>&1
@@ -323,6 +326,8 @@ LOG_LEVEL=INFO
 ```
 
 ### Scheduling Retention con Cron
+
+> **Nota:** Per deployment production si raccomanda l'uso di systemd timers (vedi sezione [Systemd Service](#-deployment)).
 
 ```bash
 # Esegue retention giornaliera alle 03:30
@@ -359,15 +364,22 @@ docker compose up -d
 sudo cp systemd/*.service /etc/systemd/system/
 sudo cp systemd/*.timer /etc/systemd/system/
 
-# Enable e start
-sudo systemctl enable security-dashboard security-scanner
-sudo systemctl start security-dashboard security-scanner
+# Enable e start dashboard
+sudo systemctl enable security-dashboard
+sudo systemctl start security-dashboard
 
-# Enable retention timer giornaliero
+# Enable timer per scansioni giornaliere (ore 02:00)
+sudo systemctl enable --now security-scanner.timer
+
+# Enable timer per retention giornaliera (ore 03:30)
 sudo systemctl enable --now security-retention.timer
 
 # Verifica prossima esecuzione timer
-systemctl list-timers security-retention.timer
+systemctl list-timers security-scanner.timer security-retention.timer
+
+# Esecuzione manuale immediata (senza attendere timer)
+sudo systemctl start security-scanner.service
+sudo systemctl start security-retention.service
 ```
 
 ### Kubernetes (Avanzato)

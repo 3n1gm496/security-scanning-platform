@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import secrets
 import time
+import csv
+import io
 from collections import defaultdict, deque
 from pathlib import Path
 from threading import Lock
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -243,6 +245,32 @@ def api_cache_hits(user: str = Depends(get_current_user)) -> dict:
 @app.get("/api/cache-hit-trend")
 def api_cache_hit_trend(days: int = 14, user: str = Depends(get_current_user)) -> list[dict]:
     return cache_hit_trend(DB_PATH, days)
+
+
+@app.get("/api/cache-hit-trend.csv")
+def api_cache_hit_trend_csv(days: int = 14, user: str = Depends(get_current_user)) -> Response:
+    rows = cache_hit_trend(DB_PATH, days)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["day", "tool_runs", "cached_runs", "cache_hit_pct"])
+    for row in rows:
+        writer.writerow(
+            [
+                row.get("day", ""),
+                row.get("tool_runs", 0),
+                row.get("cached_runs", 0),
+                row.get("cache_hit_pct", 0.0),
+            ]
+        )
+
+    content = output.getvalue()
+    output.close()
+
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="cache-hit-trend.csv"'},
+    )
 
 
 @app.get("/api/scans")

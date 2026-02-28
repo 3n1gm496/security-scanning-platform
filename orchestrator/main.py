@@ -179,6 +179,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
         output_path = str(raw_dir / f"{tool_name}.json")
         try:
             cache_hit = False
+            cache_key = ""
             if cache_enabled:
                 cache_key = build_cache_key(
                     tool_name=tool_name,
@@ -209,6 +210,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     raw_output_path=output_path,
                     stderr=result.get("stderr"),
                     finding_count=len(new_findings),
+                    cache_hit=cache_hit,
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -227,6 +229,65 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     raw_output_path=output_path if Path(output_path).exists() else None,
                     error=str(exc),
                     finding_count=0,
+                    cache_hit=False,
+                )
+            )
+
+    def execute_syft() -> None:
+        nonlocal status, error_message, artifacts
+        started_tool = utc_now_iso()
+        output_path = str(raw_dir / "syft.spdx.json")
+        try:
+            cache_hit = False
+            cache_key = ""
+            if cache_enabled:
+                cache_key = build_cache_key(
+                    tool_name="syft",
+                    target_type=target.type,
+                    target_value=target_value,
+                    context={"mode": "sbom"},
+                )
+                cache_hit = load_cached_output(cache_dir, cache_key, output_path, cache_ttl)
+
+            if cache_hit:
+                result = {"exit_code": 0, "stderr": "cache_hit"}
+            else:
+                result = run_syft(target_input, output_path)
+                if cache_enabled and Path(output_path).exists():
+                    store_cached_output(cache_dir, cache_key, output_path)
+
+            artifacts["sbom"] = output_path
+            artifacts["sbom_metadata"] = json.dumps(sbom_metadata(output_path), ensure_ascii=False)
+            tools.append(
+                ToolExecutionResult(
+                    tool="syft",
+                    enabled=True,
+                    success=True,
+                    exit_code=int(result.get("exit_code", 0)),
+                    started_at=started_tool,
+                    finished_at=utc_now_iso(),
+                    raw_output_path=output_path,
+                    artifact_paths=[output_path],
+                    finding_count=0,
+                    cache_hit=cache_hit,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.exception("Syft failed for target %s", target.name)
+            status = "PARTIAL_FAILED"
+            if not error_message:
+                error_message = str(exc)
+            tools.append(
+                ToolExecutionResult(
+                    tool="syft",
+                    enabled=True,
+                    success=False,
+                    exit_code=2,
+                    started_at=started_tool,
+                    finished_at=utc_now_iso(),
+                    error=str(exc),
+                    finding_count=0,
+                    cache_hit=False,
                 )
             )
 
@@ -307,42 +368,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 cache_context={"mode": "zap"},
             )
         if settings["scanners"]["syft"].get("enabled", True):
-            started_tool = utc_now_iso()
-            output_path = str(raw_dir / "syft.spdx.json")
-            try:
-                result = run_syft(target_input, output_path)
-                artifacts["sbom"] = output_path
-                artifacts["sbom_metadata"] = json.dumps(sbom_metadata(output_path), ensure_ascii=False)
-                tools.append(
-                    ToolExecutionResult(
-                        tool="syft",
-                        enabled=True,
-                        success=True,
-                        exit_code=int(result.get("exit_code", 0)),
-                        started_at=started_tool,
-                        finished_at=utc_now_iso(),
-                        raw_output_path=output_path,
-                        artifact_paths=[output_path],
-                        finding_count=0,
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001
-                LOGGER.exception("Syft failed for target %s", target.name)
-                status = "PARTIAL_FAILED"
-                if not error_message:
-                    error_message = str(exc)
-                tools.append(
-                    ToolExecutionResult(
-                        tool="syft",
-                        enabled=True,
-                        success=False,
-                        exit_code=2,
-                        started_at=started_tool,
-                        finished_at=utc_now_iso(),
-                        error=str(exc),
-                        finding_count=0,
-                    )
-                )
+            execute_syft()
 
     elif target.type == "image":
         if settings["scanners"]["bandit"].get("enabled", False):
@@ -389,42 +415,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 cache_context={"mode": "grype"},
             )
         if settings["scanners"]["syft"].get("enabled", True):
-            started_tool = utc_now_iso()
-            output_path = str(raw_dir / "syft.spdx.json")
-            try:
-                result = run_syft(target_input, output_path)
-                artifacts["sbom"] = output_path
-                artifacts["sbom_metadata"] = json.dumps(sbom_metadata(output_path), ensure_ascii=False)
-                tools.append(
-                    ToolExecutionResult(
-                        tool="syft",
-                        enabled=True,
-                        success=True,
-                        exit_code=int(result.get("exit_code", 0)),
-                        started_at=started_tool,
-                        finished_at=utc_now_iso(),
-                        raw_output_path=output_path,
-                        artifact_paths=[output_path],
-                        finding_count=0,
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001
-                LOGGER.exception("Syft failed for image %s", target.name)
-                status = "PARTIAL_FAILED"
-                if not error_message:
-                    error_message = str(exc)
-                tools.append(
-                    ToolExecutionResult(
-                        tool="syft",
-                        enabled=True,
-                        success=False,
-                        exit_code=2,
-                        started_at=started_tool,
-                        finished_at=utc_now_iso(),
-                        error=str(exc),
-                        finding_count=0,
-                    )
-                )
+            execute_syft()
     else:
         raise ValueError(f"Unsupported target type: {target.type}")
 

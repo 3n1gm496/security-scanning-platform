@@ -84,6 +84,7 @@ class ToolExecutionResult:
     stderr: str | None = None
     error: str | None = None
     finding_count: int = 0
+    cache_hit: bool = False
     artifact_paths: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:

@@ -126,6 +126,23 @@
     </section>
 
     <section class="card">
+      <h2>Trend cache hit ultimi 14 giorni</h2>
+      <table>
+        <thead><tr><th>Giorno</th><th>Tool run</th><th>Cached run</th><th>Cache hit %</th></tr></thead>
+        <tbody>
+          {% for row in cache_trend %}
+            <tr>
+              <td>{{ row.day }}</td>
+              <td>{{ row.tool_runs }}</td>
+              <td>{{ row.cached_runs }}</td>
+              <td>{{ row.cache_hit_pct }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
       <h2>Scansioni recenti non clean</h2>
       <table>
         <thead>

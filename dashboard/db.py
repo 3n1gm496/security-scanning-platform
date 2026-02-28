@@ -219,3 +219,52 @@ def cache_hit_stats(db_path: str, limit_scans: int = 200) -> dict[str, Any]:
         "total_runs": total_runs,
         "by_tool": by_tool_payload,
     }
+
+
+def cache_hit_trend(db_path: str, days: int = 14) -> list[dict[str, Any]]:
+    query = """
+        SELECT substr(created_at, 1, 10) AS day, tools_json
+        FROM scans
+        WHERE substr(created_at, 1, 10) >= date('now', ?)
+        ORDER BY day ASC
+    """
+
+    day_totals: dict[str, dict[str, int]] = {}
+
+    with get_connection(db_path) as conn:
+        rows = conn.execute(query, (f"-{days} day",)).fetchall()
+
+    for row in rows:
+        day = str(row["day"])
+        if day not in day_totals:
+            day_totals[day] = {"total": 0, "cached": 0}
+
+        try:
+            tools = json.loads(row["tools_json"] or "[]")
+        except json.JSONDecodeError:
+            tools = []
+
+        if not isinstance(tools, list):
+            continue
+
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            day_totals[day]["total"] += 1
+            if bool(tool.get("cache_hit", False)):
+                day_totals[day]["cached"] += 1
+
+    payload = []
+    for day in sorted(day_totals.keys()):
+        total = day_totals[day]["total"]
+        cached = day_totals[day]["cached"]
+        payload.append(
+            {
+                "day": day,
+                "tool_runs": total,
+                "cached_runs": cached,
+                "cache_hit_pct": round((cached / total) * 100, 2) if total else 0.0,
+            }
+        )
+
+    return payload

@@ -15,6 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from db import (
     cache_hit_stats,
+    cache_hit_trend,
     distinct_targets,
     distinct_tools,
     fetch_kpis,
@@ -153,6 +154,7 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
         "user": user,
         "kpis": fetch_kpis(DB_PATH),
         "cache_stats": cache_hit_stats(DB_PATH),
+        "cache_trend": cache_hit_trend(DB_PATH, 14),
         "severity_breakdown": severity_breakdown(DB_PATH),
         "tool_breakdown": tool_breakdown(DB_PATH),
         "target_breakdown": target_breakdown(DB_PATH),
@@ -236,6 +238,11 @@ def api_trends(days: int = 30, user: str = Depends(get_current_user)) -> list[di
 @app.get("/api/cache-hits")
 def api_cache_hits(user: str = Depends(get_current_user)) -> dict:
     return cache_hit_stats(DB_PATH)
+
+
+@app.get("/api/cache-hit-trend")
+def api_cache_hit_trend(days: int = 14, user: str = Depends(get_current_user)) -> list[dict]:
+    return cache_hit_trend(DB_PATH, days)
 
 
 @app.get("/api/scans")

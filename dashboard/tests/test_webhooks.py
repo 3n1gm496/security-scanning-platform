@@ -4,15 +4,9 @@ Test per il sistema di webhooks.
 import asyncio
 import os
 import sqlite3
-import tempfile
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-# Mock DASHBOARD_DB_PATH prima dell'import
-test_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
-test_db.close()
-os.environ["DASHBOARD_DB_PATH"] = test_db.name
 
 from webhooks import (
     WebhookEvent,
@@ -27,18 +21,15 @@ from webhooks import (
 
 
 @pytest.fixture
-def db_setup():
+def db_setup(isolated_db):
     """Setup test database."""
     init_webhook_tables()
-    yield
-    # Cleanup
-    if os.path.exists(test_db.name):
-        os.unlink(test_db.name)
+    yield isolated_db
 
 
 def test_init_webhook_tables(db_setup):
     """Test che le tabelle webhooks siano create correttamente."""
-    conn = sqlite3.connect(test_db.name)
+    conn = sqlite3.connect(os.environ["DASHBOARD_DB_PATH"])
     cursor = conn.cursor()
     
     # Verifica tabella webhooks
@@ -214,7 +205,7 @@ async def test_trigger_webhook_with_signature(db_setup):
     )
     
     # Leggi webhook completo dal DB (incluso secret)
-    conn = sqlite3.connect(test_db.name)
+    conn = sqlite3.connect(os.environ["DASHBOARD_DB_PATH"])
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM webhooks WHERE id = ?", (webhook_id,))

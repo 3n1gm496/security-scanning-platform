@@ -3,15 +3,9 @@ Test per il sistema RBAC e API keys.
 """
 import os
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
-
-# Mock DASHBOARD_DB_PATH prima dell'import
-test_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
-test_db.close()
-os.environ["DASHBOARD_DB_PATH"] = test_db.name
 
 from rbac import (
     Role,
@@ -27,18 +21,15 @@ from rbac import (
 
 
 @pytest.fixture
-def db_setup():
+def db_setup(isolated_db):
     """Setup test database."""
     init_rbac_tables()
-    yield
-    # Cleanup
-    if os.path.exists(test_db.name):
-        os.unlink(test_db.name)
+    yield isolated_db
 
 
 def test_init_rbac_tables(db_setup):
     """Test che le tabelle RBAC siano create correttamente."""
-    conn = sqlite3.connect(test_db.name)
+    conn = sqlite3.connect(os.environ["DASHBOARD_DB_PATH"])
     cursor = conn.cursor()
     
     # Verifica tabella api_keys

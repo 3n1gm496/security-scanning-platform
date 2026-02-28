@@ -519,6 +519,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"), help="Logging level")
     parser.add_argument("--fail-on-policy-block", action="store_true", help="Exit with code 3 when policy status is BLOCK")
     parser.add_argument("--json-output", help="Optional path for aggregate JSON output")
+    parser.add_argument("--retention-only", action="store_true", help="Run only retention cleanup and exit")
+    parser.add_argument("--retention-dry-run", action="store_true", help="Preview retention cleanup without deleting files")
     return parser
 
 
@@ -527,14 +529,21 @@ def main() -> int:
     args = parser.parse_args()
     setup_logging(args.log_level)
     settings = resolve_settings(args.settings)
-    init_db(settings["paths"]["db_path"])
-    retention_result = apply_retention(settings)
+    retention_result = apply_retention(settings, dry_run=args.retention_dry_run)
     LOGGER.info(
-        "Retention cleanup: reports=%s workspaces=%s cache=%s",
+        "Retention cleanup: reports=%s workspaces=%s cache=%s dry_run=%s",
         retention_result["reports_removed"],
         retention_result["workspaces_removed"],
         retention_result["cache_removed"],
+        retention_result["dry_run"],
     )
+
+    if args.retention_only:
+        payload = {"retention": retention_result, "generated_at": utc_now_iso()}
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
+
+    init_db(settings["paths"]["db_path"])
 
     try:
         targets = resolve_targets(args)

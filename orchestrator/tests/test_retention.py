@@ -53,6 +53,7 @@ def test_apply_retention_removes_expired_entries(tmp_path):
     assert result["reports_removed"] == 1
     assert result["workspaces_removed"] == 1
     assert result["cache_removed"] == 1
+    assert result["dry_run"] is False
 
     assert not old_report.exists()
     assert new_report.exists()
@@ -73,5 +74,33 @@ def test_apply_retention_disabled(tmp_path):
 
     result = apply_retention(settings)
 
-    assert result == {"reports_removed": 0, "workspaces_removed": 0, "cache_removed": 0}
+    assert result == {"reports_removed": 0, "workspaces_removed": 0, "cache_removed": 0, "dry_run": False}
+    assert old_report.exists()
+
+
+def test_apply_retention_dry_run(tmp_path):
+    reports_dir = tmp_path / "reports"
+    old_report = reports_dir / "old-scan"
+    _touch_with_age(old_report, 30)
+
+    settings = {
+        "paths": {
+            "reports_dir": str(reports_dir),
+            "workspace_dir": str(tmp_path / "workspaces"),
+        },
+        "cache": {"dir": str(tmp_path / "cache")},
+        "retention": {
+            "enabled": True,
+            "reports_days": 14,
+            "workspaces_days": 3,
+            "cache_days": 7,
+        },
+    }
+
+    result = apply_retention(settings, dry_run=True)
+
+    assert result["reports_removed"] == 1
+    assert result["workspaces_removed"] == 0
+    assert result["cache_removed"] == 0
+    assert result["dry_run"] is True
     assert old_report.exists()

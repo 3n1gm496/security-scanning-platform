@@ -142,7 +142,8 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 ├── scripts/
 │   ├── init_demo.sh
 │   ├── run_scan.sh
-│   └── schedule_scan.sh
+│   ├── schedule_scan.sh
+│   └── schedule_retention.sh
 ├── systemd/
 │   ├── security-dashboard.service
 │   └── security-scanner.service
@@ -307,6 +308,23 @@ LOG_LEVEL=INFO
 ```bash
 # Aggiungi a crontab
 0 2 * * * /opt/security-scanner/scripts/schedule_scan.sh >> /var/log/security-scanner/cron.log 2>&1
+```
+
+### Retention Manuale (Cleanup)
+
+```bash
+# Esegue solo retention e termina
+./scripts/run_scan.sh --retention-only --settings config/settings.yaml
+
+# Dry-run retention (nessuna cancellazione)
+./scripts/run_scan.sh --retention-only --retention-dry-run --settings config/settings.yaml
+```
+
+### Scheduling Retention con Cron
+
+```bash
+# Esegue retention giornaliera alle 03:30
+30 3 * * * /opt/security-scanner/scripts/schedule_retention.sh >> /var/log/security-scanner/retention.log 2>&1
 ```
 
 ### API REST

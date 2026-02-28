@@ -1,11 +1,11 @@
 """
-Export findings in multiple formats: JSON, CSV, SARIF, HTML.
+Export findings in multiple formats: JSON, CSV, SARIF, HTML, PDF.
 """
 import csv
 import json
 import os
 from datetime import datetime, timezone
-from io import StringIO
+from io import StringIO, BytesIO
 from typing import List, Dict, Any
 
 # SARIF format version
@@ -383,3 +383,212 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
 """
     
     return html
+
+
+def export_to_pdf(
+    findings: List[Dict[str, Any]],
+    scan_info: Dict[str, Any] = None,
+    analytics_data: Dict[str, Any] = None
+) -> bytes:
+    """
+    Export findings to PDF format with charts and analytics.
+    
+    Args:
+        findings: List of finding dictionaries
+        scan_info: Optional scan metadata
+        analytics_data: Optional analytics data (risk distribution, compliance, etc.)
+    
+    Returns:
+        PDF file content as bytes
+    """
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import (
+            SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
+            PageBreak, Image
+        )
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    except ImportError:
+        raise ImportError("reportlab is required for PDF export. Install with: pip install reportlab")
+    
+    scan_info = scan_info or {}
+    analytics_data = analytics_data or {}
+    
+    # Create PDF buffer
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading2_style = ParagraphStyle(
+        'CustomHeading2',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#764ba2'),
+        spaceAfter=12,
+        spaceBefore=20
+    )
+    
+    # Title
+    story.append(Paragraph("Security Scan Report", title_style))
+    story.append(Spacer(1, 0.2 * inch))
+    
+    # Scan metadata
+    if scan_info:
+        metadata = [
+            ["Scan ID:", scan_info.get("id", "N/A")],
+            ["Target:", f"{scan_info.get('target_type', 'N/A')} - {scan_info.get('target_name', 'N/A')}"],
+            ["Status:", scan_info.get("status", "N/A")],
+            ["Created:", scan_info.get("created_at", "N/A")],
+            ["Findings:", str(scan_info.get("findings_count", len(findings)))],
+        ]
+        
+        metadata_table = Table(metadata, colWidths=[1.5 * inch, 4.5 * inch])
+        metadata_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f0f0f0')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        
+        story.append(metadata_table)
+        story.append(Spacer(1, 0.3 * inch))
+    
+    # Executive Summary
+    story.append(Paragraph("Executive Summary", heading2_style))
+    
+    severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+    for finding in findings:
+        sev = finding.get("severity", "INFO").upper()
+        if sev in severity_counts:
+            severity_counts[sev] += 1
+    
+    summary_data = [
+        ["Severity", "Count"],
+        ["CRITICAL", severity_counts["CRITICAL"]],
+        ["HIGH", severity_counts["HIGH"]],
+        ["MEDIUM", severity_counts["MEDIUM"]],
+        ["LOW", severity_counts["LOW"]],
+        ["INFO", severity_counts["INFO"]],
+        ["TOTAL", len(findings)],
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[3 * inch, 2 * inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f0f0f0')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    
+    story.append(summary_table)
+    story.append(Spacer(1, 0.4 * inch))
+    
+    # Analytics data (if provided)
+    if analytics_data:
+        story.append(Paragraph("Risk Analysis", heading2_style))
+        
+        risk_dist = analytics_data.get("risk_distribution", {})
+        if risk_dist:
+            risk_data = [
+                ["Metric", "Value"],
+                ["Total Findings", risk_dist.get("total_findings", 0)],
+                ["Average Risk Score", f"{risk_dist.get('average_risk', 0)}/100"],
+                ["Maximum Risk Score", f"{risk_dist.get('max_risk', 0)}/100"],
+                ["High Risk Findings (≥50)", risk_dist.get("high_risk_count", 0)],
+            ]
+            
+            risk_table = Table(risk_data, colWidths=[3.5 * inch, 2 * inch])
+            risk_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#764ba2')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            
+            story.append(risk_table)
+            story.append(Spacer(1, 0.3 * inch))
+    
+    # Detailed Findings
+    story.append(PageBreak())
+    story.append(Paragraph("Detailed Findings", heading2_style))
+    
+    # Group by severity
+    by_severity = {"CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": [], "INFO": []}
+    for finding in findings:
+        sev = finding.get("severity", "INFO").upper()
+        if sev in by_severity:
+            by_severity[sev].append(finding)
+    
+    # Display findings by severity
+    for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]:
+        findings_list = by_severity[severity]
+        if not findings_list:
+            continue
+        
+        story.append(Spacer(1, 0.2 * inch))
+        story.append(Paragraph(f"{severity} Severity ({len(findings_list)} findings)", styles['Heading3']))
+        story.append(Spacer(1, 0.1 * inch))
+        
+        for idx, finding in enumerate(findings_list[:50], 1):  # Limit to 50 per severity
+            title = finding.get("title", "Untitled")
+            tool = finding.get("tool", "unknown")
+            category = finding.get("category", "N/A")
+            
+            finding_text = f"<b>{idx}. {title}</b><br/>"
+            finding_text += f"Tool: {tool} | Category: {category}<br/>"
+            
+            if finding.get("file"):
+                finding_text += f"Location: {finding['file']}"
+                if finding.get("line"):
+                    finding_text += f":{finding['line']}"
+                finding_text += "<br/>"
+            
+            if finding.get("description"):
+                desc = finding["description"][:200]
+                if len(finding["description"]) > 200:
+                    desc += "..."
+                finding_text += f"<i>{desc}</i><br/>"
+            
+            story.append(Paragraph(finding_text, styles['Normal']))
+            story.append(Spacer(1, 0.1 * inch))
+    
+    # Footer
+    story.append(Spacer(1, 0.5 * inch))
+    footer_text = f"Report generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+    story.append(Paragraph(footer_text, ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey, alignment=TA_CENTER)))
+    
+    # Build PDF
+    doc.build(story)
+    pdf_content = buffer.getvalue()
+    buffer.close()
+    
+    return pdf_content

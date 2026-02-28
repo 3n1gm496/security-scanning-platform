@@ -54,6 +54,15 @@ from export import (
     export_to_csv,
     export_to_sarif,
     export_to_html,
+    export_to_pdf,
+)
+from analytics import (
+    calculate_risk_score,
+    get_risk_distribution,
+    get_compliance_summary,
+    get_trend_analysis,
+    get_target_risk_ranking,
+    get_tool_effectiveness,
 )
 
 APP_TITLE = "Security Scanning Dashboard"
@@ -486,17 +495,18 @@ def toggle_webhook_endpoint(
 
 @app.get("/api/export/findings", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def export_findings_endpoint(
-    format: str = Query(..., pattern="^(json|csv|sarif|html)$"),
+    format: str = Query(..., pattern="^(json|csv|sarif|html|pdf)$"),
     limit: int = Query(1000, ge=1, le=10000),
     severity: str | None = None,
     tool: str | None = None,
     target: str | None = None,
     scan_id: int | None = None,
+    include_analytics: bool = Query(False),
     auth: AuthContext = Depends(require_auth)
 ) -> Response:
     """
     Export findings in multiple formats.
-    Supported formats: json, csv, sarif, html
+    Supported formats: json, csv, sarif, html, pdf
     """
     # Fetch findings
     findings = list_findings(
@@ -508,32 +518,48 @@ def export_findings_endpoint(
         scan_id=scan_id
     )
     
+    # Get scan info if scan_id provided
+    scan_info = {}
+    if scan_id:
+        scans = list_scans(DB_PATH, limit=1)
+        for scan in scans:
+            if scan.get("id") == str(scan_id):
+                scan_info = scan
+                break
+    
     # Export based on format
     if format == "json":
         content = export_to_json(findings)
         media_type = "application/json"
-        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
     
     elif format == "csv":
         content = export_to_csv(findings)
         media_type = "text/csv"
-        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
     
     elif format == "sarif":
         content = export_to_sarif(findings)
         media_type = "application/json"
-        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.sarif"
+        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.sarif"
     
     elif format == "html":
-        scan_info = {}
-        if scan_id:
-            scans = list_scans(DB_PATH, limit=1, scan_id=scan_id)
-            if scans:
-                scan_info = scans[0]
-        
         content = export_to_html(findings, scan_info)
         media_type = "text/html"
-        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
+        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"
+    
+    elif format == "pdf":
+        # Gather analytics data if requested
+        analytics_data = {}
+        if include_analytics:
+            analytics_data = {
+                "risk_distribution": get_risk_distribution(DB_PATH),
+                "compliance": get_compliance_summary(DB_PATH),
+            }
+        
+        content = export_to_pdf(findings, scan_info, analytics_data)
+        media_type = "application/pdf"
+        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"
     
     else:
         raise HTTPException(
@@ -546,3 +572,74 @@ def export_findings_endpoint(
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Advanced Analytics Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/analytics/risk-distribution", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def analytics_risk_distribution(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get risk score distribution across all findings."""
+    return get_risk_distribution(DB_PATH)
+
+
+@app.get("/api/analytics/compliance", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def analytics_compliance(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get OWASP Top 10 and CWE compliance mapping."""
+    return get_compliance_summary(DB_PATH)
+
+
+@app.get("/api/analytics/trends", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def analytics_trends(
+    days: int = Query(90, ge=7, le=365),
+    auth: AuthContext = Depends(require_auth)
+) -> dict:
+    """Get detailed trend analysis with risk scoring over time."""
+    return get_trend_analysis(DB_PATH, days=days)
+
+
+@app.get("/api/analytics/target-risk", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def analytics_target_risk(auth: AuthContext = Depends(require_auth)) -> list[dict]:
+    """Get targets ranked by aggregated risk score."""
+    return get_target_risk_ranking(DB_PATH)
+
+
+@app.get("/api/analytics/tool-effectiveness", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def analytics_tool_effectiveness(auth: AuthContext = Depends(require_auth)) -> list[dict]:
+    """Analyze tool effectiveness by findings and risk detection."""
+    return get_tool_effectiveness(DB_PATH)
+
+
+@app.get("/api/analytics/finding-risk/{finding_id}", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def analytics_finding_risk(
+    finding_id: int,
+    auth: AuthContext = Depends(require_auth)
+) -> dict:
+    """Calculate risk score for a specific finding."""
+    findings = list_findings(DB_PATH, limit=1, scan_id=None)
+    
+    # Find specific finding
+    with get_connection(DB_PATH) as conn:
+        finding = conn.execute(
+            "SELECT * FROM findings WHERE id = ?",
+            (finding_id,)
+        ).fetchone()
+    
+    if not finding:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Finding not found"
+        )
+    
+    finding_dict = dict(finding)
+    risk_score = calculate_risk_score(finding_dict)
+    
+    return {
+        "finding_id": finding_id,
+        "risk_score": round(risk_score, 2),
+        "severity": finding_dict.get("severity"),
+        "category": finding_dict.get("category"),
+        "has_cve": bool(finding_dict.get("cve")),
+        "has_location": bool(finding_dict.get("file") and finding_dict.get("line")),
+    }

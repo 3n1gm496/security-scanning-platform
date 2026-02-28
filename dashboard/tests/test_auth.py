@@ -33,43 +33,50 @@ def stub_db(monkeypatch):
         monkeypatch.setattr(module, "scans_trend", lambda path, days: [])
         monkeypatch.setattr(module, "recent_failed_scans", lambda path, n: [])
 
-client = TestClient(app)
+@pytest.fixture
+def client():
+    with TestClient(app) as c:
+        yield c
 
 
-def test_login_redirects_anonymous():
+def test_login_redirects_anonymous(client):
     resp = client.get("/", follow_redirects=False)
     assert resp.status_code in (307, 302)
     # should redirect to login
     assert "/login" in resp.headers["location"]
 
 
-def test_login_wrong_credentials():
+def test_login_wrong_credentials(client):
     resp = client.post("/login", data={"username": "foo", "password": "bar"})
     assert resp.status_code == 401
     assert "Credenziali non valide" in resp.text
 
 
-def test_login_and_access():
+def test_login_and_access(client):
     resp = client.post("/login", data={"username": "testuser", "password": "testpass"}, follow_redirects=False)
     assert resp.status_code == 302
-    # capture session cookie
-    cookie = resp.cookies.get("session")
-    assert cookie
-    # use cookie to access protected page
-    resp2 = client.get("/", cookies={"session": cookie})
+    # use persisted session cookie on the same client
+    resp2 = client.get("/")
     assert resp2.status_code == 200
     assert "Security Scanning Dashboard" in resp2.text
 
 
-def test_logout():
+def test_logout(client):
     # login first
-    resp = client.post("/login", data={"username": "testuser", "password": "testpass"}, follow_redirects=False)
-    cookie = resp.cookies.get("session")
-    assert cookie
+    client.post("/login", data={"username": "testuser", "password": "testpass"}, follow_redirects=False)
     # logout
-    resp2 = client.get("/logout", cookies={"session": cookie}, follow_redirects=False)
+    resp2 = client.get("/logout", follow_redirects=False)
     assert resp2.status_code == 302
     assert "/login" in resp2.headers["location"]
     # attempt access again (no cookies)
     resp3 = client.get("/", follow_redirects=False)
     assert resp3.status_code in (307, 302)
+
+
+def test_cache_hit_trend_csv(client):
+    client.post("/login", data={"username": "testuser", "password": "testpass"}, follow_redirects=False)
+    resp = client.get("/api/cache-hit-trend.csv?days=14")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert "attachment; filename=\"cache-hit-trend.csv\"" in resp.headers.get("content-disposition", "")
+    assert "day,tool_runs,cached_runs,cache_hit_pct" in resp.text

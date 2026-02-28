@@ -122,7 +122,7 @@ def login_page(request: Request, error: str | None = None) -> HTMLResponse:
     """Mostra il form di login. Se già autenticato, reindirizza all'overview."""
     if request.session.get("user"):
         return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return templates.TemplateResponse(request, "login.html", {"error": error})
 
 
 @app.post("/login", response_class=HTMLResponse)
@@ -134,8 +134,9 @@ async def login(
     # confronta in modo sicuro con le credenziali memorizzate
     if not (secrets.compare_digest(username or "", USERNAME) and secrets.compare_digest(password or "", PASSWORD)):
         return templates.TemplateResponse(
+            request,
             "login.html",
-            {"request": request, "error": "Credenziali non valide"},
+            {"error": "Credenziali non valide"},
             status_code=401,
         )
     # setta la sessione e reindirizza
@@ -152,7 +153,6 @@ def logout(request: Request) -> HTMLResponse:
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
     context = {
-        "request": request,
         "user": user,
         "kpis": fetch_kpis(DB_PATH),
         "cache_stats": cache_hit_stats(DB_PATH),
@@ -163,7 +163,7 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
         "trend": scans_trend(DB_PATH, 14),
         "recent_scans": recent_failed_scans(DB_PATH, 10),
     }
-    return templates.TemplateResponse("index.html", context)
+    return templates.TemplateResponse(request, "index.html", context)
 
 
 @app.get("/scans", response_class=HTMLResponse)
@@ -178,9 +178,9 @@ def scans_page(
     for scan in scans:
         scan["artifacts"] = parse_artifacts(scan)
     return templates.TemplateResponse(
+        request,
         "scans.html",
         {
-            "request": request,
             "user": user,
             "scans": scans,
             "targets": distinct_targets(DB_PATH),
@@ -211,9 +211,9 @@ def findings_page(
         category=category,
     )
     return templates.TemplateResponse(
+        request,
         "findings.html",
         {
-            "request": request,
             "user": user,
             "findings": findings,
             "tools": distinct_tools(DB_PATH),

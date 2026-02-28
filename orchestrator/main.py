@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
 import os
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -65,6 +67,7 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings.setdefault("paths", {})
     settings.setdefault("scanners", {})
     settings.setdefault("policy", {})
+    settings.setdefault("execution", {})
     settings["paths"].setdefault("db_path", os.getenv("ORCH_DB_PATH", "/data/security_scans.db"))
     settings["paths"].setdefault("reports_dir", os.getenv("REPORTS_DIR", "/data/reports"))
     settings["paths"].setdefault("workspace_dir", os.getenv("WORKSPACE_DIR", "/data/workspaces"))
@@ -79,6 +82,7 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["scanners"].setdefault("owasp_zap", {"enabled": False})
     settings["policy"].setdefault("block_on_severities", ["CRITICAL"])
     settings["policy"].setdefault("block_on_secret_categories", True)
+    settings["execution"].setdefault("max_concurrent_targets", int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2")))
     return settings
 
 
@@ -396,6 +400,60 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
     return result
 
 
+def run_targets_concurrently(
+    targets: list[TargetSpec],
+    settings: dict[str, Any],
+    fail_on_policy_block: bool,
+) -> tuple[list[dict[str, Any]], int]:
+    max_workers = max(1, int(settings.get("execution", {}).get("max_concurrent_targets", 1)))
+    results: list[dict[str, Any]] = []
+    overall_exit = 0
+
+    def _scan_target(target: TargetSpec) -> dict[str, Any]:
+        LOGGER.info("Starting scan for target=%s type=%s", target.name, target.type)
+        target_settings = copy.deepcopy(settings)
+        try:
+            result = run_single_scan(target, target_settings)
+            return {
+                "payload": result.to_dict(),
+                "policy_status": result.policy_status,
+                "status": result.status,
+                "target": target.name,
+                "error": None,
+            }
+        except (ScannerError, FileNotFoundError, ValueError) as exc:
+            LOGGER.exception("Scan failed for target=%s", target.name)
+            return {
+                "payload": {
+                    "scan_id": str(uuid.uuid4()),
+                    "target_name": target.name,
+                    "target_type": target.type,
+                    "target_value": target.resolved_target,
+                    "status": "FAILED",
+                    "policy_status": "UNKNOWN",
+                    "error_message": str(exc),
+                    "tools": [],
+                    "findings": [],
+                },
+                "policy_status": "UNKNOWN",
+                "status": "FAILED",
+                "target": target.name,
+                "error": str(exc),
+            }
+
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="target-scan") as executor:
+        futures = [executor.submit(_scan_target, target) for target in targets]
+        for future in as_completed(futures):
+            item = future.result()
+            results.append(item["payload"])
+            if item["policy_status"] == "BLOCK" and fail_on_policy_block:
+                overall_exit = max(overall_exit, 3)
+            elif item["status"] in {"PARTIAL_FAILED", "FAILED"}:
+                overall_exit = max(overall_exit, 4)
+
+    return results, overall_exit
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Centralized Linux-based security scan orchestrator")
     parser.add_argument("--target-type", choices=["git", "local", "image"], help="Target type to scan")
@@ -423,34 +481,11 @@ def main() -> int:
         LOGGER.error("Invalid arguments: %s", exc)
         return 2
 
-    results = []
-    overall_exit = 0
-
-    for target in targets:
-        LOGGER.info("Starting scan for target=%s type=%s", target.name, target.type)
-        try:
-            result = run_single_scan(target, settings)
-            results.append(result.to_dict())
-            if result.policy_status == "BLOCK" and args.fail_on_policy_block:
-                overall_exit = max(overall_exit, 3)
-            elif result.status == "PARTIAL_FAILED":
-                overall_exit = max(overall_exit, 4)
-        except (ScannerError, FileNotFoundError, ValueError) as exc:
-            LOGGER.exception("Scan failed for target=%s", target.name)
-            overall_exit = max(overall_exit, 4)
-            results.append(
-                {
-                    "scan_id": str(uuid.uuid4()),
-                    "target_name": target.name,
-                    "target_type": target.type,
-                    "target_value": target.resolved_target,
-                    "status": "FAILED",
-                    "policy_status": "UNKNOWN",
-                    "error_message": str(exc),
-                    "tools": [],
-                    "findings": [],
-                }
-            )
+    results, overall_exit = run_targets_concurrently(
+        targets=targets,
+        settings=settings,
+        fail_on_policy_block=args.fail_on_policy_block,
+    )
 
     payload = {"results": results, "generated_at": utc_now_iso()}
     if args.json_output:

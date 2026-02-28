@@ -44,3 +44,8 @@ policy:
   block_on_severities:
     - CRITICAL
   block_on_secret_categories: true
+
+execution:
+  max_concurrent_targets: 2
+
+  # Additional execution settings can be added here

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Security Retention Cleanup Daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+Unit=security-retention.service
+
+[Install]
+WantedBy=timers.target

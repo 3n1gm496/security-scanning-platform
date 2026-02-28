@@ -146,7 +146,9 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 │   └── schedule_retention.sh
 ├── systemd/
 │   ├── security-dashboard.service
-│   └── security-scanner.service
+│   ├── security-scanner.service
+│   ├── security-retention.service
+│   └── security-retention.timer
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -355,10 +357,17 @@ docker compose up -d
 ```bash
 # Copia service files
 sudo cp systemd/*.service /etc/systemd/system/
+sudo cp systemd/*.timer /etc/systemd/system/
 
 # Enable e start
 sudo systemctl enable security-dashboard security-scanner
 sudo systemctl start security-dashboard security-scanner
+
+# Enable retention timer giornaliero
+sudo systemctl enable --now security-retention.timer
+
+# Verifica prossima esecuzione timer
+systemctl list-timers security-retention.timer
 ```
 
 ### Kubernetes (Avanzato)

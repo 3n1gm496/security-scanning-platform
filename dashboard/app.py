@@ -49,6 +49,12 @@ from webhooks import (
     toggle_webhook,
     WebhookEvent,
 )
+from export import (
+    export_to_json,
+    export_to_csv,
+    export_to_sarif,
+    export_to_html,
+)
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -472,3 +478,71 @@ def toggle_webhook_endpoint(
         )
     
     return {"status": "updated", "id": webhook_id, "is_active": is_active}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Export Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/export/findings", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def export_findings_endpoint(
+    format: str = Query(..., regex="^(json|csv|sarif|html)$"),
+    limit: int = Query(1000, ge=1, le=10000),
+    severity: str | None = None,
+    tool: str | None = None,
+    target: str | None = None,
+    scan_id: int | None = None,
+    auth: AuthContext = Depends(require_auth)
+) -> Response:
+    """
+    Export findings in multiple formats.
+    Supported formats: json, csv, sarif, html
+    """
+    # Fetch findings
+    findings = list_findings(
+        DB_PATH,
+        limit=limit,
+        severity=severity,
+        tool=tool,
+        target=target,
+        scan_id=scan_id
+    )
+    
+    # Export based on format
+    if format == "json":
+        content = export_to_json(findings)
+        media_type = "application/json"
+        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+    
+    elif format == "csv":
+        content = export_to_csv(findings)
+        media_type = "text/csv"
+        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    elif format == "sarif":
+        content = export_to_sarif(findings)
+        media_type = "application/json"
+        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.sarif"
+    
+    elif format == "html":
+        scan_info = {}
+        if scan_id:
+            scans = list_scans(DB_PATH, limit=1, scan_id=scan_id)
+            if scans:
+                scan_info = scans[0]
+        
+        content = export_to_html(findings, scan_info)
+        media_type = "text/html"
+        filename = f"findings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
+    
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid format"
+        )
+    
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

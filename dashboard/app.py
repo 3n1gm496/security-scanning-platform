@@ -31,6 +31,16 @@ from db import (
     tool_breakdown,
 )
 from monitoring import router as monitoring_router
+from rbac import (
+    Role,
+    Permission,
+    init_rbac_tables,
+    create_api_key,
+    list_api_keys,
+    revoke_api_key,
+    create_default_admin_key,
+)
+from auth import require_auth, require_permission, AuthContext
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -43,6 +53,15 @@ RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_RATE_LIMIT_WINDOW_SECONDS",
 
 app = FastAPI(title=APP_TITLE)
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+
+# Initialize RBAC tables
+init_rbac_tables()
+default_key = create_default_admin_key()
+if default_key:
+    print(f"\n{'='*80}")
+    print(f"DEFAULT ADMIN API KEY: {default_key}")
+    print(f"Store this key securely! It will not be shown again.")
+    print(f"{'='*80}\n")
 
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
@@ -309,3 +328,62 @@ def api_findings(
         scan_id=scan_id,
         category=category,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# API Key Management Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/keys", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
+def get_api_keys(auth: AuthContext = Depends(require_auth)) -> list[dict]:
+    """List all API keys (admin/operator only)."""
+    return list_api_keys()
+
+
+@app.post("/api/keys", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
+def create_new_api_key(
+    name: str = Form(...),
+    role: str = Form(...),
+    expires_days: int | None = Form(None),
+    auth: AuthContext = Depends(require_auth)
+) -> dict:
+    """Create a new API key (admin/operator only)."""
+    try:
+        role_enum = Role(role)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role: {role}"
+        )
+    
+    full_key, prefix = create_api_key(
+        name=name,
+        role=role_enum,
+        expires_days=expires_days,
+        created_by=auth.api_key_prefix or auth.user_id
+    )
+    
+    return {
+        "key": full_key,
+        "prefix": prefix,
+        "role": role,
+        "name": name,
+        "warning": "Store this key securely! It will not be shown again."
+    }
+
+
+@app.delete("/api/keys/{key_prefix}", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
+def delete_api_key(
+    key_prefix: str,
+    auth: AuthContext = Depends(require_auth)
+) -> dict:
+    """Revoke an API key (admin/operator only)."""
+    success = revoke_api_key(key_prefix)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+    
+    return {"status": "revoked", "key_prefix": key_prefix}

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Security Scanning Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Security Scanning Dashboard</h1>
+      <p>MVP Linux-based, open source, centralizzato</p>
+    </div>
+    <nav>
+      <a href="/">Overview</a>
+      <a href="/scans">Scansioni</a>
+      <a href="/findings">Findings</a>
+    </nav>
+    {% if user %}
+    <div class="user-info">
+      <span>{{ user }}</span> | <a href="/logout">Logout</a>
+    </div>
+    {% endif %}
+  </header>
+
+  <main class="container">
+    <section class="grid cards">
+      <div class="card">
+        <h3>Scansioni totali</h3>
+        <p class="metric">{{ kpis.total_scans }}</p>
+      </div>
+      <div class="card">
+        <h3>Findings totali</h3>
+        <p class="metric">{{ kpis.total_findings }}</p>
+      </div>
+      <div class="card critical">
+        <h3>Critical</h3>
+        <p class="metric">{{ kpis.critical_findings }}</p>
+      </div>
+      <div class="card high">
+        <h3>High</h3>
+        <p class="metric">{{ kpis.high_findings }}</p>
+      </div>
+      <div class="card">
+        <h3>Target distinti</h3>
+        <p class="metric">{{ kpis.open_targets }}</p>
+      </div>
+      <div class="card">
+        <h3>Scansioni 7 giorni</h3>
+        <p class="metric">{{ kpis.last_7d_scans }}</p>
+      </div>
+    </section>
+
+    <section class="grid two-cols">
+      <div class="card">
+        <h2>Distribuzione severità</h2>
+        <table>
+          <thead><tr><th>Severity</th><th>Totale</th></tr></thead>
+          <tbody>
+            {% for severity, total in severity_breakdown.items() %}
+              <tr><td>{{ severity }}</td><td>{{ total }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Distribuzione tool</h2>
+        <table>
+          <thead><tr><th>Tool</th><th>Totale</th></tr></thead>
+          <tbody>
+            {% for tool, total in tool_breakdown.items() %}
+              <tr><td>{{ tool }}</td><td>{{ total }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid two-cols">
+      <div class="card">
+        <h2>Trend ultimi 14 giorni</h2>
+        <table>
+          <thead><tr><th>Giorno</th><th>Scansioni</th><th>Findings</th></tr></thead>
+          <tbody>
+            {% for row in trend %}
+              <tr><td>{{ row.day }}</td><td>{{ row.scans }}</td><td>{{ row.findings or 0 }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Target più esposti</h2>
+        <table>
+          <thead><tr><th>Target</th><th>Findings</th></tr></thead>
+          <tbody>
+            {% for target, total in target_breakdown.items() %}
+              <tr><td>{{ target }}</td><td>{{ total }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Scansioni recenti non clean</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Scan ID</th>
+            <th>Target</th>
+            <th>Tipo</th>
+            <th>Status</th>
+            <th>Policy</th>
+            <th>Findings</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for scan in recent_scans %}
+          <tr>
+            <td><code>{{ scan.id }}</code></td>
+            <td>{{ scan.target_name }}</td>
+            <td>{{ scan.target_type }}</td>
+            <td>{{ scan.status }}</td>
+            <td>{{ scan.policy_status }}</td>
+            <td>{{ scan.findings_count }}</td>
+            <td>{{ scan.created_at }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

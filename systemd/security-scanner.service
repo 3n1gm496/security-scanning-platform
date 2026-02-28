@@ -1,0 +1,14 @@
+[Unit]
+Description=Security Scanner Batch Run
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/security-scanner
+ExecStart=/opt/security-scanner/scripts/schedule_scan.sh
+User=securityscan
+Group=securityscan
+
+[Install]
+WantedBy=multi-user.target

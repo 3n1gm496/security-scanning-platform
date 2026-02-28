@@ -1,0 +1,8 @@
+PyYAML==6.0.2
+
+# additional tools used by scanner wrappers
+bandit==1.7.0
+pbr>=5.11.0
+
+# testing
+pytest>=7.0

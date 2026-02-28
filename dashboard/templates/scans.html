@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Scansioni</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Scansioni</h1>
+      <p>Elenco centralizzato delle esecuzioni</p>
+    </div>
+    <nav>
+      <a href="/">Overview</a>
+      <a href="/scans">Scansioni</a>
+      <a href="/findings">Findings</a>
+    </nav>
+    {% if user %}
+    <div class="user-info">
+      <span>{{ user }}</span> | <a href="/logout">Logout</a>
+    </div>
+    {% endif %}
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <form method="get" class="filters">
+        <label>Target
+          <select name="target">
+            <option value="">Tutti</option>
+            {% for item in targets %}
+              <option value="{{ item }}" {% if item == selected_target %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Status
+          <select name="status">
+            <option value="">Tutti</option>
+            {% for item in ["COMPLETED_CLEAN", "COMPLETED_WITH_FINDINGS", "PARTIAL_FAILED", "FAILED"] %}
+              <option value="{{ item }}" {% if item == selected_status %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Policy
+          <select name="policy_status">
+            <option value="">Tutte</option>
+            {% for item in ["PASS", "BLOCK", "UNKNOWN"] %}
+              <option value="{{ item }}" {% if item == selected_policy_status %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <button type="submit">Filtra</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Scan ID</th>
+            <th>Target</th>
+            <th>Tipo</th>
+            <th>Stato</th>
+            <th>Policy</th>
+            <th>Findings</th>
+            <th>Critical</th>
+            <th>High</th>
+            <th>Normalizzato</th>
+            <th>SBOM</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for scan in scans %}
+          <tr>
+            <td><code>{{ scan.id }}</code></td>
+            <td>{{ scan.target_name }}</td>
+            <td>{{ scan.target_type }}</td>
+            <td>{{ scan.status }}</td>
+            <td>{{ scan.policy_status }}</td>
+            <td>{{ scan.findings_count }}</td>
+            <td>{{ scan.critical_count }}</td>
+            <td>{{ scan.high_count }}</td>
+            <td><code>{{ scan.normalized_report_path }}</code></td>
+            <td><code>{{ scan.artifacts.get("sbom", "-") }}</code></td>
+            <td>{{ scan.created_at }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

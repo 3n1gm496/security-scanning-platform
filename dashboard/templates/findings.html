@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Findings</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Findings</h1>
+      <p>Vista centralizzata con filtri per severity, tool e target</p>
+    </div>
+    <nav>
+      <a href="/">Overview</a>
+      <a href="/scans">Scansioni</a>
+      <a href="/findings">Findings</a>
+    </nav>
+    {% if user %}
+    <div class="user-info">
+      <span>{{ user }}</span> | <a href="/logout">Logout</a>
+    </div>
+    {% endif %}
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <form method="get" class="filters">
+        <label>Severity
+          <select name="severity">
+            <option value="">Tutte</option>
+            {% for item in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"] %}
+              <option value="{{ item }}" {% if item == selected_severity %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Tool
+          <select name="tool">
+            <option value="">Tutti</option>
+            {% for item in tools %}
+              <option value="{{ item }}" {% if item == selected_tool %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Target
+          <select name="target">
+            <option value="">Tutti</option>
+            {% for item in targets %}
+              <option value="{{ item }}" {% if item == selected_target %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>Categoria
+          <select name="category">
+            <option value="">Tutte</option>
+            {% for item in ["sast", "sca", "secret", "container", "iac"] %}
+              <option value="{{ item }}" {% if item == selected_category %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <button type="submit">Filtra</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Tool</th>
+            <th>Categoria</th>
+            <th>Target</th>
+            <th>Titolo</th>
+            <th>File</th>
+            <th>Line</th>
+            <th>Package</th>
+            <th>Versione</th>
+            <th>CVE / ID</th>
+            <th>Remediation</th>
+            <th>Scan ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for finding in findings %}
+          <tr>
+            <td class="severity severity-{{ finding.severity|lower }}">{{ finding.severity }}</td>
+            <td>{{ finding.tool }}</td>
+            <td>{{ finding.category }}</td>
+            <td>{{ finding.target_name }}</td>
+            <td>{{ finding.title }}</td>
+            <td><code>{{ finding.file or "-" }}</code></td>
+            <td>{{ finding.line or "-" }}</td>
+            <td>{{ finding.package or "-" }}</td>
+            <td>{{ finding.version or "-" }}</td>
+            <td>{{ finding.cve or "-" }}</td>
+            <td>{{ finding.remediation or "-" }}</td>
+            <td><code>{{ finding.scan_id }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

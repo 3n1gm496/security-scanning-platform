@@ -1,0 +1,46 @@
+paths:
+  db_path: /data/security_scans.db
+  reports_dir: /data/reports
+  workspace_dir: /data/workspaces
+
+scanners:
+  semgrep:
+    enabled: true
+    configs:
+      - p/default
+  trivy:
+    enabled: true
+    severities:
+      - CRITICAL
+      - HIGH
+      - MEDIUM
+    ignore_unfixed: false
+  gitleaks:
+    enabled: true
+  checkov:
+    enabled: true
+  syft:
+    enabled: true
+  # python SAST (Bandit)
+  bandit:
+    enabled: true
+
+  # nuclei templates (pattern-based, requires binaries downloaded)
+  nuclei:
+    enabled: true
+    templates: []  # populate with your nuclei rules directory if available
+    severity: "critical,high,medium"  # limit to critical/high/medium; empty = all
+    tags: ""  # comma-separated tags to include; empty = all (e.g. "xss,sqli,auth")
+
+  # SBOM vulnerability scanner (Grype)
+  grype:
+    enabled: true
+
+  # DAST using OWASP ZAP (requires zap-cli and ZAP binary)
+  owasp_zap:
+    enabled: true
+
+policy:
+  block_on_severities:
+    - CRITICAL
+  block_on_secret_categories: true

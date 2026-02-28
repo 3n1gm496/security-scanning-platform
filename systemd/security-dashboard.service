@@ -1,0 +1,16 @@
+[Unit]
+Description=Security Dashboard via Docker Compose
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/security-scanner
+ExecStart=/usr/bin/docker compose up -d dashboard orchestrator
+ExecStop=/usr/bin/docker compose down
+User=securityscan
+Group=securityscan
+
+[Install]
+WantedBy=multi-user.target

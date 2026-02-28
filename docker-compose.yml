@@ -1,0 +1,36 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator/Dockerfile
+    env_file:
+      - .env
+    environment:
+      ORCH_DB_PATH: ${ORCH_DB_PATH:-/data/security_scans.db}
+      REPORTS_DIR: ${REPORTS_DIR:-/data/reports}
+      WORKSPACE_DIR: ${WORKSPACE_DIR:-/data/workspaces}
+      TRIVY_CACHE_DIR: ${TRIVY_CACHE_DIR:-/data/cache/trivy}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/data
+      - ./config:/app/config:ro
+    restart: "no"
+    profiles: ["manual"]  
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: security-dashboard
+    env_file:
+      - .env
+    environment:
+      DASHBOARD_DB_PATH: ${ORCH_DB_PATH:-/data/security_scans.db}
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-change-me}
+      DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-please-change-this}
+    volumes:
+      - ./data:/data
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+    restart: unless-stopped

@@ -1,0 +1,16 @@
+targets:
+  - name: demo-local-app
+    type: local
+    path: /app/demo/demo-app
+    enabled: true
+
+  - name: demo-image-nginx
+    type: image
+    image: nginx:1.27-alpine
+    enabled: false
+
+  - name: sample-remote-repo
+    type: git
+    repo: https://github.com/OWASP/NodeGoat.git
+    ref: master
+    enabled: false

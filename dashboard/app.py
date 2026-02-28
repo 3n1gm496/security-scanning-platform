@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 import secrets
+import time
+from collections import defaultdict, deque
 from pathlib import Path
+from threading import Lock
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -31,12 +34,59 @@ USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")
 PASSWORD = os.getenv("DASHBOARD_PASSWORD", "change-me")
 # chiave segreta per sessione (usa .env o variabile ambiente sicura)
 SESSION_SECRET = os.getenv("DASHBOARD_SESSION_SECRET", "please-change-this")
+RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_RATE_LIMIT_REQUESTS", "180"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_RATE_LIMIT_WINDOW_SECONDS", "60"))
 
 app = FastAPI(title=APP_TITLE)
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
+
+_RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics"}
+_request_timestamps: dict[str, deque[float]] = defaultdict(deque)
+_rate_limit_lock = Lock()
+
+
+def _client_key(request: Request) -> str:
+    if request.client and request.client.host:
+        return request.client.host
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return "unknown"
+
+
+def _is_rate_limited(client_id: str, now: float) -> bool:
+    with _rate_limit_lock:
+        bucket = _request_timestamps[client_id]
+        threshold = now - RATE_LIMIT_WINDOW_SECONDS
+        while bucket and bucket[0] < threshold:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT_REQUESTS:
+            return True
+        bucket.append(now)
+    return False
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api") and request.url.path not in _RATE_LIMIT_EXCLUDED_PATHS:
+        now = time.monotonic()
+        client_id = _client_key(request)
+        if _is_rate_limited(client_id, now):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Retry later."},
+                headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+            )
+
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")

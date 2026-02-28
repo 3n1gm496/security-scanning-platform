@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Security Scanning Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/dashboard-vue.css">
+  <!-- Vue.js 3 from CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- Chart.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <h1>Security Scanning Dashboard</h1>
+        <p>MVP Linux-based, open source, centralizzato</p>
+      </div>
+      <nav>
+        <a href="/">Overview</a>
+        <a href="/scans">Scansioni</a>
+        <a href="/findings">Findings</a>
+        <a @click.prevent="showAnalytics = !showAnalytics" href="#" class="analytics-link">
+          📊 Analytics {{ showAnalytics ? '▼' : '▶' }}
+        </a>
+      </nav>
+      {% if user %}
+      <div class="user-info">
+        <span>{{ user }}</span> | <a href="/logout">Logout</a>
+      </div>
+      {% endif %}
+    </header>
+
+    <main class="container">
+      <!-- Analytics Panel (collapsible) -->
+      <div v-show="showAnalytics" class="analytics-panel">
+        <h2>📊 Advanced Analytics</h2>
+        
+        <div class="grid three-cols">
+          <div class="card">
+            <h3>Risk Distribution</h3>
+            <canvas ref="riskChart" width="400" height="300"></canvas>
+            <p v-if="analytics.riskDistribution" class="metric-highlight">
+              Avg Risk: {{ analytics.riskDistribution.average_risk }}/100
+            </p>
+          </div>
+          
+          <div class="card">
+            <h3>OWASP Top 10 Compliance</h3>
+            <canvas ref="owaspChart" width="400" height="300"></canvas>
+          </div>
+          
+          <div class="card">
+            <h3>Trend Analysis (30 days)</h3>
+            <canvas ref="trendChart" width="400" height="300"></canvas>
+          </div>
+        </div>
+
+        <div class="grid two-cols">
+          <div class="card">
+            <h3>Target Risk Ranking</h3>
+            <div v-if="analytics.targetRisk" class="risk-list">
+              <div v-for="target in analytics.targetRisk.slice(0, 5)" :key="target.target" class="risk-item">
+                <div class="risk-name">{{ target.target }}</div>
+                <div class="risk-score" :class="getRiskClass(target.average_risk)">
+                  {{ target.average_risk }}/100
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <h3>Tool Effectiveness</h3>
+            <div v-if="analytics.toolEffectiveness" class="tool-list">
+              <div v-for="tool in analytics.toolEffectiveness.slice(0, 5)" :key="tool.tool" class="tool-item">
+                <div class="tool-name">{{ tool.tool }}</div>
+                <div class="tool-stats">
+                  <span class="tool-badge critical">{{ tool.critical_count }} Critical</span>
+                  <span class="tool-badge high">{{ tool.high_count }} High</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Export Reports</h3>
+          <div class="export-buttons">
+            <button @click="exportReport('json')" class="btn-export">📄 JSON</button>
+            <button @click="exportReport('csv')" class="btn-export">📊 CSV</button>
+            <button @click="exportReport('sarif')" class="btn-export">🔍 SARIF</button>
+            <button @click="exportReport('html')" class="btn-export">🌐 HTML</button>
+            <button @click="exportReport('pdf', true)" class="btn-export primary">📕 PDF + Analytics</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Original KPI cards -->
+      <section class="grid cards">
+        <div class="card">
+          <h3>Scansioni totali</h3>
+          <p class="metric">{{ kpis.total_scans }}</p>
+        </div>
+        <div class="card">
+          <h3>Findings totali</h3>
+          <p class="metric">{{ kpis.total_findings }}</p>
+        </div>
+        <div class="card critical">
+          <h3>Critical</h3>
+          <p class="metric">{{ kpis.critical_findings }}</p>
+        </div>
+        <div class="card high">
+          <h3>High</h3>
+          <p class="metric">{{ kpis.high_findings }}</p>
+        </div>
+        <div class="card">
+          <h3>Target distinti</h3>
+          <p class="metric">{{ kpis.open_targets }}</p>
+        </div>
+        <div class="card">
+          <h3>Scansioni 7 giorni</h3>
+          <p class="metric">{{ kpis.last_7d_scans }}</p>
+        </div>
+      </section>
+
+      <section class="grid two-cols">
+        <div class="card">
+          <h2>Distribuzione severità</h2>
+          <canvas ref="severityChart" width="400" height="300"></canvas>
+        </div>
+
+        <div class="card">
+          <h2>Distribuzione tool</h2>
+          <canvas ref="toolChart" width="400" height="300"></canvas>
+        </div>
+      </section>
+
+      <!-- Auto-refresh indicator -->
+      <div class="auto-refresh-indicator" v-if="autoRefresh">
+        <span class="refresh-dot"></span>
+        Auto-refresh attivo ({{ refreshCountdown }}s)
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Pass server data to Vue app
+    window.dashboardData = {
+      kpis: {{ kpis | tojson }},
+      severityBreakdown: {{ severity_breakdown | tojson }},
+      toolBreakdown: {{ tool_breakdown | tojson }},
+      trend: {{ trend | tojson }},
+      targetBreakdown: {{ target_breakdown | tojson }},
+    };
+  </script>
+  <script src="/static/dashboard-vue.js"></script>
+
+</body>
+</html>

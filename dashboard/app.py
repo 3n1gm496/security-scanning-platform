@@ -8,6 +8,7 @@ import io
 from collections import defaultdict, deque
 from pathlib import Path
 from threading import Lock
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -29,6 +30,7 @@ from db import (
     severity_breakdown,
     target_breakdown,
     tool_breakdown,
+    get_connection,
 )
 from monitoring import router as monitoring_router
 from rbac import (

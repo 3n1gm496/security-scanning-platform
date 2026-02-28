@@ -50,8 +50,7 @@ jobs:
 
     - name: Run orchestrator tests
       run: |
-        cd orchestrator
-        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
+        PYTHONPATH=. pytest orchestrator/tests -v --cov=orchestrator --cov-report=xml --cov-report=term-missing
 
     - name: Upload orchestrator coverage
       uses: codecov/codecov-action@v4
@@ -103,8 +102,7 @@ jobs:
 
     - name: Run dashboard tests
       run: |
-        cd dashboard
-        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
+        PYTHONPATH=. pytest dashboard/tests -v --cov=dashboard --cov-report=xml --cov-report=term-missing
 
     - name: Upload dashboard coverage
       uses: codecov/codecov-action@v4

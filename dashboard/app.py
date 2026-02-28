@@ -3,13 +3,12 @@ from __future__ import annotations
 import os
 import secrets
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from db import (
     distinct_targets,
@@ -34,14 +33,11 @@ PASSWORD = os.getenv("DASHBOARD_PASSWORD", "change-me")
 SESSION_SECRET = os.getenv("DASHBOARD_SESSION_SECRET", "please-change-this")
 
 app = FastAPI(title=APP_TITLE)
-# middleware per gestire le sessioni cookie
-from starlette.middleware.sessions import SessionMiddleware
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
 
-security = HTTPBasic()  # rimane per compatibilità con API esterne se necessario
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
@@ -75,8 +71,6 @@ def login_page(request: Request, error: str | None = None) -> HTMLResponse:
     return templates.TemplateResponse("login.html", {"request": request, "error": error})
 
 
-from fastapi import Form
-
 @app.post("/login", response_class=HTMLResponse)
 async def login(
     request: Request,
@@ -85,7 +79,11 @@ async def login(
 ) -> HTMLResponse:
     # confronta in modo sicuro con le credenziali memorizzate
     if not (secrets.compare_digest(username or "", USERNAME) and secrets.compare_digest(password or "", PASSWORD)):
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Credenziali non valide"}, status_code=401)
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "Credenziali non valide"},
+            status_code=401,
+        )
     # setta la sessione e reindirizza
     request.session["user"] = username
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
@@ -147,7 +145,15 @@ def findings_page(
     category: str | None = None,
     user: str = Depends(get_current_user),
 ) -> HTMLResponse:
-    findings = list_findings(DB_PATH, 500, severity=severity, tool=tool, target=target, scan_id=scan_id, category=category)
+    findings = list_findings(
+        DB_PATH,
+        500,
+        severity=severity,
+        tool=tool,
+        target=target,
+        scan_id=scan_id,
+        category=category,
+    )
     return templates.TemplateResponse(
         "findings.html",
         {
@@ -183,7 +189,13 @@ def api_scans(
     policy_status: str | None = None,
     user: str = Depends(get_current_user),
 ) -> list[dict]:
-    return list_scans(DB_PATH, limit=limit, target=target, status=status_value, policy_status=policy_status)
+    return list_scans(
+        DB_PATH,
+        limit=limit,
+        target=target,
+        status=status_value,
+        policy_status=policy_status,
+    )
 
 
 @app.get("/api/findings")
@@ -196,4 +208,12 @@ def api_findings(
     category: str | None = None,
     user: str = Depends(get_current_user),
 ) -> list[dict]:
-    return list_findings(DB_PATH, limit=limit, severity=severity, tool=tool, target=target, scan_id=scan_id, category=category)
+    return list_findings(
+        DB_PATH,
+        limit=limit,
+        severity=severity,
+        tool=tool,
+        target=target,
+        scan_id=scan_id,
+        category=category,
+    )

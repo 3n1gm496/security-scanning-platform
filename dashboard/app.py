@@ -24,6 +24,7 @@ from db import (
     target_breakdown,
     tool_breakdown,
 )
+from monitoring import router as monitoring_router
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -36,6 +37,9 @@ app = FastAPI(title=APP_TITLE)
 # middleware per gestire le sessioni cookie
 from starlette.middleware.sessions import SessionMiddleware
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+
+# Add monitoring endpoints
+app.include_router(monitoring_router, prefix="/api")
 
 security = HTTPBasic()  # rimane per compatibilità con API esterne se necessario
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))

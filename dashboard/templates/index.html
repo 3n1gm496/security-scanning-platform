@@ -49,6 +49,11 @@
         <h3>Scansioni 7 giorni</h3>
         <p class="metric">{{ kpis.last_7d_scans }}</p>
       </div>
+      <div class="card">
+        <h3>Cache hit complessivo</h3>
+        <p class="metric">{{ cache_stats.overall_cache_hit_pct }}%</p>
+        <p>{{ cache_stats.cached_runs }}/{{ cache_stats.total_runs }} tool run da cache</p>
+      </div>
     </section>
 
     <section class="grid two-cols">
@@ -101,6 +106,23 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Cache hit per tool</h2>
+      <table>
+        <thead><tr><th>Tool</th><th>Hit</th><th>Totale run</th><th>Cache hit %</th></tr></thead>
+        <tbody>
+          {% for row in cache_stats.by_tool %}
+            <tr>
+              <td>{{ row.tool }}</td>
+              <td>{{ row.cached }}</td>
+              <td>{{ row.total }}</td>
+              <td>{{ row.cache_hit_pct }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </section>
 
     <section class="card">

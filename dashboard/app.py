@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from db import (
+    cache_hit_stats,
     distinct_targets,
     distinct_tools,
     fetch_kpis,
@@ -151,6 +152,7 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
         "request": request,
         "user": user,
         "kpis": fetch_kpis(DB_PATH),
+        "cache_stats": cache_hit_stats(DB_PATH),
         "severity_breakdown": severity_breakdown(DB_PATH),
         "tool_breakdown": tool_breakdown(DB_PATH),
         "target_breakdown": target_breakdown(DB_PATH),
@@ -229,6 +231,11 @@ def api_kpi(user: str = Depends(get_current_user)) -> dict:
 @app.get("/api/trends")
 def api_trends(days: int = 30, user: str = Depends(get_current_user)) -> list[dict]:
     return scans_trend(DB_PATH, days)
+
+
+@app.get("/api/cache-hits")
+def api_cache_hits(user: str = Depends(get_current_user)) -> dict:
+    return cache_hit_stats(DB_PATH)
 
 
 @app.get("/api/scans")

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -159,3 +158,64 @@ def parse_artifacts(scan: dict[str, Any]) -> dict[str, Any]:
         return json.loads(scan.get("artifacts_json") or "{}")
     except json.JSONDecodeError:
         return {}
+
+
+def cache_hit_stats(db_path: str, limit_scans: int = 200) -> dict[str, Any]:
+    query = "SELECT tools_json FROM scans ORDER BY created_at DESC LIMIT ?"
+    total_runs = 0
+    cached_runs = 0
+    by_tool: dict[str, dict[str, int]] = {}
+
+    with get_connection(db_path) as conn:
+        rows = conn.execute(query, (limit_scans,)).fetchall()
+
+    for row in rows:
+        tools_json = row["tools_json"] if "tools_json" in row.keys() else "[]"
+        try:
+            tools = json.loads(tools_json or "[]")
+        except json.JSONDecodeError:
+            tools = []
+
+        if not isinstance(tools, list):
+            continue
+
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            tool_name = str(tool.get("tool", "unknown"))
+            hit = bool(tool.get("cache_hit", False))
+
+            total_runs += 1
+            if hit:
+                cached_runs += 1
+
+            if tool_name not in by_tool:
+                by_tool[tool_name] = {"total": 0, "cached": 0}
+            by_tool[tool_name]["total"] += 1
+            if hit:
+                by_tool[tool_name]["cached"] += 1
+
+    overall_pct = round((cached_runs / total_runs) * 100, 2) if total_runs else 0.0
+
+    by_tool_payload = []
+    for tool_name, counters in by_tool.items():
+        total = counters["total"]
+        cached = counters["cached"]
+        pct = round((cached / total) * 100, 2) if total else 0.0
+        by_tool_payload.append(
+            {
+                "tool": tool_name,
+                "cached": cached,
+                "total": total,
+                "cache_hit_pct": pct,
+            }
+        )
+
+    by_tool_payload.sort(key=lambda item: item["cache_hit_pct"], reverse=True)
+
+    return {
+        "overall_cache_hit_pct": overall_pct,
+        "cached_runs": cached_runs,
+        "total_runs": total_runs,
+        "by_tool": by_tool_payload,
+    }

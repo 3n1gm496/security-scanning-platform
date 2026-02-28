@@ -25,6 +25,7 @@ import app as _topapp
 def stub_db(monkeypatch):
     for module in (_db, _dashapp, _topapp):
         monkeypatch.setattr(module, "fetch_kpis", lambda path: {})
+        monkeypatch.setattr(module, "cache_hit_stats", lambda path: {"overall_cache_hit_pct": 0.0, "cached_runs": 0, "total_runs": 0, "by_tool": []})
         monkeypatch.setattr(module, "severity_breakdown", lambda path: {})
         monkeypatch.setattr(module, "tool_breakdown", lambda path: {})
         monkeypatch.setattr(module, "target_breakdown", lambda path: {})

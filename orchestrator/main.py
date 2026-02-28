@@ -27,6 +27,7 @@ from orchestrator.normalizer import (
     normalize_zap,
     sbom_metadata,
 )
+from orchestrator.retention import apply_retention
 from orchestrator.scanners import (
     ScannerError,
     clone_repo,
@@ -70,6 +71,7 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings.setdefault("policy", {})
     settings.setdefault("execution", {})
     settings.setdefault("cache", {})
+    settings.setdefault("retention", {})
     settings["paths"].setdefault("db_path", os.getenv("ORCH_DB_PATH", "/data/security_scans.db"))
     settings["paths"].setdefault("reports_dir", os.getenv("REPORTS_DIR", "/data/reports"))
     settings["paths"].setdefault("workspace_dir", os.getenv("WORKSPACE_DIR", "/data/workspaces"))
@@ -88,6 +90,10 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["cache"].setdefault("enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"})
     settings["cache"].setdefault("ttl_seconds", int(os.getenv("ORCH_CACHE_TTL_SECONDS", "900")))
     settings["cache"].setdefault("dir", os.getenv("ORCH_CACHE_DIR", "/data/cache/orchestrator"))
+    settings["retention"].setdefault("enabled", os.getenv("ORCH_RETENTION_ENABLED", "true").lower() in {"1", "true", "yes", "on"})
+    settings["retention"].setdefault("reports_days", int(os.getenv("ORCH_RETENTION_REPORTS_DAYS", "14")))
+    settings["retention"].setdefault("workspaces_days", int(os.getenv("ORCH_RETENTION_WORKSPACES_DAYS", "3")))
+    settings["retention"].setdefault("cache_days", int(os.getenv("ORCH_RETENTION_CACHE_DAYS", "7")))
     return settings
 
 
@@ -522,6 +528,13 @@ def main() -> int:
     setup_logging(args.log_level)
     settings = resolve_settings(args.settings)
     init_db(settings["paths"]["db_path"])
+    retention_result = apply_retention(settings)
+    LOGGER.info(
+        "Retention cleanup: reports=%s workspaces=%s cache=%s",
+        retention_result["reports_removed"],
+        retention_result["workspaces_removed"],
+        retention_result["cache_removed"],
+    )
 
     try:
         targets = resolve_targets(args)

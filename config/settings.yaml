@@ -54,3 +54,9 @@ cache:
   enabled: true
   ttl_seconds: 900
   dir: /data/cache/orchestrator
+
+retention:
+  enabled: true
+  reports_days: 14
+  workspaces_days: 3
+  cache_days: 7

@@ -4,7 +4,7 @@ Export findings in multiple formats: JSON, CSV, SARIF, HTML.
 import csv
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from io import StringIO
 from typing import List, Dict, Any
 
@@ -17,7 +17,7 @@ def export_to_json(findings: List[Dict[str, Any]]) -> str:
     """Export findings to JSON format."""
     output = {
         "version": "1.0",
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "total_findings": len(findings),
         "findings": findings
     }
@@ -287,7 +287,7 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
 <body>
     <div class="header">
         <h1>Security Scan Report</h1>
-        <p>Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+        <p>Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
         {f'<p>Scan ID: {scan_info.get("scan_id")}</p>' if scan_info.get("scan_id") else ''}
         {f'<p>Target: {scan_info.get("target")}</p>' if scan_info.get("target") else ''}
     </div>

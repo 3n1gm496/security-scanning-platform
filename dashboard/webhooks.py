@@ -8,7 +8,7 @@ import logging
 import os
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 import httpx
@@ -83,7 +83,7 @@ def create_webhook(
     cursor = conn.cursor()
     
     events_str = ",".join([e.value for e in events])
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(timezone.utc).isoformat()
     
     cursor.execute("""
         INSERT INTO webhooks (name, url, secret, events, created_at)
@@ -170,7 +170,7 @@ async def trigger_webhook(
     # Prepare payload
     payload_with_meta = {
         "event": event_type.value,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "data": payload
     }
     
@@ -271,7 +271,7 @@ def _log_delivery(
         response_status,
         response_body,
         error,
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
         duration_ms
     ))
     
@@ -290,7 +290,7 @@ def _update_webhook_stats(webhook_id: int, success: bool):
             SET success_count = success_count + 1,
                 last_triggered_at = ?
             WHERE id = ?
-        """, (datetime.utcnow().isoformat(), webhook_id))
+        """, (datetime.now(timezone.utc).isoformat(), webhook_id))
     else:
         cursor.execute("""
             UPDATE webhooks 

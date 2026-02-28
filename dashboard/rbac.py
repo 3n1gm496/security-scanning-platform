@@ -5,7 +5,7 @@ import hashlib
 import os
 import secrets
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -139,10 +139,10 @@ def create_api_key(
     full_key, prefix = generate_api_key()
     key_hash = hash_api_key(full_key)
     
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(timezone.utc).isoformat()
     expires_at = None
     if expires_days:
-        expires_at = (datetime.utcnow() + timedelta(days=expires_days)).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=expires_days)).isoformat()
     
     conn = sqlite3.connect(DASHBOARD_DB_PATH)
     cursor = conn.cursor()
@@ -181,14 +181,14 @@ def verify_api_key(key: str) -> Optional[dict]:
     # Check expiration
     if row["expires_at"]:
         expires_at = datetime.fromisoformat(row["expires_at"])
-        if datetime.utcnow() > expires_at:
+        if datetime.now(timezone.utc) > expires_at:
             conn.close()
             return None
     
     # Update last_used_at
     cursor.execute("""
         UPDATE api_keys SET last_used_at = ? WHERE id = ?
-    """, (datetime.utcnow().isoformat(), row["id"]))
+    """, (datetime.now(timezone.utc).isoformat(), row["id"]))
     conn.commit()
     
     key_info = dict(row)
@@ -252,7 +252,7 @@ def log_audit(
         INSERT INTO audit_log (timestamp, user_id, api_key_prefix, action, resource, result, ip_address)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
         user_id,
         api_key_prefix,
         action,

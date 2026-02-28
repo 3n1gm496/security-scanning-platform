@@ -17,13 +17,12 @@ os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 from app import app  # import after env vars
 
 # stub out DB calls so index page can render without real database
-import dashboard.db as _db
-import dashboard.app as _dashapp
-import app as _topapp
+import db as _db
+import app as _app
 
 @pytest.fixture(autouse=True)
 def stub_db(monkeypatch):
-    for module in (_db, _dashapp, _topapp):
+    for module in (_db, _app):
         monkeypatch.setattr(module, "fetch_kpis", lambda path: {})
         monkeypatch.setattr(module, "cache_hit_stats", lambda path: {"overall_cache_hit_pct": 0.0, "cached_runs": 0, "total_runs": 0, "by_tool": []})
         monkeypatch.setattr(module, "cache_hit_trend", lambda path, days: [])

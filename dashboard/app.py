@@ -486,7 +486,7 @@ def toggle_webhook_endpoint(
 
 @app.get("/api/export/findings", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def export_findings_endpoint(
-    format: str = Query(..., regex="^(json|csv|sarif|html)$"),
+    format: str = Query(..., pattern="^(json|csv|sarif|html)$"),
     limit: int = Query(1000, ge=1, le=10000),
     severity: str | None = None,
     tool: str | None = None,

@@ -3,7 +3,7 @@ Authentication middleware for API key validation.
 """
 from typing import Optional
 
-from fastapi import Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from rbac import Permission, Role, has_permission, verify_api_key, log_audit
@@ -98,7 +98,7 @@ def require_permission(permission: Permission):
     Dependency factory to enforce a specific permission.
     Usage: auth = Depends(require_permission(Permission.SCAN_WRITE))
     """
-    def _check_permission(auth: AuthContext = require_auth) -> AuthContext:
+    def _check_permission(auth: AuthContext = Depends(require_auth)) -> AuthContext:
         auth.require_permission(permission)
         return auth
     return _check_permission

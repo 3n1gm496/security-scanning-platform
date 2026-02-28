@@ -14,6 +14,7 @@ from typing import Any
 
 import yaml
 
+from orchestrator.cache import build_cache_key, load_cached_output, store_cached_output
 from orchestrator.models import ScanResult, TargetSpec, ToolExecutionResult
 from orchestrator.normalizer import (
     normalize_checkov,
@@ -68,6 +69,7 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings.setdefault("scanners", {})
     settings.setdefault("policy", {})
     settings.setdefault("execution", {})
+    settings.setdefault("cache", {})
     settings["paths"].setdefault("db_path", os.getenv("ORCH_DB_PATH", "/data/security_scans.db"))
     settings["paths"].setdefault("reports_dir", os.getenv("REPORTS_DIR", "/data/reports"))
     settings["paths"].setdefault("workspace_dir", os.getenv("WORKSPACE_DIR", "/data/workspaces"))
@@ -83,6 +85,9 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["policy"].setdefault("block_on_severities", ["CRITICAL"])
     settings["policy"].setdefault("block_on_secret_categories", True)
     settings["execution"].setdefault("max_concurrent_targets", int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2")))
+    settings["cache"].setdefault("enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"})
+    settings["cache"].setdefault("ttl_seconds", int(os.getenv("ORCH_CACHE_TTL_SECONDS", "900")))
+    settings["cache"].setdefault("dir", os.getenv("ORCH_CACHE_DIR", "/data/cache/orchestrator"))
     return settings
 
 
@@ -155,14 +160,41 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
     error_message = None
 
     target_input, target_value = prepare_target(target, settings, scan_id)
+    cache_settings = settings.get("cache", {})
+    cache_enabled = bool(cache_settings.get("enabled", False))
+    cache_ttl = int(cache_settings.get("ttl_seconds", 900))
+    cache_dir = Path(str(cache_settings.get("dir", "/data/cache/orchestrator")))
 
-    def execute_tool(tool_name: str, runner, parser, parser_kwargs: dict[str, Any] | None = None) -> None:
+    def execute_tool(
+        tool_name: str,
+        runner,
+        parser,
+        parser_kwargs: dict[str, Any] | None = None,
+        cache_context: dict[str, Any] | None = None,
+    ) -> None:
         nonlocal status, error_message, findings, artifacts
         parser_kwargs = parser_kwargs or {}
+        cache_context = cache_context or {}
         started_tool = utc_now_iso()
         output_path = str(raw_dir / f"{tool_name}.json")
         try:
-            result = runner(output_path)
+            cache_hit = False
+            if cache_enabled:
+                cache_key = build_cache_key(
+                    tool_name=tool_name,
+                    target_type=target.type,
+                    target_value=target_value,
+                    context=cache_context,
+                )
+                cache_hit = load_cached_output(cache_dir, cache_key, output_path, cache_ttl)
+
+            if cache_hit:
+                result = {"exit_code": 0, "stderr": "cache_hit"}
+            else:
+                result = runner(output_path)
+                if cache_enabled and Path(output_path).exists():
+                    store_cached_output(cache_dir, cache_key, output_path)
+
             raw_payload = load_json(output_path)
             new_findings = parser(raw_payload, output_path, **parser_kwargs)
             findings.extend(new_findings)
@@ -204,12 +236,14 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 "semgrep",
                 lambda output_path: run_semgrep(target_input, output_path, settings["scanners"]["semgrep"].get("configs", ["p/default"])),
                 lambda raw_payload, output_path, **_: normalize_semgrep(scan_id, target, raw_payload, output_path, base_path=target_input),
+                cache_context={"configs": settings["scanners"]["semgrep"].get("configs", ["p/default"])},
             )
         if settings["scanners"]["bandit"].get("enabled", False):
             execute_tool(
                 "bandit",
                 lambda output_path: run_bandit(target_input, output_path),
                 lambda raw_payload, output_path, **_: normalize_bandit(scan_id, target, raw_payload, output_path, base_path=target_input),
+                cache_context={"mode": "bandit"},
             )
         if settings["scanners"]["nuclei"].get("enabled", False):
             execute_tool(
@@ -222,6 +256,11 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     settings["scanners"]["nuclei"].get("tags"),
                 ),
                 lambda raw_payload, output_path, **_: normalize_nuclei(scan_id, target, raw_payload, output_path, base_path=target_input),
+                cache_context={
+                    "templates": settings["scanners"]["nuclei"].get("templates"),
+                    "severity": settings["scanners"]["nuclei"].get("severity"),
+                    "tags": settings["scanners"]["nuclei"].get("tags"),
+                },
             )
         if settings["scanners"]["trivy"].get("enabled", True):
             execute_tool(
@@ -233,6 +272,10 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
                 ),
                 lambda raw_payload, output_path, **_: normalize_trivy(scan_id, target, raw_payload, output_path, base_path=target_input, category="sca"),
+                cache_context={
+                    "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
+                    "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                },
             )
         if settings["scanners"]["gitleaks"].get("enabled", True):
             use_git = Path(target_input, ".git").exists()
@@ -240,24 +283,28 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 "gitleaks",
                 lambda output_path: run_gitleaks(target_input, output_path, use_git_history=use_git),
                 lambda raw_payload, output_path, **_: normalize_gitleaks(scan_id, target, raw_payload, output_path, base_path=target_input),
+                cache_context={"use_git_history": use_git},
             )
         if settings["scanners"]["checkov"].get("enabled", True):
             execute_tool(
                 "checkov",
                 lambda output_path: run_checkov(target_input, output_path),
                 lambda raw_payload, output_path, **_: normalize_checkov(scan_id, target, raw_payload, output_path, base_path=target_input),
+                cache_context={"mode": "checkov"},
             )
         if settings["scanners"]["grype"].get("enabled", False):
             execute_tool(
                 "grype",
                 lambda output_path: run_grype(target_input, output_path),
                 lambda raw_payload, output_path, **_: normalize_grype(scan_id, target, raw_payload, output_path, base_path=target_input),
+                cache_context={"mode": "grype"},
             )
         if settings["scanners"]["owasp_zap"].get("enabled", False) and target.type != "image":
             execute_tool(
                 "owasp_zap",
                 lambda output_path: run_owasp_zap(target_input, output_path),
                 lambda raw_payload, output_path, **_: normalize_zap(scan_id, target, raw_payload, output_path, base_path=target_input),
+                cache_context={"mode": "zap"},
             )
         if settings["scanners"]["syft"].get("enabled", True):
             started_tool = utc_now_iso()
@@ -313,6 +360,11 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     settings["scanners"]["nuclei"].get("tags"),
                 ),
                 lambda raw_payload, output_path, **_: normalize_nuclei(scan_id, target, raw_payload, output_path),
+                cache_context={
+                    "templates": settings["scanners"]["nuclei"].get("templates"),
+                    "severity": settings["scanners"]["nuclei"].get("severity"),
+                    "tags": settings["scanners"]["nuclei"].get("tags"),
+                },
             )
         if settings["scanners"]["trivy"].get("enabled", True):
             execute_tool(
@@ -324,12 +376,17 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
                 ),
                 lambda raw_payload, output_path, **_: normalize_trivy(scan_id, target, raw_payload, output_path, category="container"),
+                cache_context={
+                    "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
+                    "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                },
             )
         if settings["scanners"]["grype"].get("enabled", False):
             execute_tool(
                 "grype",
                 lambda output_path: run_grype(target_input, output_path),
                 lambda raw_payload, output_path, **_: normalize_grype(scan_id, target, raw_payload, output_path),
+                cache_context={"mode": "grype"},
             )
         if settings["scanners"]["syft"].get("enabled", True):
             started_tool = utc_now_iso()

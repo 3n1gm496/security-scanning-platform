@@ -49,3 +49,8 @@ execution:
   max_concurrent_targets: 2
 
   # Additional execution settings can be added here
+
+cache:
+  enabled: true
+  ttl_seconds: 900
+  dir: /data/cache/orchestrator

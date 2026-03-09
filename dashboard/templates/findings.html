@@ -94,12 +94,12 @@
             <td>{{ finding.category }}</td>
             <td>{{ finding.target_name }}</td>
             <td>{{ finding.title }}</td>
-            <td><code>{{ finding.file or "-" }}</code></td>
-            <td>{{ finding.line or "-" }}</td>
+            <td><code>{{ finding.file or finding.file_path or "-" }}</code></td>
+            <td>{{ finding.line or finding.line_number or "-" }}</td>
             <td>{{ finding.package or "-" }}</td>
             <td>{{ finding.version or "-" }}</td>
             <td>{{ finding.cve or "-" }}</td>
-            <td>{{ finding.remediation or "-" }}</td>
+            <td>{{ finding.remediation_display or finding.remediation or "-" }}</td>
             <td><code>{{ finding.scan_id }}</code></td>
           </tr>
           {% endfor %}

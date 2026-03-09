@@ -281,6 +281,20 @@ def findings_page(
         scan_id=scan_id,
         category=category,
     )
+
+    for finding in findings:
+        raw_remediation = (finding.get("remediation") or "").strip()
+        if raw_remediation:
+            finding["remediation_display"] = raw_remediation
+            continue
+
+        remediation_guide = RemediationEngine.generate_remediation(finding)
+        steps = remediation_guide.get("steps") or []
+        if steps:
+            finding["remediation_display"] = steps[0]
+        else:
+            finding["remediation_display"] = remediation_guide.get("title", "-")
+
     return templates.TemplateResponse(
         request,
         "findings.html",

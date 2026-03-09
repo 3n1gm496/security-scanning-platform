@@ -122,6 +122,14 @@ DEBUG
   versions
   curl
 
+DEV / CI
+  test [dashboard|orchestrator]    Esegui test (locali, senza Docker)
+  lint [--fix]                     flake8 + black check (--fix applica black)
+  deps-compile                     Rigenera requirements.txt pinnati con pip-compile
+  api-key create --name N --role R [--expires-days D]
+  api-key list
+  api-key revoke --prefix P
+
 ESEMPI
   ./scripts/ops.sh up
   ./scripts/ops.sh open
@@ -131,6 +139,10 @@ ESEMPI
   ./scripts/ops.sh scan image --image nginx:1.27-alpine --name nginx
   ./scripts/ops.sh db counts
   ./scripts/ops.sh backup
+  ./scripts/ops.sh test
+  ./scripts/ops.sh lint
+  ./scripts/ops.sh deps-compile
+  ./scripts/ops.sh api-key create --name ci-runner --role operator
 
 EOF
 }
@@ -349,13 +361,37 @@ cmd_health() {
     warn "Docker Compose non disponibile: salto stato container"
   fi
   echo
-  info "Dashboard endpoint: $(dashboard_url)"
+  local url
+  url="$(dashboard_url)"
+  info "Dashboard endpoint: ${url}"
+
+  # Root endpoint
   local code
-  code="$(curl -sS -o /dev/null -w "%{http_code}" "$(dashboard_url)/" || echo "000")"
+  code="$(curl -sS -o /dev/null -w "%{http_code}" "${url}/" 2>/dev/null || echo "000")"
   if [[ "${code}" == "200" || "${code}" == "302" ]]; then
-    info "Dashboard raggiungibile (HTTP ${code})"
+    info "  /          HTTP ${code} OK"
   else
-    warn "Dashboard non raggiungibile correttamente (HTTP ${code})"
+    warn "  /          HTTP ${code} (non raggiungibile)"
+  fi
+
+  # /health endpoint
+  local health_body health_code
+  health_body="$(curl -sS -w '\n%{http_code}' "${url}/health" 2>/dev/null || echo '{}'$'\n000')"
+  health_code="$(echo "${health_body}" | tail -n1)"
+  if [[ "${health_code}" == "200" ]]; then
+    info "  /health    HTTP ${health_code} OK"
+    echo "${health_body}" | head -n -1 | python3 -m json.tool 2>/dev/null | grep -E '"status"|"uptime"|"version"' | sed 's/^/             /' || true
+  else
+    warn "  /health    HTTP ${health_code}"
+  fi
+
+  # /ready endpoint
+  local ready_code
+  ready_code="$(curl -sS -o /dev/null -w "%{http_code}" "${url}/ready" 2>/dev/null || echo "000")"
+  if [[ "${ready_code}" == "200" ]]; then
+    info "  /ready     HTTP ${ready_code} OK"
+  else
+    warn "  /ready     HTTP ${ready_code}"
   fi
 }
 
@@ -712,6 +748,145 @@ cmd_reset() {
 }
 
 # ------------------------------
+# Dev / CI helpers
+# ------------------------------
+cmd_test() {
+  local suite="${1:-all}"
+  header "Test suite: ${suite}"
+
+  local python_exe="python3"
+  command -v "${python_exe}" >/dev/null 2>&1 || die "python3 non trovato in PATH"
+
+  cd "${ROOT_DIR}"
+  export PYTHONPATH="${ROOT_DIR}"
+
+  case "${suite}" in
+    dashboard)
+      info "Eseguo test dashboard..."
+      "${python_exe}" -m pytest dashboard/tests/ -v --tb=short 2>&1
+      ;;
+    orchestrator)
+      info "Eseguo test orchestrator..."
+      "${python_exe}" -m pytest orchestrator/tests/ -v --tb=short 2>&1
+      ;;
+    all|"")
+      info "Eseguo tutti i test..."
+      "${python_exe}" -m pytest dashboard/tests/ orchestrator/tests/ -v --tb=short 2>&1
+      ;;
+    *)
+      die "Suite non valida: ${suite}. Usa: dashboard, orchestrator, all"
+      ;;
+  esac
+}
+
+cmd_lint() {
+  local fix="${1:-}"
+  header "Lint (flake8 + black)"
+
+  local python_exe="python3"
+  command -v "${python_exe}" >/dev/null 2>&1 || die "python3 non trovato in PATH"
+
+  cd "${ROOT_DIR}"
+
+  if [[ "${fix}" == "--fix" ]]; then
+    info "Applicando black..."
+    "${python_exe}" -m black dashboard/ orchestrator/ --line-length=120 2>&1
+  else
+    info "Controllo black..."
+    "${python_exe}" -m black --check dashboard/ orchestrator/ --line-length=120 2>&1
+  fi
+
+  info "Controllo flake8..."
+  "${python_exe}" -m flake8 dashboard/ orchestrator/ \
+    --max-line-length=120 \
+    --extend-ignore=E203,W503 \
+    --exclude=__pycache__,.git \
+    --count 2>&1
+}
+
+cmd_deps_compile() {
+  header "Rigenera requirements.txt pinnati con pip-compile"
+
+  command -v pip-compile >/dev/null 2>&1 || die "pip-compile non trovato. Installa con: pip install pip-tools"
+
+  info "Dashboard runtime..."
+  (cd "${ROOT_DIR}/dashboard" && pip-compile requirements.in --output-file requirements.txt --no-header --quiet --strip-extras 2>&1)
+
+  info "Dashboard test..."
+  (cd "${ROOT_DIR}/dashboard" && pip-compile requirements-test.in --output-file requirements-test.txt --no-header --quiet --strip-extras 2>&1)
+
+  info "Orchestrator runtime..."
+  (cd "${ROOT_DIR}/orchestrator" && pip-compile requirements.in --output-file requirements.txt --no-header --quiet --strip-extras 2>&1)
+
+  info "Orchestrator test..."
+  (cd "${ROOT_DIR}/orchestrator" && pip-compile requirements-test.in --output-file requirements-test.txt --no-header --quiet --strip-extras 2>&1)
+
+  info "Fatto. Verifica le modifiche con: git diff"
+}
+
+cmd_api_key() {
+  local sub="${1:-}"; shift || true
+
+  case "${sub}" in
+    create)
+      local name="" role="" expires_days=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --name) name="${2:-}"; shift 2 ;;
+          --role) role="${2:-}"; shift 2 ;;
+          --expires-days) expires_days="${2:-}"; shift 2 ;;
+          *) die "Argomento sconosciuto per api-key create: $1" ;;
+        esac
+      done
+      [[ -n "${name}" ]] || die "Manca --name"
+      [[ -n "${role}" ]] || die "Manca --role (admin|operator|viewer)"
+
+      header "Creazione API key"
+      if compose_available; then
+        local py_code="from rbac import create_api_key, Role; k,p = create_api_key('${name}', Role('${role}')${expires_days:+, expires_days=${expires_days}}); print(f'Key: {k}'); print(f'Prefix: {p}')"
+        ${COMPOSE} exec -T dashboard python -c "${py_code}" 2>&1
+      else
+        export PYTHONPATH="${ROOT_DIR}"
+        export DASHBOARD_DB_PATH="${DB_FILE}"
+        python3 -c "import sys; sys.path.insert(0,'${ROOT_DIR}/dashboard'); from rbac import create_api_key, Role; k,p = create_api_key('${name}', Role('${role}')${expires_days:+, expires_days=${expires_days}}); print(f'Key: {k}'); print(f'Prefix: {p}')" 2>&1
+      fi
+      ;;
+    list)
+      header "Lista API keys"
+      if compose_available; then
+        ${COMPOSE} exec -T dashboard python -c "from rbac import list_api_keys; import json; print(json.dumps(list_api_keys(), indent=2))" 2>&1
+      else
+        export PYTHONPATH="${ROOT_DIR}"
+        export DASHBOARD_DB_PATH="${DB_FILE}"
+        python3 -c "import sys; sys.path.insert(0,'${ROOT_DIR}/dashboard'); from rbac import list_api_keys; import json; print(json.dumps(list_api_keys(), indent=2))" 2>&1
+      fi
+      ;;
+    revoke)
+      local prefix=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --prefix) prefix="${2:-}"; shift 2 ;;
+          *) die "Argomento sconosciuto per api-key revoke: $1" ;;
+        esac
+      done
+      [[ -n "${prefix}" ]] || die "Manca --prefix"
+
+      header "Revoca API key: ${prefix}"
+      if compose_available; then
+        ${COMPOSE} exec -T dashboard python -c "from rbac import revoke_api_key; ok = revoke_api_key('${prefix}'); print('Revocata' if ok else 'Non trovata')" 2>&1
+      else
+        export PYTHONPATH="${ROOT_DIR}"
+        export DASHBOARD_DB_PATH="${DB_FILE}"
+        python3 -c "import sys; sys.path.insert(0,'${ROOT_DIR}/dashboard'); from rbac import revoke_api_key; ok = revoke_api_key('${prefix}'); print('Revocata' if ok else 'Non trovata')" 2>&1
+      fi
+      ;;
+    *)
+      die "Sottocomando api-key non valido: ${sub}. Usa: create, list, revoke"
+      ;;
+  esac
+}
+
+# ------------------------------
 # Debug
 # ------------------------------
 cmd_shell() {
@@ -911,6 +1086,49 @@ EOF
   done
 }
 
+menu_dev() {
+  while true; do
+    banner
+    cat <<EOF
+DEV / CI MENU
+1) Esegui tutti i test
+2) Esegui test dashboard
+3) Esegui test orchestrator
+4) Lint check (flake8 + black)
+5) Lint fix (applica black)
+6) Rigenera requirements.txt pinnati
+7) Lista API keys
+8) Crea API key
+0) Torna al menu principale
+EOF
+    echo
+    read -r -p "Seleziona: " choice
+    case "${choice}" in
+      1) cmd_test all; pause ;;
+      2) cmd_test dashboard; pause ;;
+      3) cmd_test orchestrator; pause ;;
+      4) cmd_lint; pause ;;
+      5) cmd_lint --fix; pause ;;
+      6) cmd_deps_compile; pause ;;
+      7) cmd_api_key list; pause ;;
+      8)
+        local name role expires
+        read -r -p "Nome key: " name
+        read -r -p "Ruolo (admin/operator/viewer): " role
+        read -r -p "Scadenza giorni (invio per nessuna): " expires
+        if [[ -n "${expires}" ]]; then
+          cmd_api_key create --name "${name}" --role "${role}" --expires-days "${expires}"
+        else
+          cmd_api_key create --name "${name}" --role "${role}"
+        fi
+        pause
+        ;;
+      0) return 0 ;;
+      *) warn "Scelta non valida"; sleep 1 ;;
+    esac
+  done
+}
+
 cmd_menu() {
   while true; do
     banner
@@ -923,7 +1141,8 @@ MAIN MENU
 5) Manutenzione
 6) Debug
 7) Apri dashboard
-8) Help
+8) Dev / CI (test, lint, deps)
+9) Help
 0) Esci
 EOF
     echo
@@ -937,7 +1156,8 @@ EOF
       5) menu_maintenance ;;
       6) menu_debug ;;
       7) cmd_open; pause ;;
-      8) usage; pause ;;
+      8) menu_dev ;;
+      9) usage; pause ;;
       0) clear 2>/dev/null || true; exit 0 ;;
       *) warn "Scelta non valida"; sleep 1 ;;
     esac
@@ -1036,6 +1256,18 @@ main() {
       ;;
     curl)
       cmd_curl
+      ;;
+    test)
+      cmd_test "${1:-all}"
+      ;;
+    lint)
+      cmd_lint "${1:-}"
+      ;;
+    deps-compile)
+      cmd_deps_compile
+      ;;
+    api-key)
+      cmd_api_key "$@"
       ;;
     *)
       die "Comando non valido: ${cmd}. Usa ./scripts/ops.sh help"

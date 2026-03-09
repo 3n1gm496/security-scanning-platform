@@ -4,14 +4,35 @@ certifi==2026.2.25
     # via requests
 charset-normalizer==3.4.5
     # via requests
+coverage==7.13.4
+    # via pytest-cov
 gitdb==4.0.12
     # via gitpython
 gitpython==3.1.46
     # via bandit
 idna==3.11
     # via requests
+iniconfig==2.3.0
+    # via pytest
+packaging==26.0
+    # via pytest
 pbr==7.0.3
     # via -r requirements.in
+pluggy==1.6.0
+    # via
+    #   pytest
+    #   pytest-cov
+pygments==2.19.2
+    # via pytest
+pytest==9.0.2
+    # via
+    #   -r requirements-test.in
+    #   pytest-cov
+    #   pytest-mock
+pytest-cov==7.0.0
+    # via -r requirements-test.in
+pytest-mock==3.15.1
+    # via -r requirements-test.in
 pyyaml==6.0.2
     # via
     #   -r requirements.in

@@ -29,12 +29,12 @@ def test_findings_paginator_basic():
             title TEXT,
             description TEXT,
             severity TEXT,
-            file_path TEXT,
-            line_number INTEGER,
+            file TEXT,
+            line INTEGER,
             tool TEXT,
-            cve_id TEXT,
+            cve TEXT,
             fingerprint TEXT,
-            created_at TEXT
+            timestamp TEXT
         )
     """)
 

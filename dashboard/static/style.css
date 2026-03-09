@@ -267,6 +267,13 @@ td {
   text-overflow: ellipsis;
 }
 
+.remediation-cell {
+  max-width: 360px;
+  white-space: normal;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
 tbody tr {
   transition: background 0.2s ease;
 }

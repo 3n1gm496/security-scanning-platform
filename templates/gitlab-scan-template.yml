@@ -1,0 +1,121 @@
+# ============================================================
+# Security Scanning Platform — GitLab CI Reusable Template
+# ============================================================
+#
+# Usage in other repositories:
+#
+#   include:
+#     - project: 'security/security-scanning-platform'
+#       ref: main
+#       file: '/templates/gitlab-scan-template.yml'
+#
+# Required CI/CD variables (group or project level):
+#   SECURITY_SCANNER_URL      URL of the deployed dashboard
+#   SECURITY_SCANNER_API_KEY  Bearer token with 'operator' role
+#
+# Optional:
+#   SECURITY_SCAN_FAIL_ON_BLOCK  Set to 'false' to allow pipeline to continue
+#                                 even when policy returns BLOCK (default: true)
+#   SECURITY_SCAN_ASYNC          Set to 'true' for async scan (no policy gate)
+#   SECURITY_SCAN_TIMEOUT        Max seconds to wait for scan (default: 300)
+#
+# ============================================================
+
+.security_scan_job:
+  stage: security
+  image: alpine:3.19
+  variables:
+    SECURITY_SCAN_FAIL_ON_BLOCK: "true"
+    SECURITY_SCAN_ASYNC: "false"
+    SECURITY_SCAN_TIMEOUT: "300"
+  before_script:
+    - apk add --no-cache curl jq --quiet
+  script:
+    - |
+      set -euo pipefail
+
+      # Validate required variables
+      if [ -z "${SECURITY_SCANNER_URL:-}" ] || [ -z "${SECURITY_SCANNER_API_KEY:-}" ]; then
+        echo "[WARN] SECURITY_SCANNER_URL or SECURITY_SCANNER_API_KEY not configured."
+        echo "[WARN] Skipping security scan. Set these variables at group or project level."
+        echo '{"status":"skipped","reason":"missing_variables"}' > scan-results.json
+        exit 0
+      fi
+
+      TARGET_NAME="${CI_PROJECT_PATH}"
+      TARGET_URL="${CI_PROJECT_URL}"
+      ASYNC_MODE="${SECURITY_SCAN_ASYNC}"
+
+      echo "[INFO] Triggering security scan..."
+      echo "[INFO]   Target: ${TARGET_URL}"
+      echo "[INFO]   Name:   ${TARGET_NAME}"
+      echo "[INFO]   Async:  ${ASYNC_MODE}"
+
+      SCAN_RESPONSE=$(curl \
+        --fail-with-body \
+        --silent \
+        --show-error \
+        --max-time "${SECURITY_SCAN_TIMEOUT}" \
+        -X POST "${SECURITY_SCANNER_URL}/api/scan/trigger" \
+        -H "Authorization: Bearer ${SECURITY_SCANNER_API_KEY}" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "target_type=git" \
+        -d "target=${TARGET_URL}" \
+        -d "name=${TARGET_NAME}" \
+        -d "async_mode=${ASYNC_MODE}" \
+        2>&1) || {
+          echo "[ERROR] Failed to reach security scanner at ${SECURITY_SCANNER_URL}"
+          echo '{"status":"error","reason":"connection_failed"}' > scan-results.json
+          exit 1
+        }
+
+      # Validate JSON response
+      if ! echo "${SCAN_RESPONSE}" | jq -e . >/dev/null 2>&1; then
+        echo "[ERROR] Scanner returned non-JSON response:"
+        echo "${SCAN_RESPONSE}"
+        echo '{"status":"error","reason":"invalid_response"}' > scan-results.json
+        exit 1
+      fi
+
+      echo "${SCAN_RESPONSE}" > scan-results.json
+      echo "${SCAN_RESPONSE}" | jq .
+
+      # Extract status fields
+      SCAN_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.status // "unknown"')
+      POLICY_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r \
+        '.output.results[0].policy_status // .policy_status // "UNKNOWN"')
+
+      echo ""
+      echo "[INFO] ─────────────────────────────────────"
+      echo "[INFO] Scan status:   ${SCAN_STATUS}"
+      echo "[INFO] Policy status: ${POLICY_STATUS}"
+      echo "[INFO] ─────────────────────────────────────"
+
+      # Fail on scanner error
+      if [ "${SCAN_STATUS}" = "error" ] || [ "${SCAN_STATUS}" = "failed" ]; then
+        echo "[ERROR] Security scanner reported an error"
+        exit 1
+      fi
+
+      # Fail on policy BLOCK (configurable)
+      if [ "${SECURITY_SCAN_FAIL_ON_BLOCK}" = "true" ] && [ "${POLICY_STATUS}" = "BLOCK" ]; then
+        echo "[ERROR] Security scan BLOCKED: critical findings detected."
+        echo "[ERROR] Review findings at: ${SECURITY_SCANNER_URL}"
+        exit 1
+      fi
+
+      echo "[OK] Security scan completed (policy: ${POLICY_STATUS})"
+  artifacts:
+    when: always
+    paths:
+      - scan-results.json
+    expire_in: 30 days
+
+# Concrete job that extends the template.
+# Override 'rules' in your pipeline as needed.
+security:scan:
+  extends: .security_scan_job
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'

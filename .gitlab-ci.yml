@@ -1,0 +1,438 @@
+# ============================================================
+# Security Scanning Platform — GitLab Enterprise CI/CD
+# ============================================================
+#
+# Pipeline stages:
+#   lint      → flake8 + black check (fast, no Docker)
+#   test      → pytest with coverage (parallel: dashboard + orchestrator)
+#   security  → bandit SAST + container scanning
+#   build     → Docker build + push to GitLab Container Registry
+#   scan-self → trigger a self-scan of this repository via the platform API
+#   deploy    → deploy to staging / production (manual gate for production)
+#
+# Required CI/CD variables (Settings → CI/CD → Variables):
+#   SECURITY_SCANNER_URL      URL of the deployed dashboard, e.g. https://scanner.example.com
+#   SECURITY_SCANNER_API_KEY  Bearer token with at least 'operator' role
+#
+# Optional variables (have sensible defaults):
+#   PYTHON_VERSION            Python version to use (default: 3.11)
+#   DOCKER_REGISTRY           Override registry (default: $CI_REGISTRY)
+#   DEPLOY_SSH_KEY            Private key for SSH-based deployment (protected)
+#   DEPLOY_HOST               SSH host for deployment
+#   DEPLOY_USER               SSH user for deployment (default: deploy)
+#   DEPLOY_PATH               Remote path to the project (default: /opt/security-scanning-platform)
+#
+# ============================================================
+
+variables:
+  PYTHON_VERSION: "3.11"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_REGISTRY: "$CI_REGISTRY"
+  DOCKER_IMAGE_ORCHESTRATOR: "$CI_REGISTRY_IMAGE/orchestrator"
+  DOCKER_IMAGE_DASHBOARD: "$CI_REGISTRY_IMAGE/dashboard"
+  DEPLOY_USER: "deploy"
+  DEPLOY_PATH: "/opt/security-scanning-platform"
+  # Fail the pipeline if the security scan policy returns BLOCK
+  SECURITY_SCAN_FAIL_ON_BLOCK: "true"
+
+# ============================================================
+# Default configuration
+# ============================================================
+default:
+  image: python:${PYTHON_VERSION}-slim
+  cache:
+    key:
+      files:
+        - dashboard/requirements.txt
+        - orchestrator/requirements.txt
+      prefix: "$CI_JOB_NAME"
+    paths:
+      - .cache/pip
+  before_script:
+    - pip install --upgrade pip --quiet
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# ============================================================
+# Stages
+# ============================================================
+stages:
+  - lint
+  - test
+  - security
+  - build
+  - scan-self
+  - deploy
+
+# ============================================================
+# Stage: lint
+# ============================================================
+lint:orchestrator:
+  stage: lint
+  script:
+    - pip install flake8 black --quiet
+    - echo "=== flake8 (errors only) ==="
+    - flake8 orchestrator --count --select=E9,F63,F7,F82 --show-source --statistics
+    - echo "=== flake8 (full) ==="
+    - flake8 orchestrator --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+    - echo "=== black check ==="
+    - black --check orchestrator --line-length=120
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+lint:dashboard:
+  stage: lint
+  script:
+    - pip install flake8 black --quiet
+    - echo "=== flake8 (errors only) ==="
+    - flake8 dashboard --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=__pycache__
+    - echo "=== flake8 (full) ==="
+    - flake8 dashboard --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics --exclude=__pycache__
+    - echo "=== black check ==="
+    - black --check dashboard --line-length=120
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# ============================================================
+# Stage: test
+# ============================================================
+test:orchestrator:
+  stage: test
+  script:
+    - pip install -r orchestrator/requirements.txt --quiet
+    - pip install pytest pytest-cov pytest-mock --quiet
+    - PYTHONPATH=. pytest orchestrator/tests -v
+        --cov=orchestrator
+        --cov-report=xml:coverage-orchestrator.xml
+        --cov-report=term-missing
+        --junitxml=report-orchestrator.xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report-orchestrator.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage-orchestrator.xml
+    paths:
+      - coverage-orchestrator.xml
+    expire_in: 7 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+test:dashboard:
+  stage: test
+  script:
+    - pip install -r dashboard/requirements.txt --quiet
+    - pip install pytest pytest-cov pytest-asyncio pytest-mock httpx --quiet
+    - PYTHONPATH=. pytest dashboard/tests -v
+        --cov=dashboard
+        --cov-report=xml:coverage-dashboard.xml
+        --cov-report=term-missing
+        --junitxml=report-dashboard.xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report-dashboard.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage-dashboard.xml
+    paths:
+      - coverage-dashboard.xml
+    expire_in: 7 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# ============================================================
+# Stage: security
+# ============================================================
+sast:bandit:
+  stage: security
+  script:
+    - pip install bandit --quiet
+    - echo "=== SAST: orchestrator ==="
+    - bandit -r orchestrator -ll --exclude orchestrator/tests -s B608 -f json -o bandit-orchestrator.json || true
+    - bandit -r orchestrator -ll --exclude orchestrator/tests -s B608
+    - echo "=== SAST: dashboard ==="
+    - bandit -r dashboard -ll --exclude dashboard/tests -s B608 -f json -o bandit-dashboard.json || true
+    - bandit -r dashboard -ll --exclude dashboard/tests -s B608
+  artifacts:
+    when: always
+    paths:
+      - bandit-orchestrator.json
+      - bandit-dashboard.json
+    expire_in: 7 days
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+# GitLab SAST integration (uses GitLab-provided SAST template)
+# Uncomment to enable GitLab Ultimate SAST scanning:
+# include:
+#   - template: Security/SAST.gitlab-ci.yml
+#   - template: Security/Secret-Detection.gitlab-ci.yml
+#   - template: Security/Container-Scanning.gitlab-ci.yml
+#   - template: Security/Dependency-Scanning.gitlab-ci.yml
+
+# ============================================================
+# Stage: build
+# ============================================================
+.docker_build_template: &docker_build_template
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  needs:
+    - lint:orchestrator
+    - lint:dashboard
+    - test:orchestrator
+    - test:dashboard
+
+build:orchestrator:
+  <<: *docker_build_template
+  script:
+    - |
+      IMAGE_TAG="${DOCKER_IMAGE_ORCHESTRATOR}:${CI_COMMIT_SHORT_SHA}"
+      IMAGE_LATEST="${DOCKER_IMAGE_ORCHESTRATOR}:latest"
+      docker build
+        --cache-from "${IMAGE_LATEST}"
+        --build-arg BUILDKIT_INLINE_CACHE=1
+        --label "org.opencontainers.image.revision=${CI_COMMIT_SHA}"
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        --label "org.opencontainers.image.source=${CI_PROJECT_URL}"
+        -t "${IMAGE_TAG}"
+        -t "${IMAGE_LATEST}"
+        ./orchestrator
+      docker push "${IMAGE_TAG}"
+      docker push "${IMAGE_LATEST}"
+      echo "IMAGE_ORCHESTRATOR=${IMAGE_TAG}" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 1 day
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        PUSH_IMAGE: "false"
+
+build:dashboard:
+  <<: *docker_build_template
+  script:
+    - |
+      IMAGE_TAG="${DOCKER_IMAGE_DASHBOARD}:${CI_COMMIT_SHORT_SHA}"
+      IMAGE_LATEST="${DOCKER_IMAGE_DASHBOARD}:latest"
+      docker build
+        --cache-from "${IMAGE_LATEST}"
+        --build-arg BUILDKIT_INLINE_CACHE=1
+        --label "org.opencontainers.image.revision=${CI_COMMIT_SHA}"
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        --label "org.opencontainers.image.source=${CI_PROJECT_URL}"
+        -t "${IMAGE_TAG}"
+        -t "${IMAGE_LATEST}"
+        ./dashboard
+      docker push "${IMAGE_TAG}"
+      docker push "${IMAGE_LATEST}"
+      echo "IMAGE_DASHBOARD=${IMAGE_TAG}" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 1 day
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        PUSH_IMAGE: "false"
+
+# ============================================================
+# Stage: scan-self
+# Self-scan of this repository via the Security Scanning Platform API.
+# Requires SECURITY_SCANNER_URL and SECURITY_SCANNER_API_KEY to be set.
+# ============================================================
+scan-self:
+  stage: scan-self
+  image: alpine:3.19
+  needs:
+    - build:orchestrator
+    - build:dashboard
+  before_script:
+    - apk add --no-cache curl jq --quiet
+  script:
+    - |
+      set -euo pipefail
+
+      if [ -z "${SECURITY_SCANNER_URL:-}" ] || [ -z "${SECURITY_SCANNER_API_KEY:-}" ]; then
+        echo "[WARN] SECURITY_SCANNER_URL or SECURITY_SCANNER_API_KEY not set. Skipping self-scan."
+        echo '{"status":"skipped","reason":"missing_variables"}' > scan-results.json
+        exit 0
+      fi
+
+      echo "[INFO] Triggering security scan for ${CI_PROJECT_PATH}..."
+
+      SCAN_RESPONSE=$(curl \
+        --fail-with-body \
+        --silent \
+        --show-error \
+        --max-time 300 \
+        -X POST "${SECURITY_SCANNER_URL}/api/scan/trigger" \
+        -H "Authorization: Bearer ${SECURITY_SCANNER_API_KEY}" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "target_type=git" \
+        -d "target=${CI_PROJECT_URL}" \
+        -d "name=${CI_PROJECT_PATH}" \
+        -d "async_mode=false" \
+        2>&1) || {
+          echo "[ERROR] Scan API call failed"
+          echo '{"status":"error","reason":"api_call_failed"}' > scan-results.json
+          exit 1
+        }
+
+      if ! echo "${SCAN_RESPONSE}" | jq -e . >/dev/null 2>&1; then
+        echo "[ERROR] Scanner response is not valid JSON: ${SCAN_RESPONSE}"
+        echo '{"status":"error","reason":"invalid_json_response"}' > scan-results.json
+        exit 1
+      fi
+
+      echo "${SCAN_RESPONSE}" > scan-results.json
+
+      SCAN_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.status // "unknown"')
+      POLICY_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.output.results[0].policy_status // .policy_status // "UNKNOWN"')
+
+      echo "[INFO] Scan status:  ${SCAN_STATUS}"
+      echo "[INFO] Policy status: ${POLICY_STATUS}"
+
+      if [ "${SCAN_STATUS}" = "error" ] || [ "${SCAN_STATUS}" = "failed" ]; then
+        echo "[ERROR] Security scanner returned error status"
+        exit 1
+      fi
+
+      if [ "${SECURITY_SCAN_FAIL_ON_BLOCK}" = "true" ] && [ "${POLICY_STATUS}" = "BLOCK" ]; then
+        echo "[ERROR] Security scan BLOCKED: critical findings detected"
+        exit 1
+      fi
+
+      echo "[OK] Security scan passed (policy: ${POLICY_STATUS})"
+  artifacts:
+    when: always
+    paths:
+      - scan-results.json
+    expire_in: 30 days
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+# ============================================================
+# Stage: deploy
+# SSH-based deployment using docker compose pull + up.
+# Requires DEPLOY_SSH_KEY, DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH.
+# ============================================================
+.deploy_template: &deploy_template
+  stage: deploy
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache openssh-client --quiet
+    - eval $(ssh-agent -s)
+    - echo "${DEPLOY_SSH_KEY}" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+  script:
+    - |
+      ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "
+        set -euo pipefail
+        cd ${DEPLOY_PATH}
+        echo '[INFO] Pulling latest images...'
+        docker compose pull
+        echo '[INFO] Restarting services...'
+        docker compose up -d --remove-orphans
+        echo '[INFO] Checking health...'
+        sleep 10
+        bash scripts/ops.sh health
+        echo '[DONE] Deployment complete.'
+      "
+
+deploy:staging:
+  <<: *deploy_template
+  environment:
+    name: staging
+    url: https://scanner-staging.example.com
+  needs:
+    - scan-self
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: true
+
+deploy:production:
+  <<: *deploy_template
+  environment:
+    name: production
+    url: https://scanner.example.com
+  needs:
+    - scan-self
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: false
+
+# ============================================================
+# Scheduled: nightly full scan
+# Configure in GitLab: CI/CD → Schedules → daily at 02:00 UTC
+# ============================================================
+nightly:scan:
+  stage: scan-self
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache curl jq --quiet
+  script:
+    - |
+      set -euo pipefail
+
+      if [ -z "${SECURITY_SCANNER_URL:-}" ] || [ -z "${SECURITY_SCANNER_API_KEY:-}" ]; then
+        echo "[WARN] Scanner variables not set. Skipping nightly scan."
+        exit 0
+      fi
+
+      echo "[INFO] Nightly scan triggered for ${CI_PROJECT_PATH}"
+
+      curl \
+        --fail-with-body \
+        --silent \
+        --show-error \
+        --max-time 600 \
+        -X POST "${SECURITY_SCANNER_URL}/api/scan/trigger" \
+        -H "Authorization: Bearer ${SECURITY_SCANNER_API_KEY}" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "target_type=git" \
+        -d "target=${CI_PROJECT_URL}" \
+        -d "name=${CI_PROJECT_PATH}-nightly" \
+        -d "async_mode=false" | jq .
+
+      echo "[OK] Nightly scan complete"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  allow_failure: true

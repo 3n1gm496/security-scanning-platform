@@ -15,7 +15,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     pip install --no-cache-dir semgrep checkov bandit
 
-COPY . /app/orchestrator
+COPY . /app
 
 
 RUN mkdir -p /data/reports /data/workspaces

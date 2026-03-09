@@ -43,15 +43,14 @@ RUN if wget -qO /tmp/trivy.deb -L "https://github.com/aquasecurity/trivy/release
     fi && rm -rf /var/lib/apt/lists/*
 
 # install nuclei binary (ignore failure when offline)
-# build nuclei from source with Go instead of relying on release archive
-RUN apt-get update && apt-get install -y --no-install-recommends golang-go && \
-    GOPATH=$(go env GOPATH) && \
-    mkdir -p "$GOPATH/bin" && \
-    # install latest nuclei via Go (module path includes major v3)
-    go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && \
-    mv "$GOPATH/bin/nuclei" /usr/local/bin/ && \
-    chmod +x /usr/local/bin/nuclei || \
-    echo "warning: failed to build nuclei, continuing without it"
+RUN if wget -qO /tmp/nuclei.zip -L "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip" && [ -s /tmp/nuclei.zip ]; then \
+        unzip -q /tmp/nuclei.zip -d /tmp/nuclei-bin && \
+        cp /tmp/nuclei-bin/nuclei /usr/local/bin/nuclei && \
+        chmod +x /usr/local/bin/nuclei && \
+        rm -rf /tmp/nuclei.zip /tmp/nuclei-bin; \
+    else \
+        echo "warning: failed to download nuclei binary, continuing without it"; \
+    fi
 
 # install grype binary (ignore failure when offline)
 RUN if wget -qO /tmp/grype.tar.gz -L "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/grype_${GRYPE_VERSION}_linux_amd64.tar.gz" && [ -s /tmp/grype.tar.gz ]; then \

@@ -15,9 +15,7 @@ class FindingStatus(str, Enum):
     """Finding lifecycle status."""
 
     NEW = "new"
-    ACKNOWLEDGED = "acknow
-
-ledged"
+    ACKNOWLEDGED = "acknowledged"
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
     FALSE_POSITIVE = "false_positive"

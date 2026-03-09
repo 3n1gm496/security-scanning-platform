@@ -1049,5 +1049,3 @@ def compare_scans(
             "resolved_by_severity": count_by_severity(resolved_findings),
         },
     }
-scan_async(target_type, target, name, str(root_dir))
-        return result

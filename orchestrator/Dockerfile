@@ -16,9 +16,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     pip install --no-cache-dir semgrep checkov bandit
 
 COPY . /app/orchestrator
-
-
-RUN mkdir -p /data/reports /data/workspaces
+WORKDIR /app/orchestrator
+RUN pip install -e .
 
 ENTRYPOINT ["python", "-m", "orchestrator.main"]
 CMD ["--help"]

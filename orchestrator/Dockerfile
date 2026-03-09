@@ -36,18 +36,19 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 # users can add it later in the running container or extend the Dockerfile with a
 # git clone/pip install step when network access permits.
 
-RUN wget -qO /tmp/trivy.deb "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb" \
-    && apt-get update && apt-get install -y /tmp/trivy.deb \
-    && rm -f /tmp/trivy.deb \
-    && rm -rf /var/lib/apt/lists/*
+RUN if wget -qO /tmp/trivy.deb -L "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb" && [ -s /tmp/trivy.deb ]; then \
+        apt-get update && apt-get install -y /tmp/trivy.deb && rm -f /tmp/trivy.deb; \
+    else \
+        echo "warning: failed to download trivy package, continuing without it"; \
+    fi && rm -rf /var/lib/apt/lists/*
 
 # install nuclei binary (ignore failure when offline)
 # build nuclei from source with Go instead of relying on release archive
 RUN apt-get update && apt-get install -y --no-install-recommends golang-go && \
     GOPATH=$(go env GOPATH) && \
     mkdir -p "$GOPATH/bin" && \
-    # install latest nuclei via Go (module path includes major v2)
-    go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest && \
+    # install latest nuclei via Go (module path includes major v3)
+    go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && \
     mv "$GOPATH/bin/nuclei" /usr/local/bin/ && \
     chmod +x /usr/local/bin/nuclei || \
     echo "warning: failed to build nuclei, continuing without it"
@@ -72,15 +73,17 @@ RUN ZAP_VERSION=${ZAP_VERSION} \
            echo "warning: failed to download ZAP binary (check version), continuing without it"; \
        fi
 
-RUN wget -qO /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" \
-    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
-    && chmod +x /usr/local/bin/gitleaks \
-    && rm -f /tmp/gitleaks.tar.gz
+RUN if wget -qO /tmp/gitleaks.tar.gz -L "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" && [ -s /tmp/gitleaks.tar.gz ]; then \
+        tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks && chmod +x /usr/local/bin/gitleaks && rm -f /tmp/gitleaks.tar.gz; \
+    else \
+        echo "warning: failed to download gitleaks binary, continuing without it"; \
+    fi
 
-RUN wget -qO /tmp/syft.tar.gz "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION#v}_linux_amd64.tar.gz" \
-    && tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft \
-    && chmod +x /usr/local/bin/syft \
-    && rm -f /tmp/syft.tar.gz
+RUN if wget -qO /tmp/syft.tar.gz -L "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION#v}_linux_amd64.tar.gz" && [ -s /tmp/syft.tar.gz ]; then \
+        tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft && chmod +x /usr/local/bin/syft && rm -f /tmp/syft.tar.gz; \
+    else \
+        echo "warning: failed to download syft binary, continuing without it"; \
+    fi
 
 # attempt to fetch release binaries via helper (best-effort)
 RUN if python3 /tmp/scripts/fetch_binaries.py --nuclei-version "${NUCLEI_VERSION}" --grype-version "${GRYPE_VERSION}" --zap-version "${ZAP_VERSION}"; then \

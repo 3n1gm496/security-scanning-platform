@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 import time
+import bcrypt
 import csv
 import io
 import subprocess
@@ -91,9 +92,36 @@ from metrics import get_metrics
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")
-PASSWORD = os.getenv("DASHBOARD_PASSWORD", "change-me")
+# DASHBOARD_PASSWORD accepts either a plain-text password (legacy, not recommended)
+# or a bcrypt hash (recommended). To generate a hash:
+#   python -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
+# A value starting with '$2b$' or '$2a$' is treated as a bcrypt hash.
+PASSWORD_RAW = os.getenv("DASHBOARD_PASSWORD", "change-me")
 # chiave segreta per sessione (usa .env o variabile ambiente sicura)
 SESSION_SECRET = os.getenv("DASHBOARD_SESSION_SECRET", "please-change-this")
+
+
+def _is_bcrypt_hash(value: str) -> bool:
+    """Return True if the value looks like a bcrypt hash."""
+    return value.startswith(("$2b$", "$2a$", "$2y$"))
+
+
+def _verify_password(plain: str, stored: str) -> bool:
+    """Verify a password against the stored credential.
+
+    If *stored* is a bcrypt hash the comparison is done via bcrypt.checkpw.
+    Otherwise a timing-safe string comparison is used (legacy plain-text mode).
+    A startup warning is emitted when plain-text mode is active.
+    """
+    if _is_bcrypt_hash(stored):
+        try:
+            return bcrypt.checkpw(plain.encode(), stored.encode())
+        except Exception:
+            return False
+    # Legacy plain-text mode — warn once at module load
+    return secrets.compare_digest(plain, stored)
+
+
 RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_RATE_LIMIT_REQUESTS", "180"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_RATE_LIMIT_WINDOW_SECONDS", "60"))
 # Stricter limits for the login endpoint to prevent brute-force attacks
@@ -245,8 +273,11 @@ async def login(
     username: str = Form(...),
     password: str = Form(...),
 ) -> HTMLResponse:
-    # confronta in modo sicuro con le credenziali memorizzate
-    if not (secrets.compare_digest(username or "", USERNAME) and secrets.compare_digest(password or "", PASSWORD)):
+    # Verify username with timing-safe comparison, then verify password.
+    # _verify_password supports both bcrypt hashes and legacy plain-text.
+    username_ok = secrets.compare_digest(username or "", USERNAME)
+    password_ok = _verify_password(password or "", PASSWORD_RAW)
+    if not (username_ok and password_ok):
         return templates.TemplateResponse(
             request,
             "login.html",

@@ -3,7 +3,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
+[![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
 Piattaforma open source, Linux-based e CI-agnostic per security scanning centralizzato in ambienti enterprise eterogenei. Orchestrazione automatica di 10+ scanner OSS con dashboard unificata e normalizzazione dei risultati.
 
@@ -56,11 +57,15 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - **📝 Normalizzazione Intelligente** — Output unificato in formato standard per tutti gli scanner
 - **🎯 Policy-based Blocking** — Blocco automatico della pipeline su finding critici
 - **💾 SQLite Backend** — Persistenza dati semplice, backup facili, zero dipendenze esterne
-- **🔐 Autenticazione** — Login basato su form con sessioni sicure
+- **🔐 Autenticazione** — Login basato su form con sessioni sicure; password con hashing bcrypt; cookie `HttpOnly`/`Secure`
+- **🛡️ Security Headers** — `Content-Security-Policy`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`
+- **⚡ Rate Limiting** — Protezione brute-force su `/login` (10 req/min) e API (180 req/min) con sliding window
+- **🔒 Path Traversal Protection** — Validazione e sanitizzazione degli input su tutti gli endpoint di scan
 - **🚀 Batch Scanning** — Scansione multipla di target da file YAML
 - **📈 Trending e History** — Tracking storico dei finding per analisi nel tempo
 - **📧 Email Notifications** — Alert critici e preferenze notifiche per utente
 - **📡 Prometheus Metrics** — Endpoint `/metrics` per osservabilità e monitoring
+- **🔁 GitLab Enterprise CI** — Pipeline `.gitlab-ci.yml` completa (lint → test → SAST → build → scan-self → deploy)
 
 ---
 
@@ -136,40 +141,38 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 
 ```text
 .
+├── .github/workflows/       # GitHub Actions CI (test, lint, SAST, docker build)
+├── .gitlab-ci.yml           # GitLab Enterprise CI/CD pipeline
+├── .gitlab-ci.yml.example   # Snippet minimale per altri repository GitLab
 ├── config/
-│   ├── settings.yaml
-│   └── targets.yaml
+│   ├── settings.yaml        # Configurazione scanner e policy
+│   ├── policies.yaml        # Policy di blocco pipeline
+│   └── targets.yaml         # Target batch scan
 ├── dashboard/
-│   ├── app.py
-│   ├── db.py
-│   ├── models.py
-│   ├── requirements.txt
+│   ├── app.py               # Applicazione FastAPI principale
+│   ├── db.py                # Connessione DB centralizzata
+│   ├── requirements.in      # Dipendenze sorgente (pip-tools)
+│   ├── requirements.txt     # Dipendenze pinnate (generato)
 │   ├── Dockerfile
-│   ├── static/style.css
-│   └── templates/
-├── demo/
-│   ├── demo-app/
-│   └── sample-normalized-report.json
+│   ├── static/
+│   ├── templates/
+│   └── tests/
+├── docs/
+│   └── gitlab-integration.md  # Guida integrazione GitLab Enterprise
 ├── orchestrator/
-│   ├── __init__.py
 │   ├── main.py
-│   ├── models.py
-│   ├── normalizer.py
-│   ├── scanners.py
-│   ├── storage.py
-│   ├── requirements.txt
+│   ├── requirements.in      # Dipendenze sorgente (pip-tools)
+│   ├── requirements.txt     # Dipendenze pinnate (generato)
 │   └── Dockerfile
 ├── scripts/
-│   ├── init_demo.sh
+│   ├── ops.sh               # CLI unificata per tutte le operazioni
 │   ├── run_scan.sh
 │   ├── schedule_scan.sh
 │   └── schedule_retention.sh
-├── systemd/
-│   ├── security-dashboard.service
-│   ├── security-scanner.service
-│   ├── security-scanner.timer
-│   ├── security-retention.service
-│   └── security-retention.timer
+├── systemd/                 # Service e timer systemd
+├── templates/
+│   └── gitlab-scan-template.yml  # Template riutilizzabile per altri repo
+├── CHANGELOG.md
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -302,27 +305,45 @@ EMAIL_FROM_NAME=Security Scanner
 
 ### Operazioni CLI (ops.sh)
 
-Script di utilità per gestire stack, database e launching di scans:
+Script di utilità per gestire stack, database, scansioni e operazioni di sviluppo:
 
 ```bash
+# Stack
 ./scripts/ops.sh up                    # Avvia stack Docker Compose
 ./scripts/ops.sh down                  # Arresta stack
+./scripts/ops.sh health                # Health check (/, /health, /ready)
+./scripts/ops.sh open                  # Apri dashboard nel browser
+
+# Scan
 ./scripts/ops.sh scan demo             # Esegui demo scan
 ./scripts/ops.sh scan local --path $PWD --name my-app
 ./scripts/ops.sh scan git --url https://github.com/org/repo --name my-repo
 ./scripts/ops.sh scan image --image nginx:latest --name nginx
-./scripts/ops.sh logs dashboard        # Vedi log dashboard
-./scripts/ops.sh open                  # Apri dashboard nel browser
+
+# Dev / CI (senza Docker)
+./scripts/ops.sh test                  # Esegui tutti i test (pytest)
+./scripts/ops.sh test dashboard        # Solo test dashboard
+./scripts/ops.sh lint                  # flake8 + black check
+./scripts/ops.sh lint --fix            # Applica black
+./scripts/ops.sh deps-compile          # Rigenera requirements.txt pinnati
+
+# API Keys
+./scripts/ops.sh api-key create --name ci-runner --role operator
+./scripts/ops.sh api-key list
+./scripts/ops.sh api-key revoke --prefix abc123
+
+# Manutenzione
+./scripts/ops.sh backup
+./scripts/ops.sh retention --days 30
+./scripts/ops.sh logs dashboard
 ```
 
 **Note:**
-- `./scripts/ops.sh up` crea/inizializza automaticamente ciò che serve: `.env` (se mancante), directory dati e database scans SQLite
-- Se Docker è disponibile, `ops.sh` usa Docker Compose per eseguire orchestrator
-- Se Docker NON è disponibile, `ops.sh` automaticamente fallback a Python CLI diretto
-- In fallback Python, `ops.sh` disabilita automaticamente gli scanner non installati localmente
-- In fallback Python, `ops.sh` usa path locali separati per ridurre warning di permessi
-- Entrambi i modelli salvano i risultati nello stesso database SQLite
-- Supporta sia Docker che ambienti Python-only (es. WSL senza Docker)
+- `./scripts/ops.sh up` crea/inizializza automaticamente `.env` (se mancante), directory dati e database SQLite
+- Se Docker è disponibile, `ops.sh` usa Docker Compose per eseguire l'orchestrator
+- Se Docker **non** è disponibile, `ops.sh` fa fallback automatico a Python CLI diretto
+- In modalità Python, disabilita automaticamente gli scanner non presenti in PATH
+- I comandi `test`, `lint`, `deps-compile` funzionano sempre senza Docker
 
 ### Scan Singolo - Repository Locale
 
@@ -561,13 +582,36 @@ uvicorn app:app --reload --port 8080
 ### Test
 
 ```bash
-# Orchestrator tests
-cd orchestrator/tests
-pytest test_normalizer.py -v
+# Tutti i test (metodo rapido via ops.sh)
+./scripts/ops.sh test
 
-# Dashboard tests
-cd dashboard/tests
-pytest test_api.py -v
+# Oppure direttamente con pytest
+PYTHONPATH=. pytest dashboard/tests/ orchestrator/tests/ -v
+
+# Solo un modulo
+PYTHONPATH=. pytest dashboard/tests/test_auth.py -v
+```
+
+### Lint
+
+```bash
+./scripts/ops.sh lint          # Controlla black + flake8
+./scripts/ops.sh lint --fix    # Applica black
+```
+
+### Aggiornare le dipendenze pinnate
+
+Le dipendenze sono gestite con **pip-tools**. Modifica i file `.in` e rigenera:
+
+```bash
+# Modifica dashboard/requirements.in o orchestrator/requirements.in
+vim dashboard/requirements.in
+
+# Rigenera i .txt pinnati
+./scripts/ops.sh deps-compile
+
+# Verifica le modifiche
+git diff dashboard/requirements.txt
 ```
 
 ### Struttura Codebase
@@ -618,6 +662,7 @@ Questo progetto è distribuito sotto licenza MIT. Vedi il file [`LICENSE`](LICEN
 
 ## 📚 Documentazione Aggiuntiva
 
+- [GitLab Enterprise CI/CD Integration](docs/gitlab-integration.md)
 - [Architettura Tecnica](docs/technical-architecture.md)
 - [API Reference](docs/api-reference.md)
 - [Scanner Integration Guide](docs/scanner-integration.md)

@@ -69,6 +69,20 @@ from analytics import (
     get_tool_effectiveness,
 )
 from remediation import RemediationEngine, enrich_finding_with_remediation
+from finding_management import (
+    init_finding_management_tables,
+    FindingStatus,
+    update_finding_status,
+    assign_finding,
+    mark_false_positive,
+    accept_risk,
+    add_finding_comment,
+    get_finding_comments,
+    bulk_update_status,
+    get_findings_by_status,
+    get_finding_stats_by_status,
+    get_finding_state,
+)
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -85,6 +99,7 @@ app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 # Initialize RBAC tables
 init_rbac_tables()
 init_webhook_tables()
+init_finding_management_tables()
 default_key = create_default_admin_key()
 if default_key:
     print(f"\n{'=' * 80}")
@@ -709,5 +724,145 @@ def trigger_scan(
         return {"status": "queued", "message": "Scan queued and running in background", "target_name": name}
     else:
         # Wait for scan to complete
-        result = run_scan_async(target_type, target, name, str(root_dir))
+        result = run_
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Finding Management Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/findings/stats-by-status")
+def api_finding_stats_by_status(user: str = Depends(get_current_user)) -> dict:
+    """Get finding statistics grouped by status."""
+    return get_finding_stats_by_status()
+
+
+@app.get("/api/findings/by-status")
+def api_findings_by_status(
+    status: str | None = None,
+    limit: int = Query(100, le=1000),
+    user: str = Depends(get_current_user),
+) -> list[dict]:
+    """Get findings filtered by management status."""
+    return get_findings_by_status(status, limit)
+
+
+@app.get("/api/findings/{finding_id}/state")
+def api_get_finding_state(finding_id: int, user: str = Depends(get_current_user)) -> dict:
+    """Get finding management state."""
+    state = get_finding_state(finding_id)
+    if not state:
+        return {"finding_id": finding_id, "status": "new", "assigned_to": None}
+    return state
+
+
+@app.patch(
+    "/api/findings/{finding_id}/status",
+    dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
+)
+def api_update_finding_status(
+    finding_id: int,
+    status: str = Form(...),
+    notes: str | None = Form(None),
+    assigned_to: str | None = Form(None),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Update finding status."""
+    try:
+        finding_status = FindingStatus(status)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status}")
+
+    result = update_finding_status(
+        finding_id,
+        finding_status,
+        user=auth.api_key_prefix or "unknown",
+        notes=notes,
+        assigned_to=assigned_to,
+    )
+
+    return result
+
+
+@app.post(
+    "/api/findings/{finding_id}/assign",
+    dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
+)
+def api_assign_finding(
+    finding_id: int,
+    assigned_to: str = Form(...),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Assign finding to a user."""
+    result = assign_finding(finding_id, assigned_to, assigned_by=auth.api_key_prefix or "unknown")
+    return result
+
+
+@app.post(
+    "/api/findings/{finding_id}/false-positive",
+    dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
+)
+def api_mark_false_positive(
+    finding_id: int,
+    reason: str = Form(...),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Mark finding as false positive."""
+    result = mark_false_positive(finding_id, reason, user=auth.api_key_prefix or "unknown")
+    return result
+
+
+@app.post(
+    "/api/findings/{finding_id}/accept-risk",
+    dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
+)
+def api_accept_risk(
+    finding_id: int,
+    justification: str = Form(...),
+    expires_at: str = Form(...),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Accept risk for finding with expiration date."""
+    result = accept_risk(finding_id, justification, expires_at, user=auth.api_key_prefix or "unknown")
+    return result
+
+
+@app.post(
+    "/api/findings/{finding_id}/comment",
+    dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
+)
+def api_add_finding_comment(
+    finding_id: int,
+    comment: str = Form(...),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Add comment to finding."""
+    comment_id = add_finding_comment(finding_id, user=auth.api_key_prefix or "unknown", comment=comment)
+    return {"comment_id": comment_id, "finding_id": finding_id}
+
+
+@app.get("/api/findings/{finding_id}/comments")
+def api_get_finding_comments(finding_id: int, user: str = Depends(get_current_user)) -> list[dict]:
+    """Get all comments for a finding."""
+    return get_finding_comments(finding_id)
+
+
+@app.post(
+    "/api/findings/bulk/update-status",
+    dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
+)
+def api_bulk_update_status(
+    finding_ids: list[int],
+    status: str,
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Bulk update status for multiple findings."""
+    try:
+        finding_status = FindingStatus(status)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status}")
+
+    result = bulk_update_status(finding_ids, finding_status, user=auth.api_key_prefix or "unknown")
+    return result
+scan_async(target_type, target, name, str(root_dir))
         return result

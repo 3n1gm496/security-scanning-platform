@@ -6,8 +6,6 @@ trend analysis, and report generation capabilities.
 
 from __future__ import annotations
 
-import sqlite3
-from datetime import datetime, timedelta
 from typing import Any
 
 from db import get_connection
@@ -200,7 +198,7 @@ def get_trend_analysis(db_path: str, days: int = 90) -> dict[str, Any]:
         # Get findings grouped by day
         rows = conn.execute(
             """
-            SELECT 
+            SELECT
                 substr(timestamp, 1, 10) AS day,
                 severity,
                 category,

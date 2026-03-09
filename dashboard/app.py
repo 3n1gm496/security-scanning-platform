@@ -84,10 +84,10 @@ init_rbac_tables()
 init_webhook_tables()
 default_key = create_default_admin_key()
 if default_key:
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"DEFAULT ADMIN API KEY: {default_key}")
     print(f"Store this key securely! It will not be shown again.")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
@@ -578,7 +578,6 @@ def analytics_tool_effectiveness(auth: AuthContext = Depends(require_auth)) -> l
 )
 def analytics_finding_risk(finding_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Calculate risk score for a specific finding."""
-    findings = list_findings(DB_PATH, limit=1, scan_id=None)
 
     # Find specific finding
     with get_connection(DB_PATH) as conn:

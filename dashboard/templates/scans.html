@@ -79,17 +79,17 @@
         <tbody>
           {% for scan in scans %}
           <tr>
-            <td><code>{{ scan.id }}</code></td>
-            <td>{{ scan.target_name }}</td>
-            <td>{{ scan.target_type }}</td>
-            <td>{{ scan.status }}</td>
-            <td>{{ scan.policy_status }}</td>
-            <td>{{ scan.findings_count }}</td>
-            <td>{{ scan.critical_count }}</td>
-            <td>{{ scan.high_count }}</td>
-            <td><code>{{ scan.normalized_report_path }}</code></td>
-            <td><code>{{ scan.artifacts.get("sbom", "-") }}</code></td>
-            <td>{{ scan.created_at }}</td>
+            <td class="cell-nowrap"><code>{{ scan.id }}</code></td>
+            <td class="cell-wrap" title="{{ scan.target_name }}">{{ scan.target_name }}</td>
+            <td class="cell-nowrap">{{ scan.target_type }}</td>
+            <td class="cell-nowrap">{{ scan.status }}</td>
+            <td class="cell-nowrap">{{ scan.policy_status }}</td>
+            <td class="cell-nowrap">{{ scan.findings_count }}</td>
+            <td class="cell-nowrap">{{ scan.critical_count }}</td>
+            <td class="cell-nowrap">{{ scan.high_count }}</td>
+            <td class="cell-wrap-wide" title="{{ scan.normalized_report_path }}"><code class="cell-code">{{ scan.normalized_report_path }}</code></td>
+            <td class="cell-wrap-wide" title="{{ scan.artifacts.get('sbom', '-') }}"><code class="cell-code">{{ scan.artifacts.get("sbom", "-") }}</code></td>
+            <td class="cell-nowrap">{{ scan.created_at }}</td>
           </tr>
           {% endfor %}
         </tbody>

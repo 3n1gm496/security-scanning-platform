@@ -89,18 +89,18 @@
         <tbody>
           {% for finding in findings %}
           <tr>
-            <td class="severity severity-{{ finding.severity|lower }}">{{ finding.severity }}</td>
-            <td>{{ finding.tool }}</td>
-            <td>{{ finding.category }}</td>
-            <td>{{ finding.target_name }}</td>
-            <td>{{ finding.title }}</td>
-            <td class="remediation-cell">{{ finding.remediation_display or finding.remediation or "-" }}</td>
-            <td><code>{{ finding.file or finding.file_path or "-" }}</code></td>
-            <td>{{ finding.line or finding.line_number or "-" }}</td>
-            <td>{{ finding.package or "-" }}</td>
-            <td>{{ finding.version or "-" }}</td>
-            <td>{{ finding.cve or "-" }}</td>
-            <td><code>{{ finding.scan_id }}</code></td>
+            <td class="severity severity-{{ finding.severity|lower }} cell-nowrap">{{ finding.severity }}</td>
+            <td class="cell-nowrap">{{ finding.tool }}</td>
+            <td class="cell-nowrap">{{ finding.category }}</td>
+            <td class="cell-wrap" title="{{ finding.target_name }}">{{ finding.target_name }}</td>
+            <td class="cell-wrap-wide" title="{{ finding.title }}">{{ finding.title }}</td>
+            <td class="remediation-cell cell-wrap-wide" title="{{ finding.remediation_display or finding.remediation or '-' }}">{{ finding.remediation_display or finding.remediation or "-" }}</td>
+            <td class="cell-wrap" title="{{ finding.file or finding.file_path or '-' }}"><code class="cell-code">{{ finding.file or finding.file_path or "-" }}</code></td>
+            <td class="cell-nowrap">{{ finding.line or finding.line_number or "-" }}</td>
+            <td class="cell-wrap" title="{{ finding.package or '-' }}">{{ finding.package or "-" }}</td>
+            <td class="cell-wrap" title="{{ finding.version or '-' }}">{{ finding.version or "-" }}</td>
+            <td class="cell-wrap" title="{{ finding.cve or '-' }}">{{ finding.cve or "-" }}</td>
+            <td class="cell-nowrap"><code>{{ finding.scan_id }}</code></td>
           </tr>
           {% endfor %}
         </tbody>

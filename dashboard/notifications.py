@@ -42,33 +42,34 @@ class EmailNotificationEngine:
         <html>
             <body style="font-family: Arial, sans-serif;">
                 <h2 style="color: #d32f2f;">Critical Security Finding</h2>
-                
+
                 <p><strong>Title:</strong> {finding.get('title', 'N/A')}</p>
                 <p><strong>Severity:</strong> <span style="color: #d32f2f; font-weight: bold;">CRITICAL</span></p>
                 <p><strong>Type:</strong> {finding.get('category', 'Unknown')}</p>
                 <p><strong>Description:</strong> {finding.get('description', 'N/A')}</p>
-                
+
                 <h3>Location</h3>
                 <p><strong>File:</strong> {finding.get('file_path', 'N/A')}</p>
                 <p><strong>Line:</strong> {finding.get('line_number', 'N/A')}</p>
-                
+
                 <h3>Details</h3>
                 <ul>
                     <li>Tool: {finding.get('tool', 'N/A')}</li>
                     <li>CVE: {finding.get('cve_id', 'N/A')}</li>
                     <li>Fingerprint: {finding.get('fingerprint', 'N/A')}</li>
                 </ul>
-                
+
                 <p>
-                    <a href="{dashboard_url}/findings/{finding.get('id', '')}" 
-                       style="background-color: #d32f2f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                    <a href="{dashboard_url}/findings/{finding.get('id', '')}"
+                       style="background-color: #d32f2f; color: white; padding: 10px 20px;
+                              text-decoration: none; border-radius: 5px;">
                         View in Dashboard
                     </a>
                 </p>
-                
+
                 <hr>
                 <p style="color: #999; font-size: 12px;">
-                    This is an automated alert from the Security Scanner. 
+                    This is an automated alert from the Security Scanner.
                     <a href="{dashboard_url}/notifications/unsubscribe?email={to_email}">Unsubscribe</a>
                 </p>
             </body>
@@ -77,20 +78,20 @@ class EmailNotificationEngine:
 
         text_body = f"""
         CRITICAL SECURITY FINDING
-        
+
         Title: {finding.get('title', 'N/A')}
         Severity: CRITICAL
         Type: {finding.get('category', 'Unknown')}
         Description: {finding.get('description', 'N/A')}
-        
+
         Location:
         File: {finding.get('file_path', 'N/A')}
         Line: {finding.get('line_number', 'N/A')}
-        
+
         Details:
         Tool: {finding.get('tool', 'N/A')}
         CVE: {finding.get('cve_id', 'N/A')}
-        
+
         View in dashboard: {dashboard_url}/findings/{finding.get('id', '')}
         """
 
@@ -114,11 +115,11 @@ class EmailNotificationEngine:
         <html>
             <body style="font-family: Arial, sans-serif;">
                 <h2>Security Scan Summary</h2>
-                
+
                 <p><strong>Target:</strong> {scan_results.get('target_name', 'N/A')}</p>
                 <p><strong>Scan ID:</strong> {scan_results.get('scan_id', 'N/A')}</p>
                 <p><strong>Date:</strong> {scan_results.get('created_at', 'N/A')}</p>
-                
+
                 <h3>Findings Summary</h3>
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr style="background-color: #f0f0f0;">
@@ -142,14 +143,15 @@ class EmailNotificationEngine:
                         <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">{total_count}</td>
                     </tr>
                 </table>
-                
+
                 <p style="margin-top: 20px;">
-                    <a href="{dashboard_url}/scan/{scan_results.get('scan_id', '')}" 
-                       style="background-color: #1976d2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                    <a href="{dashboard_url}/scan/{scan_results.get('scan_id', '')}"
+                       style="background-color: #1976d2; color: white; padding: 10px 20px;
+                              text-decoration: none; border-radius: 5px;">
                         View Full Report
                     </a>
                 </p>
-                
+
                 <hr>
                 <p style="color: #999; font-size: 12px;">
                     This is an automated report from the Security Scanner.
@@ -160,17 +162,17 @@ class EmailNotificationEngine:
 
         text_body = f"""
         SECURITY SCAN SUMMARY
-        
+
         Target: {scan_results.get('target_name', 'N/A')}
         Scan ID: {scan_results.get('scan_id', 'N/A')}
         Date: {scan_results.get('created_at', 'N/A')}
-        
+
         Findings Summary:
         CRITICAL: {critical_count}
         HIGH: {high_count}
         MEDIUM: {medium_count}
         TOTAL: {total_count}
-        
+
         View full report: {dashboard_url}/scan/{scan_results.get('scan_id', '')}
         """
 
@@ -189,9 +191,9 @@ class EmailNotificationEngine:
         <html>
             <body style="font-family: Arial, sans-serif;">
                 <h2>Weekly Security Report</h2>
-                
+
                 <p>Here's your weekly security summary for the past 7 days:</p>
-                
+
                 <h3>Statistics</h3>
                 <ul>
                     <li>Total Scans: {digest_data.get('total_scans', 0)}</li>
@@ -199,14 +201,15 @@ class EmailNotificationEngine:
                     <li>Resolved Findings: {digest_data.get('resolved_findings', 0)}</li>
                     <li>Critical Findings: {digest_data.get('critical_count', 0)}</li>
                 </ul>
-                
+
                 <p>
-                    <a href="{dashboard_url}/" 
-                       style="background-color: #1976d2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                    <a href="{dashboard_url}/"
+                       style="background-color: #1976d2; color: white; padding: 10px 20px;
+                              text-decoration: none; border-radius: 5px;">
                         View Dashboard
                     </a>
                 </p>
-                
+
                 <hr>
                 <p style="color: #999; font-size: 12px;">
                     This is an automated weekly report from the Security Scanner.
@@ -217,13 +220,13 @@ class EmailNotificationEngine:
 
         text_body = f"""
         WEEKLY SECURITY REPORT
-        
+
         Statistics for the past 7 days:
         Total Scans: {digest_data.get('total_scans', 0)}
         New Findings: {digest_data.get('new_findings', 0)}
         Resolved Findings: {digest_data.get('resolved_findings', 0)}
         Critical Findings: {digest_data.get('critical_count', 0)}
-        
+
         View dashboard: {dashboard_url}/
         """
 
@@ -281,7 +284,7 @@ class NotificationPreferencesManager:
 
             conn.execute(
                 """
-                INSERT OR REPLACE INTO notification_preferences 
+                INSERT OR REPLACE INTO notification_preferences
                 (user_email, critical_alerts, high_alerts, scan_summaries, weekly_digest, preferred_channel)
                 VALUES (?, ?, ?, ?, ?, ?)
             """,

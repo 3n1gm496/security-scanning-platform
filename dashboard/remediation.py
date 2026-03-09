@@ -30,7 +30,7 @@ from markupsafe import escape
 def show_user(username):
     # SAFE: Auto-escape user input
     return render_template('user.html', username=escape(username))
-    
+
 # Or use Jinja2 auto-escaping (enabled by default)
 {{ username }}  <!-- Auto-escaped -->
 {{ username | safe }}  <!-- Only if you trust the source! -->

@@ -130,6 +130,8 @@ DEV / CI
   api-key create --name N --role R [--expires-days D]
   api-key list
   api-key revoke --prefix P
+  dev                          Avvia stack in modalità dev (live-reload)
+  down-dev                     Ferma stack dev
 
 ESEMPI
   ./scripts/ops.sh up
@@ -852,6 +854,24 @@ cmd_deps_compile() {
   info "Fatto. Verifica le modifiche con: git diff"
 }
 
+cmd_dev() {
+  require_compose
+  ensure_env
+  ensure_dirs
+  header "Avvio stack in modalità DEV"
+  ${COMPOSE} -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+  init_scan_db
+  info "Dashboard (dev): $(dashboard_url)"
+  info "I servizi sono in esecuzione con live-reload. Premi Ctrl+C per fermare i log."
+  ${COMPOSE} -f docker-compose.yml -f docker-compose.dev.yml logs -f
+}
+
+cmd_down_dev() {
+  require_compose
+  header "Stop stack DEV"
+  ${COMPOSE} -f docker-compose.yml -f docker-compose.dev.yml down
+}
+
 cmd_api_key() {
   local sub="${1:-}"; shift || true
 
@@ -1294,9 +1314,9 @@ main() {
     deps-compile)
       cmd_deps_compile
       ;;
-    api-key)
-      cmd_api_key "$@"
-      ;;
+     "api-key") cmd_api_key "$@" ;;
+    "dev") cmd_dev "$@" ;;
+    "down-dev") cmd_down_dev "$@" ;;
     *)
       die "Comando non valido: ${cmd}. Usa ./scripts/ops.sh help"
       ;;

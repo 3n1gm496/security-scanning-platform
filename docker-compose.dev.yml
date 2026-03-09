@@ -1,0 +1,16 @@
+services:
+  dashboard:
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+    volumes:
+      - ./dashboard:/app
+      - ./data:/data
+
+  orchestrator:
+    # Per lo sviluppo, manteniamo il container in esecuzione per consentire l'esecuzione manuale dei comandi.
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - ./orchestrator:/app
+      - ./data:/data
+      - ./config:/app/config:ro
+    # Rimuoviamo il profilo manuale per avviarlo di default in dev
+    profiles: []

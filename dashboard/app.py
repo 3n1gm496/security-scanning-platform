@@ -10,7 +10,8 @@ import subprocess
 import json
 from collections import defaultdict, deque
 from pathlib import Path
-from threading import Lock, Thread, Timer
+from threading import Lock, Timer
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
@@ -127,6 +128,9 @@ RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_RATE_LIMIT_WINDOW_SECONDS",
 # Stricter limits for the login endpoint to prevent brute-force attacks
 LOGIN_RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_REQUESTS", "10"))
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_WINDOW_SECONDS", "60"))
+# Maximum number of concurrent background scans. Prevents unbounded thread growth
+# when async_mode=True is used repeatedly. Configurable via env var.
+MAX_SCAN_WORKERS = int(os.getenv("DASHBOARD_MAX_SCAN_WORKERS", "4"))
 
 app = FastAPI(title=APP_TITLE)
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
@@ -174,6 +178,10 @@ _cleanup_timer.daemon = True
 _cleanup_timer.start()
 
 notification_engine = EmailNotificationEngine()
+
+# Bounded thread pool for background scans (async_mode=True).
+# Using a fixed-size pool prevents unbounded thread growth under load.
+_scan_executor = ThreadPoolExecutor(max_workers=MAX_SCAN_WORKERS, thread_name_prefix="scan-worker")
 
 
 def _client_key(request: Request) -> str:
@@ -230,6 +238,19 @@ async def security_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cache-Control"] = "no-store"
+    # Content-Security-Policy: restrict sources to self; allow inline styles
+    # for Jinja2 templates and Chart.js canvas rendering.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+    # HSTS: only sent over HTTPS; max-age 1 year
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
@@ -866,9 +887,10 @@ def trigger_scan(
             )
 
     if async_mode:
-        # Launch scan in background and return immediately
-        thread = Thread(target=run_scan_async, args=(target_type, target, name, str(root_dir)), daemon=True)
-        thread.start()
+        # Submit to bounded thread pool to prevent unbounded thread growth.
+        # If the pool is at capacity, submit() still queues the task internally
+        # (ThreadPoolExecutor uses an unbounded internal queue by default).
+        _scan_executor.submit(run_scan_async, target_type, target, name, str(root_dir))
         return {"status": "queued", "message": "Scan queued and running in background", "target_name": name}
     else:
         # Wait for scan to complete

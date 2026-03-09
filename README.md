@@ -306,6 +306,7 @@ Script di utilità per gestire stack, database e launching di scans:
 ```
 
 **Note:**
+- `./scripts/ops.sh up` crea/inizializza automaticamente ciò che serve: `.env` (se mancante), directory dati e database scans SQLite
 - Se Docker è disponibile, `ops.sh` usa Docker Compose per eseguire orchestrator
 - Se Docker NON è disponibile, `ops.sh` automaticamente fallback a Python CLI diretto
 - In fallback Python, `ops.sh` disabilita automaticamente gli scanner non installati localmente

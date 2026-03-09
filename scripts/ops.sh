@@ -191,6 +191,13 @@ db_exec_python() {
   ${COMPOSE} exec -T dashboard python -c "${code}"
 }
 
+init_scan_db() {
+  require_compose
+  ensure_dirs
+  info "Inizializzazione database scans (/data/security_scans.db)"
+  ${COMPOSE} run --rm --entrypoint python orchestrator -c 'from orchestrator.storage import init_db; init_db("/data/security_scans.db")' >/dev/null
+}
+
 latest_summary_report() {
   find "${REPORTS_DIR}" -maxdepth 2 -name summary.json -type f 2>/dev/null | sort | tail -n 1
 }
@@ -273,6 +280,7 @@ cmd_up() {
   ensure_dirs
   header "Avvio stack"
   ${COMPOSE} up -d --build
+  init_scan_db
   info "Dashboard: $(dashboard_url)"
 }
 
@@ -342,7 +350,13 @@ cmd_health() {
   fi
   echo
   info "Dashboard endpoint: $(dashboard_url)"
-  curl -I -sS "$(dashboard_url)/" | head -n 10 || true
+  local code
+  code="$(curl -sS -o /dev/null -w "%{http_code}" "$(dashboard_url)/" || echo "000")"
+  if [[ "${code}" == "200" || "${code}" == "302" ]]; then
+    info "Dashboard raggiungibile (HTTP ${code})"
+  else
+    warn "Dashboard non raggiungibile correttamente (HTTP ${code})"
+  fi
 }
 
 cmd_open() {

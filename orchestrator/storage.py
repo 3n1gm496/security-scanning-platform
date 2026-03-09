@@ -78,12 +78,14 @@ def init_db(db_path: str) -> None:
         conn.commit()
     LOGGER.info("SQLite initialized at %s", db_path)
 
+
 def _to_sqlite_text(value):
     if value is None:
         return None
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
+
 
 def save_scan_result(db_path: str, result: ScanResult) -> None:
     counts = result.severity_counts()
@@ -151,7 +153,7 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
                 )
                 for finding in result.findings
             ],
-        )       
+        )
         conn.commit()
     LOGGER.info("Persisted scan %s with %s findings", result.scan_id, len(result.findings))
 

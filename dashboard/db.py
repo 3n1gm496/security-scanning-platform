@@ -19,8 +19,12 @@ def fetch_kpis(db_path: str) -> dict[str, Any]:
     with get_connection(db_path) as conn:
         total_scans = conn.execute("SELECT COUNT(*) AS value FROM scans").fetchone()["value"]
         total_findings = conn.execute("SELECT COUNT(*) AS value FROM findings").fetchone()["value"]
-        critical_findings = conn.execute("SELECT COUNT(*) AS value FROM findings WHERE severity = 'CRITICAL'").fetchone()["value"]
-        high_findings = conn.execute("SELECT COUNT(*) AS value FROM findings WHERE severity = 'HIGH'").fetchone()["value"]
+        critical_findings = conn.execute(
+            "SELECT COUNT(*) AS value FROM findings WHERE severity = 'CRITICAL'"
+        ).fetchone()["value"]
+        high_findings = conn.execute("SELECT COUNT(*) AS value FROM findings WHERE severity = 'HIGH'").fetchone()[
+            "value"
+        ]
         open_targets = conn.execute("SELECT COUNT(DISTINCT target_name) AS value FROM scans").fetchone()["value"]
         last_7d_scans = conn.execute(
             "SELECT COUNT(*) AS value FROM scans WHERE substr(created_at, 1, 10) >= date('now', '-7 day')"
@@ -103,9 +107,7 @@ def severity_breakdown(db_path: str) -> dict[str, int]:
 
 def tool_breakdown(db_path: str) -> dict[str, int]:
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            "SELECT tool, COUNT(*) AS total FROM findings GROUP BY tool ORDER BY total DESC"
-        ).fetchall()
+        rows = conn.execute("SELECT tool, COUNT(*) AS total FROM findings GROUP BY tool ORDER BY total DESC").fetchall()
     return {row["tool"]: row["total"] for row in rows}
 
 

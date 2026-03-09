@@ -137,6 +137,7 @@ async def security_middleware(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     return response
 
+
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
@@ -144,6 +145,7 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 # ---------------------------------------------------------------------------
 # Autenticazione basata su sessione (login form)
 # ---------------------------------------------------------------------------
+
 
 def get_current_user(request: Request) -> str:
     """Dependency che restituisce l'utente autenticato.
@@ -360,6 +362,7 @@ def api_findings(
 # API Key Management Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @app.get("/api/keys", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
 def get_api_keys(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """List all API keys (admin/operator only)."""
@@ -371,53 +374,42 @@ def create_new_api_key(
     name: str = Form(...),
     role: str = Form(...),
     expires_days: int | None = Form(None),
-    auth: AuthContext = Depends(require_auth)
+    auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Create a new API key (admin/operator only)."""
     try:
         role_enum = Role(role)
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role: {role}"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}")
+
     full_key, prefix = create_api_key(
-        name=name,
-        role=role_enum,
-        expires_days=expires_days,
-        created_by=auth.api_key_prefix or auth.user_id
+        name=name, role=role_enum, expires_days=expires_days, created_by=auth.api_key_prefix or auth.user_id
     )
-    
+
     return {
         "key": full_key,
         "prefix": prefix,
         "role": role,
         "name": name,
-        "warning": "Store this key securely! It will not be shown again."
+        "warning": "Store this key securely! It will not be shown again.",
     }
 
 
 @app.delete("/api/keys/{key_prefix}", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
-def delete_api_key(
-    key_prefix: str,
-    auth: AuthContext = Depends(require_auth)
-) -> dict:
+def delete_api_key(key_prefix: str, auth: AuthContext = Depends(require_auth)) -> dict:
     """Revoke an API key (admin/operator only)."""
     success = revoke_api_key(key_prefix)
-    
+
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+
     return {"status": "revoked", "key_prefix": key_prefix}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Webhook Management Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/webhooks", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
 def get_webhooks(auth: AuthContext = Depends(require_auth)) -> list[dict]:
@@ -431,7 +423,7 @@ def create_new_webhook(
     url: str = Form(...),
     events: str = Form(...),  # Comma-separated event types
     secret: str | None = Form(None),
-    auth: AuthContext = Depends(require_auth)
+    auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Create a new webhook (admin/operator only)."""
     # Parse events
@@ -441,59 +433,41 @@ def create_new_webhook(
         try:
             event_list.append(WebhookEvent(event_str))
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid event type: {event_str}"
-            )
-    
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid event type: {event_str}")
+
     webhook_id = create_webhook(name, url, event_list, secret)
-    
-    return {
-        "id": webhook_id,
-        "name": name,
-        "url": url,
-        "events": events
-    }
+
+    return {"id": webhook_id, "name": name, "url": url, "events": events}
 
 
 @app.delete("/api/webhooks/{webhook_id}", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def delete_webhook_endpoint(
-    webhook_id: int,
-    auth: AuthContext = Depends(require_auth)
-) -> dict:
+def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Delete a webhook (admin/operator only)."""
     success = delete_webhook(webhook_id)
-    
+
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Webhook not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+
     return {"status": "deleted", "id": webhook_id}
 
 
 @app.patch("/api/webhooks/{webhook_id}", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
 def toggle_webhook_endpoint(
-    webhook_id: int,
-    is_active: bool = Form(...),
-    auth: AuthContext = Depends(require_auth)
+    webhook_id: int, is_active: bool = Form(...), auth: AuthContext = Depends(require_auth)
 ) -> dict:
     """Enable or disable a webhook (admin/operator only)."""
     success = toggle_webhook(webhook_id, is_active)
-    
+
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Webhook not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+
     return {"status": "updated", "id": webhook_id, "is_active": is_active}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Export Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/export/findings", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def export_findings_endpoint(
@@ -504,22 +478,15 @@ def export_findings_endpoint(
     target: str | None = None,
     scan_id: int | None = None,
     include_analytics: bool = Query(False),
-    auth: AuthContext = Depends(require_auth)
+    auth: AuthContext = Depends(require_auth),
 ) -> Response:
     """
     Export findings in multiple formats.
     Supported formats: json, csv, sarif, html, pdf
     """
     # Fetch findings
-    findings = list_findings(
-        DB_PATH,
-        limit=limit,
-        severity=severity,
-        tool=tool,
-        target=target,
-        scan_id=scan_id
-    )
-    
+    findings = list_findings(DB_PATH, limit=limit, severity=severity, tool=tool, target=target, scan_id=scan_id)
+
     # Get scan info if scan_id provided
     scan_info = {}
     if scan_id:
@@ -528,28 +495,28 @@ def export_findings_endpoint(
             if scan.get("id") == str(scan_id):
                 scan_info = scan
                 break
-    
+
     # Export based on format
     if format == "json":
         content = export_to_json(findings)
         media_type = "application/json"
         filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
-    
+
     elif format == "csv":
         content = export_to_csv(findings)
         media_type = "text/csv"
         filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
-    
+
     elif format == "sarif":
         content = export_to_sarif(findings)
         media_type = "application/json"
         filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.sarif"
-    
+
     elif format == "html":
         content = export_to_html(findings, scan_info)
         media_type = "text/html"
         filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"
-    
+
     elif format == "pdf":
         # Gather analytics data if requested
         analytics_data = {}
@@ -558,27 +525,23 @@ def export_findings_endpoint(
                 "risk_distribution": get_risk_distribution(DB_PATH),
                 "compliance": get_compliance_summary(DB_PATH),
             }
-        
+
         content = export_to_pdf(findings, scan_info, analytics_data)
         media_type = "application/pdf"
         filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"
-    
+
     else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid format"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid format")
+
     return Response(
-        content=content,
-        media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        content=content, media_type=media_type, headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Advanced Analytics Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/analytics/risk-distribution", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_risk_distribution(auth: AuthContext = Depends(require_auth)) -> dict:
@@ -593,10 +556,7 @@ def analytics_compliance(auth: AuthContext = Depends(require_auth)) -> dict:
 
 
 @app.get("/api/analytics/trends", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
-def analytics_trends(
-    days: int = Query(90, ge=7, le=365),
-    auth: AuthContext = Depends(require_auth)
-) -> dict:
+def analytics_trends(days: int = Query(90, ge=7, le=365), auth: AuthContext = Depends(require_auth)) -> dict:
     """Get detailed trend analysis with risk scoring over time."""
     return get_trend_analysis(DB_PATH, days=days)
 
@@ -613,30 +573,23 @@ def analytics_tool_effectiveness(auth: AuthContext = Depends(require_auth)) -> l
     return get_tool_effectiveness(DB_PATH)
 
 
-@app.get("/api/analytics/finding-risk/{finding_id}", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
-def analytics_finding_risk(
-    finding_id: int,
-    auth: AuthContext = Depends(require_auth)
-) -> dict:
+@app.get(
+    "/api/analytics/finding-risk/{finding_id}", dependencies=[Depends(require_permission(Permission.FINDING_READ))]
+)
+def analytics_finding_risk(finding_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Calculate risk score for a specific finding."""
     findings = list_findings(DB_PATH, limit=1, scan_id=None)
-    
+
     # Find specific finding
     with get_connection(DB_PATH) as conn:
-        finding = conn.execute(
-            "SELECT * FROM findings WHERE id = ?",
-            (finding_id,)
-        ).fetchone()
-    
+        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+
     if not finding:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Finding not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
+
     finding_dict = dict(finding)
     risk_score = calculate_risk_score(finding_dict)
-    
+
     return {
         "finding_id": finding_id,
         "risk_score": round(risk_score, 2),

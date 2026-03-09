@@ -32,7 +32,14 @@ class TargetSpec:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TargetSpec":
-        name = data.get("name") or data.get("target_name") or data.get("repo") or data.get("path") or data.get("image") or "unnamed-target"
+        name = (
+            data.get("name")
+            or data.get("target_name")
+            or data.get("repo")
+            or data.get("path")
+            or data.get("image")
+            or "unnamed-target"
+        )
         target_type = data.get("type")
         if target_type not in {"git", "local", "image"}:
             raise ValueError(f"Unsupported target type: {target_type}")

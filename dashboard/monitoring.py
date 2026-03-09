@@ -1,6 +1,7 @@
 """
 Health check and monitoring endpoints for Security Scanning Platform Dashboard.
 """
+
 import time
 from datetime import datetime
 from typing import Any, Dict

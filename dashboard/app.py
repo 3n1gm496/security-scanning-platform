@@ -5,9 +5,11 @@ import secrets
 import time
 import csv
 import io
+import subprocess
+import json
 from collections import defaultdict, deque
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
@@ -597,3 +599,93 @@ def analytics_finding_risk(finding_id: int, auth: AuthContext = Depends(require_
         "has_cve": bool(finding_dict.get("cve")),
         "has_location": bool(finding_dict.get("file") and finding_dict.get("line")),
     }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scan Trigger Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def run_scan_async(target_type: str, target: str, name: str, root_dir: str) -> dict:
+    """Execute orchestrator scan and save results to database."""
+    try:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = f"{root_dir}:{env.get('PYTHONPATH', '')}"
+        env["ORCH_DB_PATH"] = f"{root_dir}/data/security_scans.db"
+        env["REPORTS_DIR"] = f"{root_dir}/data/reports"
+        env["WORKSPACE_DIR"] = f"{root_dir}/data/workspaces"
+        env["ORCH_CACHE_DIR"] = f"{root_dir}/data/cache"
+        env["DASHBOARD_DB_PATH"] = f"{root_dir}/data/security_scans.db"
+
+        # Build orchestrator command
+        cmd = [
+            "python3",
+            "-m",
+            "orchestrator.main",
+            "--target-type",
+            target_type,
+            "--target",
+            target,
+            "--target-name",
+            name,
+            "--settings",
+            f"{root_dir}/config/settings.yaml",
+        ]
+
+        result = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True, env=env, timeout=300)
+
+        # Parse JSON output
+        try:
+            output_json = json.loads(result.stdout)
+            return {"status": "completed", "output": output_json, "returncode": result.returncode}
+        except json.JSONDecodeError:
+            return {
+                "status": "error",
+                "message": "Failed to parse orchestrator output",
+                "stderr": result.stderr,
+                "returncode": result.returncode,
+            }
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "Scan timed out after 5 minutes"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/api/scan/trigger", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
+def trigger_scan(
+    target_type: str = Form(...),
+    target: str = Form(...),
+    name: str = Form(...),
+    async_mode: bool = Form(False),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Trigger a new security scan (admin/operator only).
+
+    Args:
+        target_type: 'local', 'git', or 'image'
+        target: path, URL, or image reference
+        name: display name for the target
+        async_mode: if true, return immediately with job_id; if false, wait for completion
+    """
+    # Validate inputs
+    if target_type not in ["local", "git", "image"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="target_type must be 'local', 'git', or 'image'",
+        )
+
+    if not target or not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="target and name are required"
+        )
+
+    root_dir = Path(__file__).parent.parent.absolute()
+
+    if async_mode:
+        # Launch scan in background and return immediately
+        thread = Thread(target=run_scan_async, args=(target_type, target, name, str(root_dir)), daemon=True)
+        thread.start()
+        return {"status": "queued", "message": "Scan queued and running in background", "target_name": name}
+    else:
+        # Wait for scan to complete
+        result = run_scan_async(target_type, target, name, str(root_dir))
+        return result

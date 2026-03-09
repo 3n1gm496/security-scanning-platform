@@ -89,12 +89,28 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 
 ### Scelte Architetturali
 
+
 - **Orchestratore Python 3.11** — Semplice da mantenere per team IT/Security
 - **Scanner CLI OSS** — Riutilizzabili anche fuori dalla piattaforma
 - **SQLite** — Sufficiente per MVP singolo nodo, backup semplici, costo nullo
 - **FastAPI Dashboard** — API + UI nello stesso componente
-- **Docker Compose** — Deploy rapido su server Linux standard
+- **Docker Compose** — Deploy rapido su server Linux standard (opzionale)
+- **Python-only Mode** — Fallback automatico quando Docker non disponibile (es. WSL)
 - **CI-agnostic** — Utilizzabile da qualsiasi tool CI/CD o schedulatore
+
+### Modalità Esecuzione dell'Orchestrator
+
+**Docker Mode (predefinito):**
+- Isolamento environment via container
+- Gestito da `run_scan.sh` e `docker compose run`
+- Ideale per production / ambienti multi-user
+
+**Python-only Mode (fallback automatico):**
+- Esecuzione diretta via `python3 -m orchestrator.main`
+- Usato quando Docker non disponibile
+- Supportato automaticamente da `ops.sh` e `/api/scan/trigger`
+- Ideale per development / WSL / ambienti senza Docker
+
 
 ### Componenti
 
@@ -272,6 +288,27 @@ LOG_LEVEL=INFO
 
 ## 💻 Utilizzo
 
+### Operazioni CLI (ops.sh)
+
+Script di utilità per gestire stack, database e launching di scans:
+
+```bash
+./scripts/ops.sh up                    # Avvia stack Docker Compose
+./scripts/ops.sh down                  # Arresta stack
+./scripts/ops.sh scan demo             # Esegui demo scan
+./scripts/ops.sh scan local --path $PWD --name my-app
+./scripts/ops.sh scan git --url https://github.com/org/repo --name my-repo
+./scripts/ops.sh scan image --image nginx:latest --name nginx
+./scripts/ops.sh logs dashboard        # Vedi log dashboard
+./scripts/ops.sh open                  # Apri dashboard nel browser
+```
+
+**Note:**
+- Se Docker è disponibile, `ops.sh` usa Docker Compose per eseguire orchestrator
+- Se Docker NON è disponibile, `ops.sh` automaticamente fallback a Python CLI diretto
+- Entrambi i modelli salvano i risultati nello stesso database SQLite
+- Supporta sia Docker che ambienti Python-only (es. WSL senza Docker)
+
 ### Scan Singolo - Repository Locale
 
 ```bash
@@ -336,6 +373,8 @@ LOG_LEVEL=INFO
 
 ### API REST
 
+#### Query Scanning Results
+
 ```bash
 # Lista tutti gli scan
 curl http://localhost:8080/api/scans
@@ -345,6 +384,45 @@ curl http://localhost:8080/api/scans/{scan_id}
 
 # Findings per scan
 curl http://localhost:8080/api/scans/{scan_id}/findings
+```
+
+#### Trigger Scans from Dashboard
+
+Nuovo endpoint per triggerare scans direttamente dalla UI dashboard (richiede autenticazione e permesso `SCAN_WRITE`):
+
+**Trigger Scan Sincrono:**
+
+```bash
+curl -X POST http://localhost:8080/api/scan/trigger \
+  -F "target_type=local" \
+  -F "target=/path/to/repo" \
+  -F "name=my-project" \
+  -F "async_mode=false"
+```
+
+**Parametri:**
+- `target_type` (required): `local`, `git`, o `image`
+- `target` (required): percorso locale, URL git, o referenza immagine
+- `name` (required): nome display per il target
+- `async_mode` (optional, default=false): Se true, ritorna subito con job status; se false, attende completamento
+
+**Trigger Scan Asincrono:**
+
+```bash
+curl -X POST http://localhost:8080/api/scan/trigger \
+  -F "target_type=git" \
+  -F "target=https://github.com/example/repo.git" \
+  -F "name=example-repo" \
+  -F "async_mode=true"
+```
+
+**Risposta (asincrono):**
+```json
+{
+  "status": "queued",
+  "message": "Scan queued and running in background",
+  "target_name": "example-repo"
+}
 ```
 
 ---

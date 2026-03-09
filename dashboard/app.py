@@ -68,6 +68,7 @@ from analytics import (
     get_target_risk_ranking,
     get_tool_effectiveness,
 )
+from remediation import RemediationEngine, enrich_finding_with_remediation
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -598,6 +599,28 @@ def analytics_finding_risk(finding_id: int, auth: AuthContext = Depends(require_
         "category": finding_dict.get("category"),
         "has_cve": bool(finding_dict.get("cve")),
         "has_location": bool(finding_dict.get("file") and finding_dict.get("line")),
+    }
+
+
+@app.get("/api/remediation/{finding_id}", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
+def get_remediation_guidance(finding_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get comprehensive remediation guidance for a finding."""
+
+    # Find specific finding
+    with get_connection(DB_PATH) as conn:
+        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+
+    if not finding:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
+
+    finding_dict = dict(finding)
+    remediation = RemediationEngine.generate_remediation(finding_dict)
+
+    return {
+        "finding_id": finding_id,
+        "finding_title": finding_dict.get("title"),
+        "severity": finding_dict.get("severity"),
+        "remediation": remediation,
     }
 
 

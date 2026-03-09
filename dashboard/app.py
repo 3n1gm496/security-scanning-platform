@@ -897,5 +897,87 @@ def api_bulk_update_status(
 
     result = bulk_update_status(finding_ids, finding_status, user=auth.api_key_prefix or "unknown")
     return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CI/CD Integration Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/badge/{target_name}.svg")
+def generate_badge(target_name: str) -> Response:
+    """Generate SVG badge for scan status."""
+    # Get latest scan for target
+    with get_connection(DB_PATH) as conn:
+        scan = conn.execute(
+            "SELECT status, policy_status, findings_count, critical_count, high_count FROM scans WHERE target_name = ? ORDER BY created_at DESC LIMIT 1",
+            (target_name,),
+        ).fetchone()
+    
+    if not scan:
+        # No scans found
+        svg = """<svg xmlns="http://www.w3.org/2000/svg" width="140" height="20">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <mask id="a"><rect width="140" height="20" rx="3" fill="#fff"/></mask>
+  <g mask="url(#a)">
+    <path fill="#555" d="M0 0h60v20H0z"/>
+    <path fill="#9f9f9f" d="M60 0h80v20H60z"/>
+    <path fill="url(#b)" d="M0 0h140v20H0z"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="30" y="15" fill="#010101" fill-opacity=".3">security</text>
+    <text x="30" y="14">security</text>
+    <text x="99" y="15" fill="#010101" fill-opacity=".3">unknown</text>
+    <text x="99" y="14">unknown</text>
+  </g>
+</svg>"""
+        return Response(content=svg, media_type="image/svg+xml")
+    
+    scan_dict = dict(scan)
+    status_val = scan_dict.get("status", "")
+    policy_status = scan_dict.get("policy_status", "")
+    critical_count = scan_dict.get("critical_count", 0)
+    high_count = scan_dict.get("high_count", 0)
+    
+    # Determine badge color and message
+    if policy_status == "BLOCK" or critical_count > 0:
+        color = "#e05d44"  # Red
+        message = f"{critical_count} critical"
+    elif high_count > 0:
+        color = "#fe7d37"  # Orange
+        message = f"{high_count} high"
+    elif status_val == "COMPLETED_CLEAN":
+        color = "#97ca00"  # Green
+        message = "passing"
+    else:
+        color = "#dfb317"  # Yellow
+        message = "warnings"
+    
+    # Generate SVG
+    message_width = len(message) * 6 + 10
+    total_width = 60 + message_width
+    
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <mask id="a"><rect width="{total_width}" height="20" rx="3" fill="#fff"/></mask>
+  <g mask="url(#a)">
+    <path fill="#555" d="M0 0h60v20H0z"/>
+    <path fill="{color}" d="M60 0h{message_width}v20H60z"/>
+    <path fill="url(#b)" d="M0 0h{total_width}v20H0z"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="30" y="15" fill="#010101" fill-opacity=".3">security</text>
+    <text x="30" y="14">security</text>
+    <text x="{60 + message_width//2}" y="15" fill="#010101" fill-opacity=".3">{message}</text>
+    <text x="{60 + message_width//2}" y="14">{message}</text>
+  </g>
+</svg>"""
+    
+    return Response(content=svg, media_type="image/svg+xml")
 scan_async(target_type, target, name, str(root_dir))
         return result

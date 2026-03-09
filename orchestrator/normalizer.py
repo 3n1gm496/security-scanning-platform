@@ -7,7 +7,6 @@ from typing import Any
 
 from orchestrator.models import Finding, TargetSpec, utc_now_iso
 
-
 SEVERITY_MAP = {
     "ERROR": "HIGH",
     "WARNING": "MEDIUM",
@@ -44,7 +43,9 @@ def _rel_path(base_path: str | None, file_path: str | None) -> str | None:
     return file_path
 
 
-def normalize_semgrep(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None) -> list[Finding]:
+def normalize_semgrep(
+    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
     for item in raw.get("results", []):
         extra = item.get("extra", {}) or {}
@@ -80,7 +81,14 @@ def normalize_semgrep(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw
     return findings
 
 
-def normalize_trivy(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None, category: str | None = None) -> list[Finding]:
+def normalize_trivy(
+    scan_id: str,
+    target: TargetSpec,
+    raw: dict[str, Any],
+    raw_reference: str,
+    base_path: str | None = None,
+    category: str | None = None,
+) -> list[Finding]:
     findings: list[Finding] = []
     for result in raw.get("Results", []) or []:
         result_target = result.get("Target")
@@ -102,7 +110,14 @@ def normalize_trivy(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_r
                 cve=vuln.get("VulnerabilityID"),
                 remediation=vuln.get("FixedVersion"),
                 raw_reference=raw_reference,
-                fingerprint=_fingerprint("trivy", target.name, result_target, vuln.get("PkgName"), vuln.get("InstalledVersion"), vuln.get("VulnerabilityID")),
+                fingerprint=_fingerprint(
+                    "trivy",
+                    target.name,
+                    result_target,
+                    vuln.get("PkgName"),
+                    vuln.get("InstalledVersion"),
+                    vuln.get("VulnerabilityID"),
+                ),
             )
             findings.append(finding)
         for misconfig in result.get("Misconfigurations", []) or []:
@@ -144,13 +159,17 @@ def normalize_trivy(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_r
                 cve=secret.get("RuleID"),
                 remediation="Rotate the secret and remove it from source control.",
                 raw_reference=raw_reference,
-                fingerprint=_fingerprint("trivy-secret", target.name, result_target, secret.get("RuleID"), secret.get("StartLine")),
+                fingerprint=_fingerprint(
+                    "trivy-secret", target.name, result_target, secret.get("RuleID"), secret.get("StartLine")
+                ),
             )
             findings.append(finding)
     return findings
 
 
-def normalize_gitleaks(scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None) -> list[Finding]:
+def normalize_gitleaks(
+    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
     for item in raw:
         description = item.get("Description") or item.get("RuleID") or "Potential secret detected"
@@ -172,13 +191,16 @@ def normalize_gitleaks(scan_id: str, target: TargetSpec, raw: list[dict[str, Any
             cve=None,
             remediation="Rotate the secret, remove it from source control, and add an ignore only if justified.",
             raw_reference=raw_reference,
-            fingerprint=item.get("Fingerprint") or _fingerprint("gitleaks", target.name, file_path, item.get("StartLine"), item.get("RuleID")),
+            fingerprint=item.get("Fingerprint")
+            or _fingerprint("gitleaks", target.name, file_path, item.get("StartLine"), item.get("RuleID")),
         )
         findings.append(finding)
     return findings
 
 
-def normalize_checkov(scan_id: str, target: TargetSpec, raw: Any, raw_reference: str, base_path: str | None = None) -> list[Finding]:
+def normalize_checkov(
+    scan_id: str, target: TargetSpec, raw: Any, raw_reference: str, base_path: str | None = None
+) -> list[Finding]:
     """
     Checkov JSON output is not fully stable: it can be either:
     - a dict containing {"results": {"failed_checks": [...]}}
@@ -204,7 +226,9 @@ def normalize_checkov(scan_id: str, target: TargetSpec, raw: Any, raw_reference:
             line_ranges = item.get("file_line_range") or []
             line = line_ranges[0] if line_ranges else None
             severity = _severity(item.get("severity"), "MEDIUM")
-            description = item.get("guideline") or item.get("check_name") or item.get("check_id") or "IaC misconfiguration"
+            description = (
+                item.get("guideline") or item.get("check_name") or item.get("check_id") or "IaC misconfiguration"
+            )
 
             remediation = item.get("guideline")
             if isinstance(remediation, list):
@@ -233,7 +257,10 @@ def normalize_checkov(scan_id: str, target: TargetSpec, raw: Any, raw_reference:
 
     return findings
 
-def normalize_bandit(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None) -> list[Finding]:
+
+def normalize_bandit(
+    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
     for issue in raw.get("results", []):
         filename = issue.get("filename")
@@ -264,7 +291,7 @@ def normalize_bandit(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_
 
 def _nuclei_category(info: dict[str, Any]) -> str:
     """Map nuclei template tags to discovery categories.
-    
+
     Nuclei templates use tags to indicate the type of check; we use these
     to classify the finding into security categories.
     """
@@ -294,7 +321,9 @@ def _nuclei_category(info: dict[str, Any]) -> str:
     return "vulnerability"
 
 
-def normalize_nuclei(scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None) -> list[Finding]:
+def normalize_nuclei(
+    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
     # nuclei outputs list of JSON objects; parser may load lines into list
     for item in raw:
@@ -317,13 +346,17 @@ def normalize_nuclei(scan_id: str, target: TargetSpec, raw: list[dict[str, Any]]
             cve=None,
             remediation=info.get("reference"),
             raw_reference=raw_reference,
-            fingerprint=_fingerprint("nuclei", target.name, item.get("templateId"), item.get("matched", {}).get("line")),
+            fingerprint=_fingerprint(
+                "nuclei", target.name, item.get("templateId"), item.get("matched", {}).get("line")
+            ),
         )
         findings.append(finding)
     return findings
 
 
-def normalize_grype(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None) -> list[Finding]:
+def normalize_grype(
+    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
     for match in raw.get("matches", []) or []:
         # grype match structure contains vulnerability info
@@ -354,7 +387,9 @@ def normalize_grype(scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_r
     return findings
 
 
-def normalize_zap(scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None) -> list[Finding]:
+def normalize_zap(
+    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
     # zap-cli returns a list of alerts
     for item in raw:

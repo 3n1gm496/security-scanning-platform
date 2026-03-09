@@ -2,6 +2,7 @@
 """
 Quick API verification script to test all implemented features.
 """
+
 import os
 import sys
 import sqlite3
@@ -34,10 +35,7 @@ print(f"   ✅ {len(keys)} API key(s) nel database")
 # 3. Test Webhooks
 print("\n3. Test Webhooks...")
 webhook_id = create_webhook(
-    name="Test Webhook",
-    url="https://example.com/hook",
-    events=[WebhookEvent.SCAN_COMPLETED],
-    secret="test_secret"
+    name="Test Webhook", url="https://example.com/hook", events=[WebhookEvent.SCAN_COMPLETED], secret="test_secret"
 )
 print(f"   ✅ Webhook creato: ID {webhook_id}")
 webhooks = list_webhooks()
@@ -46,13 +44,7 @@ print(f"   ✅ {len(webhooks)} webhook(s) nel database")
 # 4. Test Export
 print("\n4. Test Export multi-format...")
 test_findings = [
-    {
-        "id": 1,
-        "tool": "trivy",
-        "severity": "critical",
-        "message": "Test vulnerability",
-        "target": "container:test"
-    }
+    {"id": 1, "tool": "trivy", "severity": "critical", "message": "Test vulnerability", "target": "container:test"}
 ]
 
 json_export = export_to_json(test_findings)

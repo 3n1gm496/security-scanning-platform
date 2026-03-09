@@ -27,17 +27,17 @@ def test_export_to_pdf_basic():
             "tool": "semgrep",
             "category": "Hardcoded",
             "description": "Hardcoded credentials detected",
-        }
+        },
     ]
-    
+
     pdf_content = export_to_pdf(findings)
-    
+
     # Check that PDF content is generated
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    
+
     # Check PDF magic number
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"
 
 
 def test_export_to_pdf_with_scan_info():
@@ -51,21 +51,21 @@ def test_export_to_pdf_with_scan_info():
             "description": "Remote code execution",
         }
     ]
-    
+
     scan_info = {
         "id": "scan123",
         "target_type": "repository",
         "target_name": "myapp",
         "status": "COMPLETED_WITH_FINDINGS",
         "created_at": "2024-02-28T10:00:00Z",
-        "findings_count": 1
+        "findings_count": 1,
     }
-    
+
     pdf_content = export_to_pdf(findings, scan_info)
-    
+
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"
 
 
 def test_export_to_pdf_with_analytics():
@@ -80,56 +80,58 @@ def test_export_to_pdf_with_analytics():
             "cve": "CVE-2024-1234",
         }
     ]
-    
+
     analytics_data = {
         "risk_distribution": {
             "total_findings": 1,
             "average_risk": 75.5,
             "max_risk": 85.0,
             "high_risk_count": 1,
-            "distribution": {"0-25": 0, "25-50": 0, "50-75": 0, "75-100": 1}
+            "distribution": {"0-25": 0, "25-50": 0, "50-75": 0, "75-100": 1},
         }
     }
-    
+
     pdf_content = export_to_pdf(findings, analytics_data=analytics_data)
-    
+
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"
 
 
 def test_export_to_pdf_empty_findings():
     """Test PDF export with empty findings list."""
     findings = []
-    
+
     pdf_content = export_to_pdf(findings)
-    
+
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"
 
 
 def test_export_to_pdf_many_findings():
     """Test PDF export with many findings."""
     findings = []
     severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
-    
+
     for i in range(100):
-        findings.append({
-            "severity": severities[i % 5],
-            "title": f"Finding {i}",
-            "tool": "test-tool",
-            "category": "Test Category",
-            "description": f"Test description for finding {i}",
-            "file": f"file{i}.py",
-            "line": i * 10,
-        })
-    
+        findings.append(
+            {
+                "severity": severities[i % 5],
+                "title": f"Finding {i}",
+                "tool": "test-tool",
+                "category": "Test Category",
+                "description": f"Test description for finding {i}",
+                "file": f"file{i}.py",
+                "line": i * 10,
+            }
+        )
+
     pdf_content = export_to_pdf(findings)
-    
+
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"
 
 
 def test_export_to_pdf_all_severities():
@@ -141,12 +143,12 @@ def test_export_to_pdf_all_severities():
         {"severity": "LOW", "title": "Low", "tool": "t4", "category": "c4"},
         {"severity": "INFO", "title": "Info", "tool": "t5", "category": "c5"},
     ]
-    
+
     pdf_content = export_to_pdf(findings)
-    
+
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"
 
 
 def test_export_to_pdf_long_descriptions():
@@ -160,12 +162,12 @@ def test_export_to_pdf_long_descriptions():
             "description": "A" * 1000,  # Very long description
         }
     ]
-    
+
     pdf_content = export_to_pdf(findings)
-    
+
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"
 
 
 def test_export_to_pdf_special_characters():
@@ -173,15 +175,15 @@ def test_export_to_pdf_special_characters():
     findings = [
         {
             "severity": "MEDIUM",
-            "title": "Test with <special> & characters \"quoted\"",
+            "title": 'Test with <special> & characters "quoted"',
             "tool": "test-tool",
             "category": "Test",
             "description": "Description with <tags> & symbols \"quotes\" 'apostrophes'",
         }
     ]
-    
+
     pdf_content = export_to_pdf(findings)
-    
+
     assert isinstance(pdf_content, bytes)
     assert len(pdf_content) > 0
-    assert pdf_content[:4] == b'%PDF'
+    assert pdf_content[:4] == b"%PDF"

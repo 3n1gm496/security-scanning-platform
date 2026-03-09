@@ -20,17 +20,23 @@ from app import app  # import after env vars
 import db as _db
 import app as _app
 
+
 @pytest.fixture(autouse=True)
 def stub_db(monkeypatch):
     for module in (_db, _app):
         monkeypatch.setattr(module, "fetch_kpis", lambda path: {})
-        monkeypatch.setattr(module, "cache_hit_stats", lambda path: {"overall_cache_hit_pct": 0.0, "cached_runs": 0, "total_runs": 0, "by_tool": []})
+        monkeypatch.setattr(
+            module,
+            "cache_hit_stats",
+            lambda path: {"overall_cache_hit_pct": 0.0, "cached_runs": 0, "total_runs": 0, "by_tool": []},
+        )
         monkeypatch.setattr(module, "cache_hit_trend", lambda path, days: [])
         monkeypatch.setattr(module, "severity_breakdown", lambda path: {})
         monkeypatch.setattr(module, "tool_breakdown", lambda path: {})
         monkeypatch.setattr(module, "target_breakdown", lambda path: {})
         monkeypatch.setattr(module, "scans_trend", lambda path, days: [])
         monkeypatch.setattr(module, "recent_failed_scans", lambda path, n: [])
+
 
 @pytest.fixture
 def client():
@@ -77,5 +83,5 @@ def test_cache_hit_trend_csv(client):
     resp = client.get("/api/cache-hit-trend.csv?days=14")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/csv")
-    assert "attachment; filename=\"cache-hit-trend.csv\"" in resp.headers.get("content-disposition", "")
+    assert 'attachment; filename="cache-hit-trend.csv"' in resp.headers.get("content-disposition", "")
     assert "day,tool_runs,cached_runs,cache_hit_pct" in resp.text

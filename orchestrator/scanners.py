@@ -24,7 +24,9 @@ def command_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def run_command(command: list[str], cwd: str | None = None, timeout: int = 3600, env: dict[str, str] | None = None) -> tuple[int, str, str]:
+def run_command(
+    command: list[str], cwd: str | None = None, timeout: int = 3600, env: dict[str, str] | None = None
+) -> tuple[int, str, str]:
     LOGGER.info("Executing command: %s", " ".join(command))
     process = subprocess.run(
         command,
@@ -95,7 +97,9 @@ def run_semgrep(target_path: str, output_path: str, configs: list[str]) -> dict[
     }
 
 
-def run_trivy_fs(target_path: str, output_path: str, severities: list[str], ignore_unfixed: bool = False) -> dict[str, Any]:
+def run_trivy_fs(
+    target_path: str, output_path: str, severities: list[str], ignore_unfixed: bool = False
+) -> dict[str, Any]:
     if not command_exists("trivy"):
         raise ScannerError("trivy not found in PATH")
     command = [
@@ -123,7 +127,9 @@ def run_trivy_fs(target_path: str, output_path: str, severities: list[str], igno
     }
 
 
-def run_trivy_image(image_ref: str, output_path: str, severities: list[str], ignore_unfixed: bool = False) -> dict[str, Any]:
+def run_trivy_image(
+    image_ref: str, output_path: str, severities: list[str], ignore_unfixed: bool = False
+) -> dict[str, Any]:
     if not command_exists("trivy"):
         raise ScannerError("trivy not found in PATH")
     command = [
@@ -226,6 +232,7 @@ def run_syft(target_value: str, output_path: str) -> dict[str, Any]:
 # new scanners
 # ---------------------------------------------------------------------------
 
+
 def run_bandit(target_path: str, output_path: str) -> dict[str, Any]:
     """Run Bandit SAST for Python projects.
     Output is written in JSON format to ``output_path``.
@@ -233,17 +240,23 @@ def run_bandit(target_path: str, output_path: str) -> dict[str, Any]:
     if not command_exists("bandit"):
         LOGGER.warning("bandit not in PATH, skipping scan and returning empty results")
         # create empty output for consistency
-        Path(output_path).write_text("{\"results\": []}", encoding="utf-8")
+        Path(output_path).write_text('{"results": []}', encoding="utf-8")
         return {"exit_code": 0, "stdout_path": output_path, "stderr": ""}
     command = ["bandit", "-f", "json", "-r", target_path]
     code, stdout, stderr = run_command(command, timeout=3600)
     if code not in (0, 1):
         raise ScannerError(f"bandit execution failed: {stderr or stdout}")
-    Path(output_path).write_text(stdout or "{\"results\": []}", encoding="utf-8")
+    Path(output_path).write_text(stdout or '{"results": []}', encoding="utf-8")
     return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
 
 
-def run_nuclei(target_path: str, output_path: str, templates: list[str] | None = None, severity: str | None = None, tags: str | None = None) -> dict[str, Any]:
+def run_nuclei(
+    target_path: str,
+    output_path: str,
+    templates: list[str] | None = None,
+    severity: str | None = None,
+    tags: str | None = None,
+) -> dict[str, Any]:
     """Run *nuclei* templates against a filesystem/URL.
 
     The CLI changed between major versions; modern releases (v2+) no longer support a
@@ -283,13 +296,13 @@ def run_nuclei(target_path: str, output_path: str, templates: list[str] | None =
 def run_grype(target_value: str, output_path: str) -> dict[str, Any]:
     if not command_exists("grype"):
         LOGGER.warning("grype not found in PATH, skipping scan and returning empty results")
-        Path(output_path).write_text("{\"matches\": []}", encoding="utf-8")
+        Path(output_path).write_text('{"matches": []}', encoding="utf-8")
         return {"exit_code": 0, "stdout_path": output_path, "stderr": ""}
     command = ["grype", target_value, "-o", "json", "-q"]
     code, stdout, stderr = run_command(command, timeout=3600)
     if code not in (0, 1):
         raise ScannerError(f"grype failed: {stderr or stdout}")
-    Path(output_path).write_text(stdout or "{\"matches\": []}", encoding="utf-8")
+    Path(output_path).write_text(stdout or '{"matches": []}', encoding="utf-8")
     return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
 
 

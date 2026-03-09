@@ -2,6 +2,7 @@
 """Fetch release assets for nuclei, grype and zap and install them.
 Best-effort helper used during Dockerfile build. Uses GitHub Releases API.
 """
+
 import argparse
 import json
 import os

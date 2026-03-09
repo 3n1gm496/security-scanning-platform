@@ -76,7 +76,9 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["paths"].setdefault("reports_dir", os.getenv("REPORTS_DIR", "/data/reports"))
     settings["paths"].setdefault("workspace_dir", os.getenv("WORKSPACE_DIR", "/data/workspaces"))
     settings["scanners"].setdefault("semgrep", {"enabled": True, "configs": ["p/default"]})
-    settings["scanners"].setdefault("trivy", {"enabled": True, "severities": ["CRITICAL", "HIGH", "MEDIUM"], "ignore_unfixed": False})
+    settings["scanners"].setdefault(
+        "trivy", {"enabled": True, "severities": ["CRITICAL", "HIGH", "MEDIUM"], "ignore_unfixed": False}
+    )
     settings["scanners"].setdefault("gitleaks", {"enabled": True})
     settings["scanners"].setdefault("checkov", {"enabled": True})
     settings["scanners"].setdefault("syft", {"enabled": True})
@@ -87,10 +89,14 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["policy"].setdefault("block_on_severities", ["CRITICAL"])
     settings["policy"].setdefault("block_on_secret_categories", True)
     settings["execution"].setdefault("max_concurrent_targets", int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2")))
-    settings["cache"].setdefault("enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"})
+    settings["cache"].setdefault(
+        "enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    )
     settings["cache"].setdefault("ttl_seconds", int(os.getenv("ORCH_CACHE_TTL_SECONDS", "900")))
     settings["cache"].setdefault("dir", os.getenv("ORCH_CACHE_DIR", "/data/cache/orchestrator"))
-    settings["retention"].setdefault("enabled", os.getenv("ORCH_RETENTION_ENABLED", "true").lower() in {"1", "true", "yes", "on"})
+    settings["retention"].setdefault(
+        "enabled", os.getenv("ORCH_RETENTION_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    )
     settings["retention"].setdefault("reports_days", int(os.getenv("ORCH_RETENTION_REPORTS_DAYS", "14")))
     settings["retention"].setdefault("workspaces_days", int(os.getenv("ORCH_RETENTION_WORKSPACES_DAYS", "3")))
     settings["retention"].setdefault("cache_days", int(os.getenv("ORCH_RETENTION_CACHE_DAYS", "7")))
@@ -178,7 +184,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
         parser_kwargs: dict[str, Any] | None = None,
         cache_context: dict[str, Any] | None = None,
     ) -> None:
-        nonlocal status, error_message, findings, artifacts
+        nonlocal status, error_message
         parser_kwargs = parser_kwargs or {}
         cache_context = cache_context or {}
         started_tool = utc_now_iso()
@@ -240,7 +246,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
             )
 
     def execute_syft() -> None:
-        nonlocal status, error_message, artifacts
+        nonlocal status, error_message
         started_tool = utc_now_iso()
         output_path = str(raw_dir / "syft.spdx.json")
         try:
@@ -301,15 +307,21 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
         if settings["scanners"]["semgrep"].get("enabled", True):
             execute_tool(
                 "semgrep",
-                lambda output_path: run_semgrep(target_input, output_path, settings["scanners"]["semgrep"].get("configs", ["p/default"])),
-                lambda raw_payload, output_path, **_: normalize_semgrep(scan_id, target, raw_payload, output_path, base_path=target_input),
+                lambda output_path: run_semgrep(
+                    target_input, output_path, settings["scanners"]["semgrep"].get("configs", ["p/default"])
+                ),
+                lambda raw_payload, output_path, **_: normalize_semgrep(
+                    scan_id, target, raw_payload, output_path, base_path=target_input
+                ),
                 cache_context={"configs": settings["scanners"]["semgrep"].get("configs", ["p/default"])},
             )
         if settings["scanners"]["bandit"].get("enabled", False):
             execute_tool(
                 "bandit",
                 lambda output_path: run_bandit(target_input, output_path),
-                lambda raw_payload, output_path, **_: normalize_bandit(scan_id, target, raw_payload, output_path, base_path=target_input),
+                lambda raw_payload, output_path, **_: normalize_bandit(
+                    scan_id, target, raw_payload, output_path, base_path=target_input
+                ),
                 cache_context={"mode": "bandit"},
             )
         if settings["scanners"]["nuclei"].get("enabled", False):
@@ -322,7 +334,9 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     settings["scanners"]["nuclei"].get("severity"),
                     settings["scanners"]["nuclei"].get("tags"),
                 ),
-                lambda raw_payload, output_path, **_: normalize_nuclei(scan_id, target, raw_payload, output_path, base_path=target_input),
+                lambda raw_payload, output_path, **_: normalize_nuclei(
+                    scan_id, target, raw_payload, output_path, base_path=target_input
+                ),
                 cache_context={
                     "templates": settings["scanners"]["nuclei"].get("templates"),
                     "severity": settings["scanners"]["nuclei"].get("severity"),
@@ -338,7 +352,9 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
                     bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
                 ),
-                lambda raw_payload, output_path, **_: normalize_trivy(scan_id, target, raw_payload, output_path, base_path=target_input, category="sca"),
+                lambda raw_payload, output_path, **_: normalize_trivy(
+                    scan_id, target, raw_payload, output_path, base_path=target_input, category="sca"
+                ),
                 cache_context={
                     "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
                     "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
@@ -349,28 +365,36 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
             execute_tool(
                 "gitleaks",
                 lambda output_path: run_gitleaks(target_input, output_path, use_git_history=use_git),
-                lambda raw_payload, output_path, **_: normalize_gitleaks(scan_id, target, raw_payload, output_path, base_path=target_input),
+                lambda raw_payload, output_path, **_: normalize_gitleaks(
+                    scan_id, target, raw_payload, output_path, base_path=target_input
+                ),
                 cache_context={"use_git_history": use_git},
             )
         if settings["scanners"]["checkov"].get("enabled", True):
             execute_tool(
                 "checkov",
                 lambda output_path: run_checkov(target_input, output_path),
-                lambda raw_payload, output_path, **_: normalize_checkov(scan_id, target, raw_payload, output_path, base_path=target_input),
+                lambda raw_payload, output_path, **_: normalize_checkov(
+                    scan_id, target, raw_payload, output_path, base_path=target_input
+                ),
                 cache_context={"mode": "checkov"},
             )
         if settings["scanners"]["grype"].get("enabled", False):
             execute_tool(
                 "grype",
                 lambda output_path: run_grype(target_input, output_path),
-                lambda raw_payload, output_path, **_: normalize_grype(scan_id, target, raw_payload, output_path, base_path=target_input),
+                lambda raw_payload, output_path, **_: normalize_grype(
+                    scan_id, target, raw_payload, output_path, base_path=target_input
+                ),
                 cache_context={"mode": "grype"},
             )
         if settings["scanners"]["owasp_zap"].get("enabled", False) and target.type != "image":
             execute_tool(
                 "owasp_zap",
                 lambda output_path: run_owasp_zap(target_input, output_path),
-                lambda raw_payload, output_path, **_: normalize_zap(scan_id, target, raw_payload, output_path, base_path=target_input),
+                lambda raw_payload, output_path, **_: normalize_zap(
+                    scan_id, target, raw_payload, output_path, base_path=target_input
+                ),
                 cache_context={"mode": "zap"},
             )
         if settings["scanners"]["syft"].get("enabled", True):
@@ -407,7 +431,9 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
                     bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
                 ),
-                lambda raw_payload, output_path, **_: normalize_trivy(scan_id, target, raw_payload, output_path, category="container"),
+                lambda raw_payload, output_path, **_: normalize_trivy(
+                    scan_id, target, raw_payload, output_path, category="container"
+                ),
                 cache_context={
                     "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
                     "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
@@ -517,10 +543,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--targets-file", help="YAML file with multiple targets")
     parser.add_argument("--settings", default="/app/config/settings.yaml", help="Path to settings YAML")
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"), help="Logging level")
-    parser.add_argument("--fail-on-policy-block", action="store_true", help="Exit with code 3 when policy status is BLOCK")
+    parser.add_argument(
+        "--fail-on-policy-block", action="store_true", help="Exit with code 3 when policy status is BLOCK"
+    )
     parser.add_argument("--json-output", help="Optional path for aggregate JSON output")
     parser.add_argument("--retention-only", action="store_true", help="Run only retention cleanup and exit")
-    parser.add_argument("--retention-dry-run", action="store_true", help="Preview retention cleanup without deleting files")
+    parser.add_argument(
+        "--retention-dry-run", action="store_true", help="Preview retention cleanup without deleting files"
+    )
     return parser
 
 

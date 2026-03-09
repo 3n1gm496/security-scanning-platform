@@ -26,8 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY orchestrator/scripts /tmp/scripts
-COPY orchestrator/requirements.txt /tmp/requirements.txt
+COPY scripts /tmp/scripts
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     # command‑line utilities required by new scanners
     && pip install --no-cache-dir semgrep checkov bandit
@@ -89,9 +89,8 @@ RUN if python3 /tmp/scripts/fetch_binaries.py --nuclei-version "${NUCLEI_VERSION
             echo "fetch_binaries encountered errors, continuing"; \
         fi
 
-COPY orchestrator /app/orchestrator
-COPY config /app/config
-COPY demo /app/demo
+COPY . /app/orchestrator
+RUN mkdir -p /app/config /app/demo
 
 RUN mkdir -p /data/reports /data/workspaces /data/cache/trivy
 

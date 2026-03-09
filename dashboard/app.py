@@ -85,6 +85,8 @@ from finding_management import (
 )
 from pagination import FindingsPaginator, ScansPaginator
 from charting import ChartingEngine
+from notifications import EmailNotificationEngine, NotificationPreferencesManager
+from metrics import get_metrics
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -112,9 +114,11 @@ if default_key:
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
 
-_RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics"}
+_RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics", "/metrics"}
 _request_timestamps: dict[str, deque[float]] = defaultdict(deque)
 _rate_limit_lock = Lock()
+
+notification_engine = EmailNotificationEngine()
 
 
 def _client_key(request: Request) -> str:
@@ -1176,3 +1180,64 @@ def chart_cve_distribution(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get top CVEs found for bar chart."""
     with get_connection(DB_PATH) as conn:
         return ChartingEngine.cve_distribution(conn)
+
+
+@app.post("/api/notifications/send-alert")
+def send_notification_alert(
+    to_email: str = Form(...),
+    finding_id: int = Form(...),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Send critical finding notification email."""
+    with get_connection(DB_PATH) as conn:
+        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+        if not finding:
+            raise HTTPException(status_code=404, detail="Finding not found")
+
+        sent = notification_engine.send_critical_finding_alert(to_email=to_email, finding=dict(finding))
+        if not sent:
+            raise HTTPException(status_code=502, detail="Failed to send email")
+
+    return {"status": "sent", "to": to_email, "finding_id": finding_id}
+
+
+@app.post("/api/notifications/preferences")
+def save_notification_preferences(
+    preferences: dict,
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Save notification preferences for the authenticated user."""
+    user_identifier = auth.user_id or auth.api_key_prefix or "unknown"
+    with get_connection(DB_PATH) as conn:
+        saved = NotificationPreferencesManager.save_preferences(conn, user_identifier, preferences)
+        if not saved:
+            raise HTTPException(status_code=500, detail="Failed to save preferences")
+    return {"status": "saved", "user": user_identifier}
+
+
+@app.get("/api/notifications/preferences")
+def get_notification_preferences(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get notification preferences for the authenticated user."""
+    user_identifier = auth.user_id or auth.api_key_prefix or "unknown"
+    with get_connection(DB_PATH) as conn:
+        prefs = NotificationPreferencesManager.get_preferences(conn, user_identifier)
+    return {"preferences": prefs or {}}
+
+
+@app.get("/metrics")
+def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Response:
+    """Expose Prometheus metrics in text format."""
+    metrics = get_metrics()
+    with get_connection(DB_PATH) as conn:
+        severity_rows = conn.execute(
+            "SELECT severity, COUNT(*) AS total FROM findings GROUP BY severity"
+        ).fetchall()
+        for row in severity_rows:
+            metrics.set_findings_count(row["severity"] or "UNKNOWN", int(row["total"]))
+
+        queue_size = conn.execute(
+            "SELECT COUNT(*) AS total FROM scans WHERE UPPER(status) = 'RUNNING'"
+        ).fetchone()
+        metrics.set_queue_size(int(queue_size["total"]) if queue_size else 0)
+
+    return Response(content=metrics.generate_text(), media_type="text/plain; version=0.0.4")

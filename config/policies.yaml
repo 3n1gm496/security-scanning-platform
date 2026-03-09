@@ -1,0 +1,110 @@
+# Advanced Policy Configuration
+#
+# Define custom security policies with rules, thresholds, and exemptions.
+
+policies:
+  # Policy 1: Block Critical in Production
+  - name: "production-critical-block"
+    description: "Block deployments with any CRITICAL findings to production"
+    enabled: true
+    target_patterns:
+      - "prod-*"
+      - "*-production"
+      - "main"
+    rules:
+      - name: "No Critical Findings"
+        severities: [CRITICAL]
+        action: block
+        message: "Critical findings detected - deployment blocked"
+      
+      - name: "Secrets Detection"
+        categories: [secret]
+        action: block
+        message: "Hardcoded secrets detected - fix immediately"
+  
+  # Policy 2: High Severity Threshold for Staging
+  - name: "staging-high-threshold"
+    description: "Block if more than 5 HIGH findings in staging"
+    enabled: true
+    target_patterns:
+      - "staging-*"
+      - "develop"
+    rules:
+      - name: "High Findings Threshold"
+        severities: [HIGH]
+        threshold: 5
+        action: block
+        message: "More than 5 HIGH findings - review required"
+      
+      - name: "Critical Always Blocked"
+        severities: [CRITICAL]
+        action: block
+  
+  # Policy 3: Development Environment - Warnings Only
+  - name: "development-warnings"
+    description: "Development branches get warnings, not blocks"
+    enabled: true
+    target_patterns:
+      - "feature/*"
+      - "bugfix/*"
+      - "dev-*"
+    rules:
+      - name: "Critical Warning"
+        severities: [CRITICAL]
+        action: warn
+        message: "Critical findings detected - please fix before merge"
+      
+      - name: "High Warning"
+        severities: [HIGH]
+        threshold: 10
+        action: warn
+        message: "Many HIGH findings detected"
+  
+  # Policy 4: Container Images - Strict
+  - name: "container-images-strict"
+    description: "Strict policy for container images"
+    enabled: true
+    target_types: [image]
+    rules:
+      - name: "No Critical Vulnerabilities"
+        severities: [CRITICAL]
+        categories: [container, sca]
+        action: block
+        message: "Critical container vulnerabilities - update base image"
+      
+      - name: "No High Without Fix"
+        severities: [HIGH]
+        threshold: 3
+        action: block
+        message: "Too many HIGH vulnerabilities in image"
+
+# Global exemptions (suppressions)
+exemptions:
+  # Exempt specific findings by fingerprint
+  - fingerprint: "a1b2c3d4e5f6..."
+    reason: "False positive - reviewed by security team on 2026-03-01"
+    approved_by: "security-team@company.com"
+    expires_at: "2026-12-31"
+  
+  - fingerprint: "xyz789..."
+    reason: "Risk accepted - vendor patch not available, implementing workaround"
+    approved_by: "cto@company.com"
+    expires_at: "2026-06-30"
+  
+  # Exempt by CWE for specific targets
+  - cwe: "CWE-
+
+611"  # XML External Entity
+    target_pattern: "legacy-*"
+    reason: "Legacy app - XML parsing disabled at firewall level"
+    approved_by: "security-architect@company.com"
+    expires_at: "2027-01-01"
+
+# Default policy (if no pattern matches)
+default_policy:
+  name: "default-block-critical"
+  rules:
+    - severities: [CRITICAL]
+      action: block
+    - categories: [secret]
+      action: block

@@ -9,6 +9,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -17,6 +25,11 @@ def utc_now_iso() -> str:
 
 
 class ScannerError(RuntimeError):
+    pass
+
+
+class RateLimitError(ScannerError):
+    """Raised when API rate limit is hit."""
     pass
 
 
@@ -82,19 +95,31 @@ def clone_repo(repo_url: str, destination: str, ref: str | None = None) -> str:
 def run_semgrep(target_path: str, output_path: str, configs: list[str]) -> dict[str, Any]:
     if not command_exists("semgrep"):
         raise ScannerError("semgrep not found in PATH")
-    command = ["semgrep", "scan", "--json", "--quiet"]
-    for config in configs:
-        command.extend(["--config", config])
-    command.append(target_path)
-    code, stdout, stderr = run_command(command, timeout=3600)
-    if code not in (0, 1):
-        raise ScannerError(f"semgrep execution failed: {stderr or stdout}")
-    Path(output_path).write_text(stdout or '{"results": []}', encoding="utf-8")
-    return {
-        "exit_code": code,
-        "stdout_path": output_path,
-        "stderr": stderr,
-    }
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        retry=retry_if_exception_type(RateLimitError),
+        before_sleep=before_sleep_log(LOGGER, logging.WARNING),
+    )
+    def _run_with_retry():
+        command = ["semgrep", "scan", "--json", "--quiet"]
+        for config in configs:
+            command.extend(["--config", config])
+        command.append(target_path)
+        code, stdout, stderr = run_command(command, timeout=3600)
+        
+        # Detect rate limiting
+        if "rate limit" in stderr.lower() or code == 429:
+            raise RateLimitError(f"Semgrep rate limit hit: {stderr}")
+        
+        if code not in (0, 1):
+            raise ScannerError(f"semgrep execution failed: {stderr or stdout}")
+        
+        Path(output_path).write_text(stdout or '{"results": []}', encoding="utf-8")
+        return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
+    
+    return _run_with_retry()
 
 
 def run_trivy_fs(

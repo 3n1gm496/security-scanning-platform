@@ -131,9 +131,17 @@ LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_WIND
 # Maximum number of concurrent background scans. Prevents unbounded thread growth
 # when async_mode=True is used repeatedly. Configurable via env var.
 MAX_SCAN_WORKERS = int(os.getenv("DASHBOARD_MAX_SCAN_WORKERS", "4"))
+# Set to '1' or 'true' when the dashboard is served over HTTPS (recommended in production).
+# Enables the Secure flag on session cookies and enforces https_only in SessionMiddleware.
+HTTPS_ONLY = os.getenv("DASHBOARD_HTTPS_ONLY", "0").strip().lower() in ("1", "true", "yes")
 
 app = FastAPI(title=APP_TITLE)
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    https_only=HTTPS_ONLY,
+    same_site="lax",
+)
 
 # Initialize RBAC tables
 init_rbac_tables()

@@ -410,7 +410,10 @@ invoke_orchestrator() {
     done
     [[ "${has_settings}" == "0" && -f "${ROOT_DIR}/config/settings.yaml" ]] && set -- "$@" --settings config/settings.yaml
 
-    ${COMPOSE} run --rm "${EXTRA_VOLUMES[@]}" orchestrator "$@" --json-output "${host_json}" || true
+    # Convert host path to container path (./data:/data mount)
+    local container_json="${host_json/#${DATA_DIR}/\/data}"
+    
+    ${COMPOSE} run --rm "${EXTRA_VOLUMES[@]}" orchestrator "$@" --json-output "${container_json}" || true
   else
     info "Using direct Python orchestrator (Docker unavailable)"
     local python_exe="python3"

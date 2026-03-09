@@ -3,7 +3,7 @@ Health check and monitoring endpoints for Security Scanning Platform Dashboard.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Response, status
@@ -42,7 +42,7 @@ async def health_check() -> HealthResponse:
 
     return HealthResponse(
         status="healthy",
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         uptime_seconds=round(uptime, 2),
         version="1.0.0",
         component="dashboard",
@@ -113,5 +113,5 @@ async def metrics() -> Dict[str, Any]:
         "app_version": "1.0.0",
         "app_name": "security-scanner-dashboard",
         "component": "dashboard",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }

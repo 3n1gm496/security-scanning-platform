@@ -11,7 +11,7 @@ Supports:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 import sqlite3
 
@@ -26,7 +26,7 @@ class ChartingEngine:
         Returns data for stacked bar chart.
         """
         if days > 0:
-            cutoff = datetime.now() - timedelta(days=days)
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
             rows = conn.execute(
                 """
                 SELECT
@@ -187,7 +187,7 @@ class ChartingEngine:
 
         Returns data for line chart.
         """
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         query = """
             SELECT

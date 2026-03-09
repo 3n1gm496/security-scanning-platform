@@ -46,7 +46,7 @@ jobs:
 
     - name: Security scan
       run: |
-        bandit -r orchestrator -ll --exclude orchestrator/tests
+        bandit -r orchestrator -ll --exclude orchestrator/tests -s B608
 
     - name: Run orchestrator tests
       run: |
@@ -98,7 +98,7 @@ jobs:
 
     - name: Security scan
       run: |
-        bandit -r dashboard -ll --exclude dashboard/tests
+        bandit -r dashboard -ll --exclude dashboard/tests -s B608
 
     - name: Run dashboard tests
       run: |

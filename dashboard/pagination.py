@@ -93,7 +93,7 @@ class PaginationCursor:
             WHERE {where_sql}
             ORDER BY {self.sort_by} {self.sort_order}
             LIMIT ?
-            """  # nosec B608
+            """
         params.append(self.per_page + 1)  # Fetch +1 to detect if there's next page
 
         return query, params
@@ -216,7 +216,7 @@ class FindingsPaginator:
             WHERE {where_sql}
             ORDER BY {safe_sort_by} {safe_sort_order}
             LIMIT ?
-            """  # nosec B608
+            """
         params.append(self.per_page + 1)
 
         rows = conn.execute(query, params).fetchall()
@@ -312,7 +312,7 @@ class ScansPaginator:
             WHERE {where_sql}
             ORDER BY {safe_sort_by} {safe_sort_order}
             LIMIT ?
-            """  # nosec B608
+            """
         params.append(self.per_page + 1)
 
         rows = conn.execute(query, params).fetchall()

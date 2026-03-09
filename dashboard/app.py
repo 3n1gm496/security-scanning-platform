@@ -84,6 +84,7 @@ from finding_management import (
     get_finding_state,
 )
 from pagination import FindingsPaginator, ScansPaginator
+from charting import ChartingEngine
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -1126,3 +1127,52 @@ def paginate_scans(
             sort_by=sort_by,
             sort_order=sort_order,
         )
+
+
+# Charting endpoints
+@app.get("/api/chart/severity-distribution")
+def chart_severity_distribution(
+    days: int = Query(30, ge=1, le=365),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Get findings severity distribution over time for stacked bar chart."""
+    with get_connection(DB_PATH) as conn:
+        return ChartingEngine.severity_distribution(conn, days=days)
+
+
+@app.get("/api/chart/tool-effectiveness")
+def chart_tool_effectiveness(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get findings count by tool for bar chart."""
+    with get_connection(DB_PATH) as conn:
+        return ChartingEngine.tool_effectiveness(conn)
+
+
+@app.get("/api/chart/target-risk-heatmap")
+def chart_target_risk(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get risk scores by target for heatmap visualization."""
+    with get_connection(DB_PATH) as conn:
+        return ChartingEngine.target_risk_heatmap(conn)
+
+
+@app.get("/api/chart/scan-trend")
+def chart_scan_trend(
+    days: int = Query(90, ge=7, le=365),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Get scan completion trend over time for line chart."""
+    with get_connection(DB_PATH) as conn:
+        return ChartingEngine.scan_status_trend(conn, days=days)
+
+
+@app.get("/api/chart/remediation-progress")
+def chart_remediation_progress(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get findings remediation progress for pie chart."""
+    with get_connection(DB_PATH) as conn:
+        return ChartingEngine.remediation_progress(conn)
+
+
+@app.get("/api/chart/cve-distribution")
+def chart_cve_distribution(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get top CVEs found for bar chart."""
+    with get_connection(DB_PATH) as conn:
+        return ChartingEngine.cve_distribution(conn)

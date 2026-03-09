@@ -1,0 +1,60 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+jobs:
+  security-scan:
+    name: Run Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for Gitleaks
+      
+      - name: Run Security Scan
+        run: |
+          # Configure scanner URL
+          SCANNER_URL="${{ secrets.SECURITY_SCANNER_URL }}"
+          SCANNER_API_KEY="${{ secrets.SECURITY_SCANNER_API_KEY }}"
+          
+          # Trigger scan via API
+          SCAN_RESPONSE=$(curl -X POST "${SCANNER_URL}/api/scan/trigger" \
+            -H "Authorization: Bearer ${SCANNER_API_KEY}" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "target_type=git" \
+            -d "target=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            -d "name=${GITHUB_REPOSITORY}" \
+            -d "async_mode=false")
+          
+          echo "Scan Response: ${SCAN_RESPONSE}"
+          
+          # Check scan status
+          SCAN_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.status // "unknown"')
+          POLICY_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.output.results[0].policy_status // "UNKNOWN"')
+          
+          echo "Scan Status: ${SCAN_STATUS}"
+          echo "Policy Status: ${POLICY_STATUS}"
+          
+          # Fail pipeline if policy blocked
+          if [ "${POLICY_STATUS}" == "BLOCK" ]; then
+            echo "❌ Security scan failed: Critical findings detected"
+            exit 1
+          fi
+          
+          echo "✅ Security scan passed"
+      
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: scan-results.json
+          retention-days: 30

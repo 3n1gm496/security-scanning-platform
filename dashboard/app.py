@@ -979,5 +979,75 @@ def generate_badge(target_name: str) -> Response:
 </svg>"""
     
     return Response(content=svg, media_type="image/svg+xml")
+
+
+@app.get("/api/scans/compare")
+def compare_scans(
+    scan_id_1: str,
+    scan_id_2: str,
+    user: str = Depends(get_current_user),
+) -> dict:
+    """Compare two scans and show diff (new, resolved, unchanged findings)."""
+    
+    with get_connection(DB_PATH) as conn:
+        # Get findings for both scans
+        findings_1 = conn.execute("SELECT * FROM findings WHERE scan_id = ?", (scan_id_1,)).fetchall()
+        findings_2 = conn.execute("SELECT * FROM findings WHERE scan_id = ?", (scan_id_2,)).fetchall()
+        
+        # Get scan metadata
+        scan_1 = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id_1,)).fetchone()
+        scan_2 = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id_2,)).fetchone()
+    
+    if not scan_1 or not scan_2:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or both scans not found")
+    
+    # Convert to dicts
+    findings_1_list = [dict(f) for f in findings_1]
+    findings_2_list = [dict(f) for f in findings_2]
+    
+    # Build fingerprint sets
+    fingerprints_1 = {f["fingerprint"]: f for f in findings_1_list if f.get("fingerprint")}
+    fingerprints_2 = {f["fingerprint"]: f for f in findings_2_list if f.get("fingerprint")}
+    
+    # Calculate diff
+    new_fingerprints = set(fingerprints_2.keys()) - set(fingerprints_1.keys())
+    resolved_fingerprints = set(fingerprints_1.keys()) - set(fingerprints_2.keys())
+    unchanged_fingerprints = set(fingerprints_1.keys()) & set(fingerprints_2.keys())
+    
+    new_findings = [fingerprints_2[fp] for fp in new_fingerprints]
+    resolved_findings = [fingerprints_1[fp] for fp in resolved_fingerprints]
+    unchanged_findings = [fingerprints_2[fp] for fp in unchanged_fingerprints]
+    
+    # Count by severity
+    def count_by_severity(findings_list):
+        counts = {}
+        for f in findings_list:
+            sev = f.get("severity", "UNKNOWN")
+            counts[sev] = counts.get(sev, 0) + 1
+        return counts
+    
+    return {
+        "scan_1": {
+            "id": scan_id_1,
+            "target_name": dict(scan_1).get("target_name"),
+            "created_at": dict(scan_1).get("created_at"),
+            "findings_count": len(findings_1_list),
+        },
+        "scan_2": {
+            "id": scan_id_2,
+            "target_name": dict(scan_2).get("target_name"),
+            "created_at": dict(scan_2).get("created_at"),
+            "findings_count": len(findings_2_list),
+        },
+        "diff": {
+            "new_count": len(new_findings),
+            "resolved_count": len(resolved_findings),
+            "unchanged_count": len(unchanged_findings),
+            "new_findings": new_findings,
+            "resolved_findings": resolved_findings,
+            "new_by_severity": count_by_severity(new_findings),
+            "resolved_by_severity": count_by_severity(resolved_findings),
+        },
+    }
 scan_async(target_type, target, name, str(root_dir))
         return result

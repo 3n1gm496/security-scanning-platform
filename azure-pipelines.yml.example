@@ -1,0 +1,39 @@
+trigger:
+  - stage: Security Scan
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+      - task: Bash@3
+        displayName: 'Run Security Scan'
+        inputs:
+          targetType: 'inline'
+          script: |
+            echo "Running security scan for $(Build.Repository.Name)..."
+            
+            # Trigger scan via API
+            SCAN_RESPONSE=$(curl -X POST "$(SECURITY_SCANNER_URL)/api/scan/trigger" \
+              -H "Authorization: Bearer $(SECURITY_SCANNER_API_KEY)" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "target_type=git" \
+              -d "target=$(Build.Repository.Uri)" \
+              -d "name=$(Build.Repository.Name)" \
+              -d "async_mode=false")
+            
+            echo "Scan Response: ${SCAN_RESPONSE}"
+            
+            # Parse results
+            POLICY_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.output.results[0].policy_status // "UNKNOWN"')
+            
+            if [ "${POLICY_STATUS}" == "BLOCK" ]; then
+              echo "##vso[task.complete result=Failed;]Security scan failed: Critical findings"
+              exit 1
+            fi
+            
+            echo "##vso[task.complete result=Succeeded;]Security scan passed"
+      
+      - task: PublishBuildArtifacts@1
+        condition: always()
+        inputs:
+          PathtoPublish: 'scan-results.json'
+          ArtifactName: 'security-scan-results'

@@ -2,10 +2,10 @@
 
 import sys
 from pathlib import Path
-import sqlite3
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from db_adapter import get_connection
 from notifications import EmailNotificationEngine, NotificationPreferencesManager
 
 
@@ -18,7 +18,7 @@ def test_notification_engine_init():
 
 def test_notification_preferences_save():
     """Test saving notification preferences."""
-    conn = sqlite3.connect(":memory:")
+    conn = get_connection(":memory:")
     prefs = {
         "critical_alerts": True,
         "high_alerts": False,
@@ -30,7 +30,7 @@ def test_notification_preferences_save():
 
 def test_notification_preferences_get():
     """Test retrieving notification preferences."""
-    conn = sqlite3.connect(":memory:")
+    conn = get_connection(":memory:")
     NotificationPreferencesManager.save_preferences(conn, "test@example.com", {"critical_alerts": True})
     prefs = NotificationPreferencesManager.get_preferences(conn, "test@example.com")
     assert prefs is not None
@@ -39,7 +39,7 @@ def test_notification_preferences_get():
 
 def test_get_subscribers():
     """Test getting subscribers for alerts."""
-    conn = sqlite3.connect(":memory:")
+    conn = get_connection(":memory:")
     NotificationPreferencesManager.save_preferences(conn, "user1@example.com", {"critical_alerts": True})
     NotificationPreferencesManager.save_preferences(conn, "user2@example.com", {"critical_alerts": False})
 

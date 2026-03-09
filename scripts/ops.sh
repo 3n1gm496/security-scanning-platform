@@ -7,6 +7,7 @@ cd "${ROOT_DIR}"
 COMPOSE="docker compose"
 DATA_DIR="${ROOT_DIR}/data"
 DB_FILE="${DATA_DIR}/security_scans.db"
+DATABASE_URL="${DATABASE_URL:-}"
 REPORTS_DIR="${DATA_DIR}/reports"
 WORKSPACES_DIR="${DATA_DIR}/workspaces"
 CACHE_DIR="${DATA_DIR}/cache"
@@ -203,11 +204,22 @@ db_exec_python() {
   ${COMPOSE} exec -T dashboard python -c "${code}"
 }
 
+db_is_postgres() {
+  [[ -n "${DATABASE_URL}" && "${DATABASE_URL}" == postgresql* ]]
+}
+
 init_scan_db() {
   require_compose
   ensure_dirs
-  info "Inizializzazione database scans (/data/security_scans.db)"
-  ${COMPOSE} run --rm --entrypoint python orchestrator -c 'from orchestrator.storage import init_db; init_db("/data/security_scans.db")' >/dev/null
+  if db_is_postgres; then
+    info "Inizializzazione database PostgreSQL (${DATABASE_URL})"
+    ${COMPOSE} run --rm --entrypoint python orchestrator -c \
+      'import os; from orchestrator.storage import init_db; init_db(os.environ.get("ORCH_DB_PATH","/data/security_scans.db"))' >/dev/null
+  else
+    info "Inizializzazione database SQLite (/data/security_scans.db)"
+    ${COMPOSE} run --rm --entrypoint python orchestrator -c \
+      'from orchestrator.storage import init_db; init_db("/data/security_scans.db")' >/dev/null
+  fi
 }
 
 latest_summary_report() {
@@ -653,19 +665,26 @@ cmd_scan_batch() {
 # DB / Reports
 # ------------------------------
 cmd_db_tables() {
-  header "Tabelle SQLite"
-  db_exec_python 'import sqlite3; c=sqlite3.connect("/data/security_scans.db"); print(c.execute("SELECT name FROM sqlite_master WHERE type='\''table'\'' ORDER BY name").fetchall())'
+  if db_is_postgres; then
+    header "Tabelle PostgreSQL"
+    local pg_code="from orchestrator.db_adapter import get_connection; conn=get_connection(); rows=conn.execute(\"SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename\").fetchall(); [print(dict(r)) for r in rows]"
+    db_exec_python "${pg_code}"
+  else
+    header "Tabelle SQLite"
+    local sq_code="import sqlite3; c=sqlite3.connect('/data/security_scans.db'); print(c.execute(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\").fetchall())"
+    db_exec_python "${sq_code}"
+  fi
 }
 
 cmd_db_counts() {
   header "Conteggi DB"
-  db_exec_python 'import sqlite3; c=sqlite3.connect("/data/security_scans.db"); scans=c.execute("select count(*) from scans").fetchone()[0]; findings=c.execute("select count(*) from findings").fetchone()[0]; print({"scans": scans, "findings": findings})'
+  db_exec_python 'from orchestrator.db_adapter import get_connection; conn=get_connection(); scans=conn.execute("SELECT COUNT(*) FROM scans").fetchone()[0]; findings=conn.execute("SELECT COUNT(*) FROM findings").fetchone()[0]; print(dict(scans=scans, findings=findings))'
 }
 
 cmd_db_last() {
   local limit="${1:-10}"
   header "Ultime ${limit} scansioni"
-  db_exec_python "import sqlite3; c=sqlite3.connect('/data/security_scans.db'); rows=c.execute('select id,target_name,status,policy_status,created_at from scans order by created_at desc limit ${limit}').fetchall(); [print(r) for r in rows]"
+  db_exec_python "import os; from orchestrator.db_adapter import get_connection; conn=get_connection(); rows=conn.execute('SELECT id,target_name,status,policy_status,created_at FROM scans ORDER BY created_at DESC LIMIT ${limit}').fetchall(); [print(dict(r)) for r in rows]"
 }
 
 cmd_reports_list() {
@@ -702,9 +721,18 @@ cmd_backup() {
   db_backup="${BACKUP_DIR}/security_scans-${ts}.db"
   reports_backup="${BACKUP_DIR}/reports-${ts}.tgz"
 
-  if [[ -f "${DB_FILE}" ]]; then
+  if db_is_postgres; then
+    info "Backup PostgreSQL → ${db_backup}.sql"
+    if command -v pg_dump &>/dev/null; then
+      pg_dump "${DATABASE_URL}" > "${db_backup}.sql"
+      info "DB backup (PostgreSQL): ${db_backup}.sql"
+    else
+      ${COMPOSE} exec -T postgres pg_dump -U "${POSTGRES_USER:-security}" "${POSTGRES_DB:-security_scans}" > "${db_backup}.sql"
+      info "DB backup (PostgreSQL via container): ${db_backup}.sql"
+    fi
+  elif [[ -f "${DB_FILE}" ]]; then
     cp "${DB_FILE}" "${db_backup}"
-    info "DB backup: ${db_backup}"
+    info "DB backup (SQLite): ${db_backup}"
   else
     warn "DB non trovato: ${DB_FILE}"
   fi

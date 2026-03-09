@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import smtplib
-import sqlite3
+
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
@@ -263,7 +263,7 @@ class NotificationPreferencesManager:
 
     @staticmethod
     def save_preferences(
-        conn: sqlite3.Connection,
+        conn: Any,
         user_email: str,
         preferences: dict[str, Any],
     ) -> bool:
@@ -305,10 +305,10 @@ class NotificationPreferencesManager:
             return False
 
     @staticmethod
-    def get_preferences(conn: sqlite3.Connection, user_email: str) -> dict[str, Any] | None:
+    def get_preferences(conn: Any, user_email: str) -> dict[str, Any] | None:
         """Get notification preferences for a user."""
         try:
-            conn.row_factory = sqlite3.Row
+            pass  # row_factory handled by db_adapter
             row = conn.execute(
                 "SELECT * FROM notification_preferences WHERE user_email = ?",
                 (user_email,),
@@ -322,12 +322,12 @@ class NotificationPreferencesManager:
 
     @staticmethod
     def get_subscribers_for_alerts(
-        conn: sqlite3.Connection,
+        conn: Any,
         alert_type: str = "critical_alerts",
     ) -> list[str]:
         """Get all email subscribers for a specific alert type."""
         try:
-            conn.row_factory = sqlite3.Row
+            pass  # row_factory handled by db_adapter
             allowed_alert_types = {
                 "critical_alerts": "critical_alerts",
                 "high_alerts": "high_alerts",

@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-from pathlib import Path
+import os
 from typing import Any
 
+from db_adapter import get_connection
 
-def get_connection(db_path: str) -> sqlite3.Connection:
-    path = Path(db_path)
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Re-export get_connection so existing callers (app.py etc.) continue to work
+__all__ = ["get_connection"]
+
+_DB_PATH = os.environ.get("DASHBOARD_DB_PATH", "/data/security_scans.db")
+
+
+def _conn(db_path: str | None = None):
+    return get_connection(db_path or _DB_PATH)
 
 
 def fetch_kpis(db_path: str) -> dict[str, Any]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         total_scans = conn.execute("SELECT COUNT(*) AS value FROM scans").fetchone()["value"]
         total_findings = conn.execute("SELECT COUNT(*) AS value FROM findings").fetchone()["value"]
         critical_findings = conn.execute(
@@ -27,7 +28,7 @@ def fetch_kpis(db_path: str) -> dict[str, Any]:
         ]
         open_targets = conn.execute("SELECT COUNT(DISTINCT target_name) AS value FROM scans").fetchone()["value"]
         last_7d_scans = conn.execute(
-            "SELECT COUNT(*) AS value FROM scans WHERE substr(created_at, 1, 10) >= date('now', '-7 day')"
+            "SELECT COUNT(*) AS value FROM scans" " WHERE substr(created_at, 1, 10) >= date('now', '-7 day')"
         ).fetchone()["value"]
     return {
         "total_scans": total_scans,
@@ -59,7 +60,7 @@ def list_scans(
         params.append(policy_status)
     query += " ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
 
@@ -92,13 +93,13 @@ def list_findings(
         params.append(category)
     query += " ORDER BY timestamp DESC, severity DESC LIMIT ?"
     params.append(limit)
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
 
 
 def severity_breakdown(db_path: str) -> dict[str, int]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(
             "SELECT severity, COUNT(*) AS total FROM findings GROUP BY severity ORDER BY total DESC"
         ).fetchall()
@@ -106,24 +107,26 @@ def severity_breakdown(db_path: str) -> dict[str, int]:
 
 
 def tool_breakdown(db_path: str) -> dict[str, int]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute("SELECT tool, COUNT(*) AS total FROM findings GROUP BY tool ORDER BY total DESC").fetchall()
     return {row["tool"]: row["total"] for row in rows}
 
 
 def target_breakdown(db_path: str) -> dict[str, int]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(
-            "SELECT target_name, COUNT(*) AS total FROM findings GROUP BY target_name ORDER BY total DESC LIMIT 20"
+            "SELECT target_name, COUNT(*) AS total FROM findings" " GROUP BY target_name ORDER BY total DESC LIMIT 20"
         ).fetchall()
     return {row["target_name"]: row["total"] for row in rows}
 
 
 def scans_trend(db_path: str, days: int = 30) -> list[dict[str, Any]]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS scans, SUM(findings_count) AS findings
+            SELECT substr(created_at, 1, 10) AS day,
+                   COUNT(*) AS scans,
+                   SUM(findings_count) AS findings
             FROM scans
             WHERE substr(created_at, 1, 10) >= date('now', ?)
             GROUP BY substr(created_at, 1, 10)
@@ -135,21 +138,21 @@ def scans_trend(db_path: str, days: int = 30) -> list[dict[str, Any]]:
 
 
 def distinct_targets(db_path: str) -> list[str]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute("SELECT DISTINCT target_name FROM scans ORDER BY target_name ASC").fetchall()
     return [row["target_name"] for row in rows]
 
 
 def distinct_tools(db_path: str) -> list[str]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute("SELECT DISTINCT tool FROM findings ORDER BY tool ASC").fetchall()
     return [row["tool"] for row in rows]
 
 
 def recent_failed_scans(db_path: str, limit: int = 20) -> list[dict[str, Any]]:
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(
-            "SELECT * FROM scans WHERE status != 'COMPLETED_CLEAN' ORDER BY created_at DESC LIMIT ?",
+            "SELECT * FROM scans WHERE status != 'COMPLETED_CLEAN'" " ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
     return [dict(row) for row in rows]
@@ -168,7 +171,7 @@ def cache_hit_stats(db_path: str, limit_scans: int = 200) -> dict[str, Any]:
     cached_runs = 0
     by_tool: dict[str, dict[str, int]] = {}
 
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(query, (limit_scans,)).fetchall()
 
     for row in rows:
@@ -233,7 +236,7 @@ def cache_hit_trend(db_path: str, days: int = 14) -> list[dict[str, Any]]:
 
     day_totals: dict[str, dict[str, int]] = {}
 
-    with get_connection(db_path) as conn:
+    with _conn(db_path) as conn:
         rows = conn.execute(query, (f"-{days} day",)).fetchall()
 
     for row in rows:

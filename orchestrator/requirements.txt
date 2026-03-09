@@ -31,3 +31,4 @@ urllib3==2.6.3
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
+psycopg2-binary>=2.9.9

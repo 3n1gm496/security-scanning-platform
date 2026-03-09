@@ -377,9 +377,10 @@ invoke_orchestrator() {
 
   ensure_dirs
 
-  local ts host_json
+  local ts host_json container_json
   ts="$(date +%Y%m%d-%H%M%S)-$$"
   host_json="${TMP_DIR}/ops-summary-${ts}.json"
+  container_json="/data/tmp/ops-summary-${ts}.json"
 
   header "${label}"
 
@@ -410,10 +411,8 @@ invoke_orchestrator() {
     done
     [[ "${has_settings}" == "0" && -f "${ROOT_DIR}/config/settings.yaml" ]] && set -- "$@" --settings config/settings.yaml
 
-    # Convert host path to container path (./data:/data mount)
-    local container_json="${host_json/#${DATA_DIR}/\/data}"
-    
-    ${COMPOSE} run --rm "${EXTRA_VOLUMES[@]}" orchestrator "$@" --json-output "${container_json}" || true
+    # Run container with host user ID to prevent permission issues
+    ${COMPOSE} run --rm --user "$(id -u):$(id -g)" "${EXTRA_VOLUMES[@]}" orchestrator "$@" --json-output "${container_json}" || true
   else
     info "Using direct Python orchestrator (Docker unavailable)"
     local python_exe="python3"

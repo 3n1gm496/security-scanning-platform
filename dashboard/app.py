@@ -9,7 +9,7 @@ import subprocess
 import json
 from collections import defaultdict, deque
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Lock, Thread, Timer
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
@@ -96,6 +96,9 @@ PASSWORD = os.getenv("DASHBOARD_PASSWORD", "change-me")
 SESSION_SECRET = os.getenv("DASHBOARD_SESSION_SECRET", "please-change-this")
 RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_RATE_LIMIT_REQUESTS", "180"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_RATE_LIMIT_WINDOW_SECONDS", "60"))
+# Stricter limits for the login endpoint to prevent brute-force attacks
+LOGIN_RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_REQUESTS", "10"))
+LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_WINDOW_SECONDS", "60"))
 
 app = FastAPI(title=APP_TITLE)
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
@@ -115,8 +118,32 @@ if default_key:
 app.include_router(monitoring_router, prefix="/api")
 
 _RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics", "/metrics"}
-_request_timestamps: dict[str, deque[float]] = defaultdict(deque)
-_rate_limit_lock = Lock()
+
+# In-process sliding-window rate limiter.
+# _rate_buckets maps (scope, client_id) -> deque of monotonic timestamps.
+# A periodic cleanup timer evicts stale entries to prevent unbounded memory growth.
+_rate_buckets: dict[tuple[str, str], deque] = {}
+_rate_lock = Lock()
+_CLEANUP_INTERVAL_SECONDS = 300  # run cleanup every 5 minutes
+
+
+def _evict_stale_buckets() -> None:
+    """Remove bucket entries whose last timestamp is older than the longest window."""
+    cutoff = time.monotonic() - max(RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_WINDOW_SECONDS)
+    with _rate_lock:
+        stale = [k for k, dq in _rate_buckets.items() if not dq or dq[-1] < cutoff]
+        for k in stale:
+            del _rate_buckets[k]
+    # Reschedule
+    t = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
+    t.daemon = True
+    t.start()
+
+
+# Start the first cleanup cycle
+_cleanup_timer = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
+_cleanup_timer.daemon = True
+_cleanup_timer.start()
 
 notification_engine = EmailNotificationEngine()
 
@@ -130,13 +157,17 @@ def _client_key(request: Request) -> str:
     return "unknown"
 
 
-def _is_rate_limited(client_id: str, now: float) -> bool:
-    with _rate_limit_lock:
-        bucket = _request_timestamps[client_id]
-        threshold = now - RATE_LIMIT_WINDOW_SECONDS
+def _is_rate_limited(scope: str, client_id: str, limit: int, window: int, now: float) -> bool:
+    """Sliding-window rate limiter. Returns True if the request should be blocked."""
+    key = (scope, client_id)
+    with _rate_lock:
+        if key not in _rate_buckets:
+            _rate_buckets[key] = deque()
+        bucket = _rate_buckets[key]
+        threshold = now - window
         while bucket and bucket[0] < threshold:
             bucket.popleft()
-        if len(bucket) >= RATE_LIMIT_REQUESTS:
+        if len(bucket) >= limit:
             return True
         bucket.append(now)
     return False
@@ -144,10 +175,22 @@ def _is_rate_limited(client_id: str, now: float) -> bool:
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
-    if request.url.path.startswith("/api") and request.url.path not in _RATE_LIMIT_EXCLUDED_PATHS:
-        now = time.monotonic()
-        client_id = _client_key(request)
-        if _is_rate_limited(client_id, now):
+    now = time.monotonic()
+    client_id = _client_key(request)
+    path = request.url.path
+
+    # Brute-force protection on the login endpoint
+    if path == "/login" and request.method == "POST":
+        if _is_rate_limited("login", client_id, LOGIN_RATE_LIMIT_REQUESTS, LOGIN_RATE_LIMIT_WINDOW_SECONDS, now):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many login attempts. Please wait before retrying."},
+                headers={"Retry-After": str(LOGIN_RATE_LIMIT_WINDOW_SECONDS)},
+            )
+
+    # General API rate limiting
+    if path.startswith("/api") and path not in _RATE_LIMIT_EXCLUDED_PATHS:
+        if _is_rate_limited("api", client_id, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, now):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Retry later."},

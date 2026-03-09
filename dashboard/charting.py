@@ -142,7 +142,7 @@ class ChartingEngine:
         Returns data for heatmap visualization.
         """
         query = """
-            SELECT 
+            SELECT
                 s.target_name,
                 COUNT(CASE WHEN f.severity = 'CRITICAL' THEN 1 END) as critical_count,
                 COUNT(CASE WHEN f.severity = 'HIGH' THEN 1 END) as high_count,
@@ -190,7 +190,7 @@ class ChartingEngine:
         cutoff = datetime.now() - timedelta(days=days)
 
         query = """
-            SELECT 
+            SELECT
                 DATE(created_at) as date,
                 COUNT(*) as total_scans,
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
@@ -234,7 +234,7 @@ class ChartingEngine:
         Returns data for pie/doughnut chart.
         """
         query = """
-            SELECT 
+            SELECT
                 COALESCE(status, 'new') as status,
                 COUNT(*) as count
             FROM findings f
@@ -279,7 +279,7 @@ class ChartingEngine:
         Returns data for bar chart.
         """
         query = """
-            SELECT 
+            SELECT
                 cve_id,
                 COUNT(*) as count
             FROM findings

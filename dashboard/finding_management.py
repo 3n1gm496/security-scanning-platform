@@ -128,7 +128,8 @@ def update_finding_status(
         # Insert new
         cursor.execute(
             """
-            INSERT INTO finding_states (finding_id, status, assigned_to, created_at, updated_at, resolution_notes, resolved_at)
+            INSERT INTO finding_states
+            (finding_id, status, assigned_to, created_at, updated_at, resolution_notes, resolved_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
             (
@@ -220,7 +221,7 @@ def accept_risk(finding_id: int, justification: str, expires_at: str, user: str)
 
     cursor.execute(
         """
-        INSERT OR REPLACE INTO finding_states 
+        INSERT OR REPLACE INTO finding_states
         (finding_id, status, risk_acceptance_justification, risk_acceptance_expires_at, created_at, updated_at)
         VALUES (?, 'risk_accepted', ?, ?, COALESCE((SELECT created_at FROM finding_states WHERE finding_id = ?), ?), ?)
     """,
@@ -348,7 +349,7 @@ def get_finding_stats_by_status() -> dict:
 
     # Count findings by status
     rows = cursor.execute("""
-        SELECT 
+        SELECT
             COALESCE(fs.status, 'new') as status,
             COUNT(*) as count
         FROM findings f

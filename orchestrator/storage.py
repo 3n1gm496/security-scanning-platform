@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 from pathlib import Path
 
+from orchestrator.db_adapter import adapt_schema, get_connection
 from orchestrator.models import Finding, ScanResult
 
 LOGGER = logging.getLogger(__name__)
@@ -64,22 +64,20 @@ CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
 """
 
 
-def connect(db_path: str) -> sqlite3.Connection:
-    path = Path(db_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
+def connect(db_path: str):
+    """Return a connection wrapper (backward-compatible alias)."""
+    return get_connection(db_path)
 
 
 def init_db(db_path: str) -> None:
-    with connect(db_path) as conn:
-        conn.executescript(SCHEMA_SQL)
+    adapted = adapt_schema(SCHEMA_SQL)
+    with get_connection(db_path) as conn:
+        conn.executescript(adapted)
         conn.commit()
-    LOGGER.info("SQLite initialized at %s", db_path)
+    LOGGER.info("Database initialised at %s", db_path)
 
 
-def _to_sqlite_text(value):
+def _to_text(value):
     if value is None:
         return None
     if isinstance(value, (list, dict)):
@@ -89,7 +87,7 @@ def _to_sqlite_text(value):
 
 def save_scan_result(db_path: str, result: ScanResult) -> None:
     counts = result.severity_counts()
-    with connect(db_path) as conn:
+    with get_connection(db_path) as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO scans (
@@ -140,16 +138,16 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
                     finding.tool,
                     finding.category,
                     finding.severity,
-                    _to_sqlite_text(finding.title),
-                    _to_sqlite_text(finding.description),
-                    _to_sqlite_text(finding.file),
+                    _to_text(finding.title),
+                    _to_text(finding.description),
+                    _to_text(finding.file),
                     finding.line,
-                    _to_sqlite_text(finding.package),
-                    _to_sqlite_text(finding.version),
-                    _to_sqlite_text(finding.cve),
-                    _to_sqlite_text(finding.remediation),
-                    _to_sqlite_text(finding.raw_reference),
-                    _to_sqlite_text(finding.fingerprint),
+                    _to_text(finding.package),
+                    _to_text(finding.version),
+                    _to_text(finding.cve),
+                    _to_text(finding.remediation),
+                    _to_text(finding.raw_reference),
+                    _to_text(finding.fingerprint),
                 )
                 for finding in result.findings
             ],

@@ -11,7 +11,7 @@ Supports:
 from __future__ import annotations
 
 from typing import Any
-import sqlite3
+
 from base64 import b64encode, b64decode
 
 
@@ -100,7 +100,7 @@ class PaginationCursor:
 
     def paginate(
         self,
-        conn: sqlite3.Connection,
+        conn: Any,
         filters: dict[str, Any] | None = None,
         cursor: str | None = None,
     ) -> dict[str, Any]:
@@ -145,7 +145,7 @@ class FindingsPaginator:
 
     def paginate(
         self,
-        conn: sqlite3.Connection,
+        conn: Any,
         search: str = "",
         severity_filter: list[str] | None = None,
         tool_filter: list[str] | None = None,
@@ -265,7 +265,7 @@ class ScansPaginator:
 
     def paginate(
         self,
-        conn: sqlite3.Connection,
+        conn: Any,
         target_filter: str = "",
         status_filter: str = "",
         cursor: str | None = None,

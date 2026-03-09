@@ -13,14 +13,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-import sqlite3
 
 
 class ChartingEngine:
     """Generate chart data for visualization."""
 
     @staticmethod
-    def severity_distribution(conn: sqlite3.Connection, days: int = 30) -> dict[str, Any]:
+    def severity_distribution(conn: Any, days: int = 30) -> dict[str, Any]:
         """Get findings distribution by severity over time.
 
         Returns data for stacked bar chart.
@@ -96,7 +95,7 @@ class ChartingEngine:
         return {"labels": labels, "datasets": datasets}
 
     @staticmethod
-    def tool_effectiveness(conn: sqlite3.Connection) -> dict[str, Any]:
+    def tool_effectiveness(conn: Any) -> dict[str, Any]:
         """Get findings count by tool (effectiveness comparison).
 
         Returns data for bar chart.
@@ -136,7 +135,7 @@ class ChartingEngine:
         }
 
     @staticmethod
-    def target_risk_heatmap(conn: sqlite3.Connection) -> dict[str, Any]:
+    def target_risk_heatmap(conn: Any) -> dict[str, Any]:
         """Get risk scores by target (for heatmap).
 
         Returns data for heatmap visualization.
@@ -182,7 +181,7 @@ class ChartingEngine:
         return {"targets": [r["target"] for r in risk_scores], "data": risk_scores}
 
     @staticmethod
-    def scan_status_trend(conn: sqlite3.Connection, days: int = 90) -> dict[str, Any]:
+    def scan_status_trend(conn: Any, days: int = 90) -> dict[str, Any]:
         """Get scan completion trend.
 
         Returns data for line chart.
@@ -228,7 +227,7 @@ class ChartingEngine:
         }
 
     @staticmethod
-    def remediation_progress(conn: sqlite3.Connection) -> dict[str, Any]:
+    def remediation_progress(conn: Any) -> dict[str, Any]:
         """Get findings remediation progress.
 
         Returns data for pie/doughnut chart.
@@ -273,7 +272,7 @@ class ChartingEngine:
         }
 
     @staticmethod
-    def cve_distribution(conn: sqlite3.Connection) -> dict[str, Any]:
+    def cve_distribution(conn: Any) -> dict[str, Any]:
         """Get top CVEs found.
 
         Returns data for bar chart.

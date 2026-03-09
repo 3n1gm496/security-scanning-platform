@@ -4,24 +4,72 @@ Best-effort helper used during Dockerfile build. Uses GitHub Releases API.
 """
 
 import argparse
-import json
 import os
 import shutil
 import stat
 import sys
 import tarfile
 import tempfile
-import urllib.request
+from pathlib import Path
+from urllib.parse import urlparse
 import zipfile
 
+import requests
+
 GITHUB_API = "https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag}"
-DOWNLOAD_DIR = "/tmp"
+DOWNLOAD_DIR = tempfile.gettempdir()
+
+
+def is_safe_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.scheme == "https" and bool(parsed.netloc)
+
+
+def is_within_directory(base: str, target: str) -> bool:
+    base_path = Path(base).resolve()
+    target_path = Path(target).resolve()
+    try:
+        target_path.relative_to(base_path)
+        return True
+    except ValueError:
+        return False
+
+
+def safe_extract_tar(archive: tarfile.TarFile, destination: str) -> None:
+    for member in archive.getmembers():
+        final_path = os.path.join(destination, member.name)
+        if not is_within_directory(destination, final_path):
+            raise ValueError(f"unsafe tar path: {member.name}")
+    for member in archive.getmembers():
+        archive.extract(member, destination)
+
+
+def safe_extract_zip(archive: zipfile.ZipFile, destination: str) -> None:
+    for member in archive.namelist():
+        final_path = os.path.join(destination, member)
+        if not is_within_directory(destination, final_path):
+            raise ValueError(f"unsafe zip path: {member}")
+    for member in archive.namelist():
+        if member.endswith("/"):
+            os.makedirs(os.path.join(destination, member), exist_ok=True)
+            continue
+        final_path = os.path.join(destination, member)
+        os.makedirs(os.path.dirname(final_path), exist_ok=True)
+        with archive.open(member) as src, open(final_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
 
 def download_url(url: str, dst: str) -> bool:
+    if not is_safe_url(url):
+        print(f"download rejected (non-https URL): {url}")
+        return False
     try:
-        with urllib.request.urlopen(url) as r, open(dst, "wb") as out:
-            shutil.copyfileobj(r, out)
+        response = requests.get(url, timeout=30, stream=True)
+        response.raise_for_status()
+        with open(dst, "wb") as out:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    out.write(chunk)
         return True
     except Exception as e:
         print(f"download failed {url}: {e}")
@@ -39,9 +87,13 @@ def pick_asset(release_json: dict, name_contains: tuple[str, ...]) -> str | None
 
 def get_release(owner: str, repo: str, tag: str) -> dict | None:
     url = GITHUB_API.format(owner=owner, repo=repo, tag=tag)
+    if not is_safe_url(url):
+        print(f"failed to fetch release metadata {owner}/{repo} {tag}: invalid URL")
+        return None
     try:
-        with urllib.request.urlopen(url) as r:
-            return json.load(r)
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return response.json()
     except Exception as e:
         print(f"failed to fetch release metadata {owner}/{repo} {tag}: {e}")
         return None
@@ -76,7 +128,7 @@ def install_nuclei(version: str) -> None:
         with tarfile.open(out, "r:gz") as tf:
             for member in tf.getmembers():
                 if os.path.basename(member.name) == "nuclei":
-                    tf.extract(member, "/usr/local/bin")
+                    safe_extract_tar(tf, "/usr/local/bin")
                     src = os.path.join("/usr/local/bin", member.name)
                     dst = "/usr/local/bin/nuclei"
                     try:
@@ -109,7 +161,7 @@ def install_grype(version: str) -> None:
         with tarfile.open(out, "r:gz") as tf:
             for member in tf.getmembers():
                 if os.path.basename(member.name) == "grype":
-                    tf.extract(member, "/usr/local/bin")
+                    safe_extract_tar(tf, "/usr/local/bin")
                     src = os.path.join("/usr/local/bin", member.name)
                     dst = "/usr/local/bin/grype"
                     try:
@@ -143,11 +195,11 @@ def install_zap(version: str) -> None:
     try:
         if out.endswith(".zip"):
             with zipfile.ZipFile(out, "r") as zf:
-                zf.extractall("/opt")
+                safe_extract_zip(zf, "/opt")
         else:
             # assume tar.gz
             with tarfile.open(out, "r:gz") as tf:
-                tf.extractall("/opt")
+                safe_extract_tar(tf, "/opt")
         # try to find zap.sh
         for root, dirs, files in os.walk("/opt"):
             if "zap.sh" in files:

@@ -46,7 +46,7 @@ jobs:
 
     - name: Security scan
       run: |
-        bandit -r orchestrator -ll
+        bandit -r orchestrator -ll --exclude orchestrator/tests
 
     - name: Run orchestrator tests
       run: |

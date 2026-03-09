@@ -1,0 +1,13 @@
+# Dashboard runtime dependencies
+# Edit this file, then run: pip-compile requirements.in
+fastapi==0.115.8
+uvicorn[standard]==0.34.0
+jinja2==3.1.5
+structlog>=24.1.0
+itsdangerous>=2.1.0
+python-multipart>=0.0.6
+reportlab>=4.0.0
+matplotlib>=3.8.0
+prometheus-client>=0.20.0
+bcrypt>=4.0.0
+httpx>=0.24

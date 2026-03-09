@@ -197,7 +197,12 @@ def analytics_db(tmp_path, monkeypatch):
     ]
 
     conn.executemany(
-        "INSERT INTO findings (scan_id, timestamp, target_type, target_name, tool, category, severity, title, description, file, line, package, version, cve, remediation, raw_reference, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "INSERT INTO findings (scan_id, timestamp, target_type, target_name, "
+            "tool, category, severity, title, description, file, line, package, "
+            "version, cve, remediation, raw_reference, fingerprint) VALUES "
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ),
         findings_data,
     )
 

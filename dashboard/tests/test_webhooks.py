@@ -139,7 +139,7 @@ def test_generate_signature():
 @pytest.mark.asyncio
 async def test_trigger_webhook_success(db_setup):
     """Test invio webhook con successo."""
-    webhook_id = create_webhook(
+    create_webhook(
         name="Success Test", url="https://example.com/webhook", events=[WebhookEvent.SCAN_COMPLETED]
     )
 
@@ -167,7 +167,7 @@ async def test_trigger_webhook_success(db_setup):
 @pytest.mark.asyncio
 async def test_trigger_webhook_failure(db_setup):
     """Test invio webhook con fallimento."""
-    webhook_id = create_webhook(
+    create_webhook(
         name="Failure Test", url="https://example.com/webhook", events=[WebhookEvent.SCAN_FAILED]
     )
 

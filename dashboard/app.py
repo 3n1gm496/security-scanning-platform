@@ -86,7 +86,7 @@ default_key = create_default_admin_key()
 if default_key:
     print(f"\n{'=' * 80}")
     print(f"DEFAULT ADMIN API KEY: {default_key}")
-    print(f"Store this key securely! It will not be shown again.")
+    print("Store this key securely! It will not be shown again.")
     print(f"{'=' * 80}\n")
 
 # Add monitoring endpoints

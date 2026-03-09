@@ -266,7 +266,7 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
         {f'<p>Scan ID: {scan_info.get("scan_id")}</p>' if scan_info.get("scan_id") else ''}
         {f'<p>Target: {scan_info.get("target")}</p>' if scan_info.get("target") else ''}
     </div>
-    
+
     <div class="summary">
         <div class="summary-card">
             <h3>Total Findings</h3>
@@ -289,7 +289,7 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
             <div class="value low">{len(by_severity['low'])}</div>
         </div>
     </div>
-    
+
 """
 
     # Add findings by severity

@@ -105,7 +105,7 @@ def list_webhooks() -> list[dict]:
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT id, name, url, events, is_active, created_at, last_triggered_at, 
+        SELECT id, name, url, events, is_active, created_at, last_triggered_at,
                success_count, failure_count
         FROM webhooks
         ORDER BY created_at DESC
@@ -245,7 +245,7 @@ def _log_delivery(
 
     cursor.execute(
         """
-        INSERT INTO webhook_deliveries 
+        INSERT INTO webhook_deliveries
         (webhook_id, event_type, payload, response_status, response_body, error, delivered_at, duration_ms)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """,
@@ -273,7 +273,7 @@ def _update_webhook_stats(webhook_id: int, success: bool):
     if success:
         cursor.execute(
             """
-            UPDATE webhooks 
+            UPDATE webhooks
             SET success_count = success_count + 1,
                 last_triggered_at = ?
             WHERE id = ?
@@ -283,7 +283,7 @@ def _update_webhook_stats(webhook_id: int, success: bool):
     else:
         cursor.execute(
             """
-            UPDATE webhooks 
+            UPDATE webhooks
             SET failure_count = failure_count + 1
             WHERE id = ?
         """,

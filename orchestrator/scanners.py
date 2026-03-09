@@ -216,7 +216,7 @@ def run_checkov(target_path: str, output_path: str) -> dict[str, Any]:
 def run_syft(target_value: str, output_path: str) -> dict[str, Any]:
     if not command_exists("syft"):
         raise ScannerError("syft not found in PATH")
-    command = ["syft", target_value, f"-o", f"spdx-json={output_path}"]
+    command = ["syft", target_value, "-o", f"spdx-json={output_path}"]
     code, stdout, stderr = run_command(command, timeout=3600)
     if code != 0:
         raise ScannerError(f"syft failed: {stderr or stdout}")

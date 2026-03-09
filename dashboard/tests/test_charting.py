@@ -31,10 +31,10 @@ def _setup_test_db():
             title TEXT,
             description TEXT,
             severity TEXT,
-            file_path TEXT,
+            file TEXT,
             tool TEXT,
-            cve_id TEXT,
-            created_at TEXT
+            cve TEXT,
+            timestamp TEXT
         )
     """)
 

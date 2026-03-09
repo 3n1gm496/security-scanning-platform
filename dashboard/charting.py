@@ -30,12 +30,12 @@ class ChartingEngine:
             rows = conn.execute(
                 """
                 SELECT
-                    DATE(created_at) as date,
+                    DATE(timestamp) as date,
                     severity,
                     COUNT(*) as count
                 FROM findings
-                WHERE created_at >= ?
-                GROUP BY DATE(created_at), severity
+                WHERE timestamp >= ?
+                GROUP BY DATE(timestamp), severity
                 ORDER BY date ASC
                 """,
                 [cutoff.isoformat()],
@@ -43,11 +43,11 @@ class ChartingEngine:
         else:
             rows = conn.execute("""
                 SELECT
-                    DATE(created_at) as date,
+                    DATE(timestamp) as date,
                     severity,
                     COUNT(*) as count
                 FROM findings
-                GROUP BY DATE(created_at), severity
+                GROUP BY DATE(timestamp), severity
                 ORDER BY date ASC
                 """).fetchall()
 
@@ -280,18 +280,18 @@ class ChartingEngine:
         """
         query = """
             SELECT
-                cve_id,
+                cve,
                 COUNT(*) as count
             FROM findings
-            WHERE cve_id IS NOT NULL AND cve_id != ''
-            GROUP BY cve_id
+            WHERE cve IS NOT NULL AND cve != ''
+            GROUP BY cve
             ORDER BY count DESC
             LIMIT 15
         """
 
         rows = conn.execute(query).fetchall()
 
-        labels = [row["cve_id"] for row in rows]
+        labels = [row["cve"] for row in rows]
         data = [row["count"] for row in rows]
 
         return {

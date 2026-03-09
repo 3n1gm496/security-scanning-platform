@@ -169,7 +169,10 @@ class FindingsPaginator:
         Returns:
             Paginated findings with cursor
         """
-        allowed_sort_columns = {"id", "scan_id", "severity", "tool", "created_at", "line_number"}
+        allowed_sort_columns = {"id", "scan_id", "severity", "tool", "timestamp", "line"}
+        # Map legacy column aliases to actual schema column names
+        _col_alias = {"created_at": "timestamp", "line_number": "line", "file_path": "file", "cve_id": "cve"}
+        sort_by = _col_alias.get(sort_by, sort_by)
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "id"
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 
@@ -179,7 +182,7 @@ class FindingsPaginator:
         # Search filter (OR across multiple columns)
         if search:
             search_param = f"%{search}%"
-            where_clauses.append("(title LIKE ? OR description LIKE ? OR file_path LIKE ? OR cve_id LIKE ?)")
+            where_clauses.append("(title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)")
             params.extend([search_param] * 4)
 
         # Severity filter
@@ -210,8 +213,8 @@ class FindingsPaginator:
 
         # Query with +1 to detect has_next
         query = f"""
-            SELECT id, scan_id, title, description, severity, file_path,
-                   line_number, tool, cve_id, fingerprint, created_at
+            SELECT id, scan_id, title, description, severity, file,
+                   line, tool, cve, fingerprint, timestamp
             FROM findings
             WHERE {where_sql}
             ORDER BY {safe_sort_by} {safe_sort_order}
@@ -282,8 +285,9 @@ class ScansPaginator:
         Returns:
             Paginated scans
         """
-        allowed_sort_columns = {"id", "target_name", "target_type", "status", "created_at"}
+        allowed_sort_columns = {"id", "target_name", "target_type", "status", "created_at", "finished_at"}
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "created_at"
+        # created_at is a valid column in the scans table
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 
         where_clauses = ["1=1"]

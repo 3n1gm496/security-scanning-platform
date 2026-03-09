@@ -416,27 +416,27 @@ def findings_page(
 
 
 @app.get("/api/kpi")
-def api_kpi(user: str = Depends(get_current_user)) -> dict:
+def api_kpi(auth: AuthContext = Depends(require_auth)) -> dict:
     return fetch_kpis(DB_PATH)
 
 
 @app.get("/api/trends")
-def api_trends(days: int = 30, user: str = Depends(get_current_user)) -> list[dict]:
+def api_trends(days: int = 30, auth: AuthContext = Depends(require_auth)) -> list[dict]:
     return scans_trend(DB_PATH, days)
 
 
 @app.get("/api/cache-hits")
-def api_cache_hits(user: str = Depends(get_current_user)) -> dict:
+def api_cache_hits(auth: AuthContext = Depends(require_auth)) -> dict:
     return cache_hit_stats(DB_PATH)
 
 
 @app.get("/api/cache-hit-trend")
-def api_cache_hit_trend(days: int = 14, user: str = Depends(get_current_user)) -> list[dict]:
+def api_cache_hit_trend(days: int = 14, auth: AuthContext = Depends(require_auth)) -> list[dict]:
     return cache_hit_trend(DB_PATH, days)
 
 
 @app.get("/api/cache-hit-trend.csv")
-def api_cache_hit_trend_csv(days: int = 14, user: str = Depends(get_current_user)) -> Response:
+def api_cache_hit_trend_csv(days: int = 14, auth: AuthContext = Depends(require_auth)) -> Response:
     rows = cache_hit_trend(DB_PATH, days)
     output = io.StringIO()
     writer = csv.writer(output)
@@ -467,7 +467,7 @@ def api_scans(
     target: str | None = None,
     status_value: str | None = Query(default=None, alias="status"),
     policy_status: str | None = None,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(require_auth),
 ) -> list[dict]:
     return list_scans(
         DB_PATH,
@@ -487,7 +487,7 @@ def api_findings(
     scan_id: str | None = None,
     category: str | None = None,
     search: str | None = None,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(require_auth),
 ) -> list[dict]:
     if search:
         # Full-text search across title, description, file
@@ -911,7 +911,7 @@ def trigger_scan(
 
 
 @app.get("/api/findings/stats-by-status")
-def api_finding_stats_by_status(user: str = Depends(get_current_user)) -> dict:
+def api_finding_stats_by_status(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get finding statistics grouped by status."""
     return get_finding_stats_by_status()
 
@@ -920,14 +920,14 @@ def api_finding_stats_by_status(user: str = Depends(get_current_user)) -> dict:
 def api_findings_by_status(
     status: str | None = None,
     limit: int = Query(100, le=1000),
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(require_auth),
 ) -> list[dict]:
     """Get findings filtered by management status."""
     return get_findings_by_status(status, limit)
 
 
 @app.get("/api/findings/{finding_id}/state")
-def api_get_finding_state(finding_id: int, user: str = Depends(get_current_user)) -> dict:
+def api_get_finding_state(finding_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Get finding management state."""
     state = get_finding_state(finding_id)
     if not state:
@@ -1021,7 +1021,7 @@ def api_add_finding_comment(
 
 
 @app.get("/api/findings/{finding_id}/comments")
-def api_get_finding_comments(finding_id: int, user: str = Depends(get_current_user)) -> list[dict]:
+def api_get_finding_comments(finding_id: int, auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """Get all comments for a finding."""
     return get_finding_comments(finding_id)
 
@@ -1133,7 +1133,7 @@ def generate_badge(target_name: str) -> Response:
 def compare_scans(
     scan_id_1: str,
     scan_id_2: str,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Compare two scans and show diff (new, resolved, unchanged findings)."""
 

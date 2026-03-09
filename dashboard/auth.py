@@ -1,5 +1,5 @@
 """
-Authentication middleware for API key validation.
+Authentication middleware for API key and session validation.
 """
 
 from typing import Optional
@@ -32,7 +32,7 @@ class AuthContext:
             )
 
 
-def get_auth_context(request: Request, authorization: Optional[str] = Header(None)) -> Optional[AuthContext]:
+def _auth_from_api_key(request: Request, authorization: Optional[str]) -> Optional[AuthContext]:
     """
     Extract and validate API key from the Authorization header.
     Returns AuthContext if valid, None otherwise.
@@ -70,17 +70,42 @@ def get_auth_context(request: Request, authorization: Optional[str] = Header(Non
     return AuthContext(role=Role(key_info["role"]), api_key_prefix=key_info["key_prefix"])
 
 
+def _auth_from_session(request: Request) -> Optional[AuthContext]:
+    """
+    Extract authentication from the session cookie.
+    Returns AuthContext with ADMIN role if a valid session is found, None otherwise.
+    Session-based auth always grants ADMIN role (single-user dashboard).
+    """
+    user = request.session.get("user")
+    if not user:
+        return None
+    return AuthContext(role=Role.ADMIN, user_id=user)
+
+
+def get_auth_context(request: Request, authorization: Optional[str] = Header(None)) -> Optional[AuthContext]:
+    """
+    Try session first, then API key.
+    Returns AuthContext if either method succeeds, None otherwise.
+    """
+    # 1. Session-based auth (browser UI)
+    ctx = _auth_from_session(request)
+    if ctx:
+        return ctx
+    # 2. API key auth (programmatic access)
+    return _auth_from_api_key(request, authorization)
+
+
 def require_auth(request: Request, authorization: Optional[str] = Header(None)) -> AuthContext:
     """
-    Dependency to enforce API key authentication.
-    Raises HTTPException if authentication fails.
+    Dependency to enforce authentication via session or API key.
+    Raises HTTPException(401) if neither method succeeds.
     """
     auth_context = get_auth_context(request, authorization)
 
     if not auth_context:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
+            detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

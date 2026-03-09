@@ -6,6 +6,7 @@ itsdangerous>=2.1.0
 python-multipart>=0.0.6
 reportlab>=4.0.0
 matplotlib>=3.8.0
+prometheus-client>=0.20.0
 
 # test dependencies
 pytest>=7.0

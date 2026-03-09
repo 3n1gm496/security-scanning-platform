@@ -1,5 +1,6 @@
 PyYAML==6.0.2
 requests>=2.31.0
+tenacity>=8.2,<10
 
 # additional tools used by scanner wrappers
 bandit==1.7.0

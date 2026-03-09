@@ -787,8 +787,7 @@ def trigger_scan(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    f"Local target must be inside the workspace directory "
-                    f"({allowed_base}). Got: {resolved_target}"
+                    f"Local target must be inside the workspace directory " f"({allowed_base}). Got: {resolved_target}"
                 ),
             )
 

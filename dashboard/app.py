@@ -83,6 +83,7 @@ from finding_management import (
     get_finding_stats_by_status,
     get_finding_state,
 )
+from pagination import FindingsPaginator, ScansPaginator
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -1049,3 +1050,79 @@ def compare_scans(
             "resolved_by_severity": count_by_severity(resolved_findings),
         },
     }
+
+
+
+
+# Pagination endpoints
+@app.get("/api/findings/paginated")
+def paginate_findings(
+    search: str = Query(""),
+    severity: str = Query(""),
+    tool: str = Query(""),
+    scan_id: int | None = Query(None),
+    cursor: str | None = Query(None),
+    per_page: int = Query(50, ge=1, le=1000),
+    sort_by: str = Query("id"),
+    sort_order: str = Query("ASC"),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Get paginated findings with cursor-based pagination.
+    
+    Query Parameters:
+    - search: Full-text search across title, description, file_path, cve_id
+    - severity: Comma-separated list of severities (CRITICAL,HIGH,MEDIUM,LOW)
+    - tool: Comma-separated list of tools (semgrep,bandit,nuclei,etc)
+    - scan_id: Filter by specific scan ID
+    - cursor: Pagination cursor from previous response
+    - per_page: Items per page (1-1000, default 50)
+    - sort_by: Column to sort by (default: id)
+    - sort_order: ASC or DESC (default: ASC)
+    """
+    with get_connection(DB_PATH) as conn:
+        paginator = FindingsPaginator(per_page=per_page)
+        severity_list = [s.strip() for s in severity.split(",")] if severity else []
+        tool_list = [t.strip() for t in tool.split(",")] if tool else []
+        
+        return paginator.paginate(
+            conn,
+            search=search,
+            severity_filter=severity_list if severity_list else None,
+            tool_filter=tool_list if tool_list else None,
+            scan_id=scan_id,
+            cursor=cursor,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+
+@app.get("/api/scans/paginated")
+def paginate_scans(
+    target: str = Query(""),
+    status: str = Query(""),
+    cursor: str | None = Query(None),
+    per_page: int = Query(20, ge=1, le=200),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("DESC"),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Get paginated scans with cursor-based pagination.
+    
+    Query Parameters:
+    - target: Filter by target name (partial match)
+    - status: Filter by status (exact match: completed, failed, running)
+    - cursor: Pagination cursor from previous response
+    - per_page: Items per page (1-200, default 20)
+    - sort_by: Column to sort by (default: created_at)
+    - sort_order: ASC or DESC (default: DESC)
+    """
+    with get_connection(DB_PATH) as conn:
+        paginator = ScansPaginator(per_page=per_page)
+        return paginator.paginate(
+            conn,
+            target_filter=target,
+            status_filter=status,
+            cursor=cursor,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )

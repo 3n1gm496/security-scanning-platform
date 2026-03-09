@@ -3,6 +3,12 @@ Test per il sistema di export findings.
 """
 
 import json
+import sys
+from pathlib import Path
+
+# Add dashboard directory to sys.path so imports work
+root = Path(__file__).parent.parent
+sys.path.insert(0, str(root))
 
 from export import export_to_json, export_to_csv, export_to_sarif, export_to_html
 

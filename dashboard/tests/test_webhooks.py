@@ -5,9 +5,15 @@ Test per il sistema di webhooks.
 import asyncio
 import os
 import sqlite3
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+# Add dashboard directory to sys.path so imports work
+root = Path(__file__).parent.parent
+sys.path.insert(0, str(root))
 
 from webhooks import (
     WebhookEvent,

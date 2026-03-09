@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
+
+# Add dashboard directory to sys.path so imports work
+root = Path(__file__).parent.parent
+sys.path.insert(0, str(root))
 
 from analytics import (
     calculate_risk_score,

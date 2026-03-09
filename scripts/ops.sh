@@ -154,8 +154,13 @@ ensure_env() {
 }
 
 require_compose() {
-  command -v docker >/dev/null 2>&1 || die "docker non trovato"
-  ${COMPOSE} version >/dev/null 2>&1 || die "docker compose non disponibile"
+  compose_available || die "docker compose non disponibile. Per scans senza Docker usa: ./scripts/ops.sh scan ..."
+}
+
+compose_available() {
+  command -v docker >/dev/null 2>&1 || return 1
+  ${COMPOSE} version >/dev/null 2>&1 || return 1
+  return 0
 }
 
 require_run_scan() {
@@ -329,9 +334,12 @@ cmd_logs() {
 }
 
 cmd_health() {
-  require_compose
   header "Health check"
-  ${COMPOSE} ps
+  if compose_available; then
+    ${COMPOSE} ps
+  else
+    warn "Docker Compose non disponibile: salto stato container"
+  fi
   echo
   info "Dashboard endpoint: $(dashboard_url)"
   curl -I -sS "$(dashboard_url)/" | head -n 10 || true
@@ -355,13 +363,13 @@ invoke_orchestrator() {
 
   ensure_dirs
 
-  local ts host_json container_json
+  local ts host_json
   ts="$(date +%Y%m%d-%H%M%S)-$$"
   host_json="${TMP_DIR}/ops-summary-${ts}.json"
 
   header "${label}"
 
-  if command -v docker >/dev/null 2>&1 && ${COMPOSE} ps >/dev/null 2>&1; then
+  if compose_available; then
     info "Using Docker Compose orchestrator"
     EXTRA_VOLUMES=()
     
@@ -370,9 +378,10 @@ invoke_orchestrator() {
     
     # Apply target-specific mounts
     local i=0
-    for ((i=0; i<$#; i++)); do
-      if [[ "${!i}" == "--target" && $((i+1)) -lt $# ]]; then
-        local target_val="${@:$((i+2)):1}"
+    for ((i=1; i<=$#; i++)); do
+      if [[ "${!i}" == "--target" && $((i+1)) -le $# ]]; then
+        local next_index=$((i + 1))
+        local target_val="${!next_index}"
         if [[ "${target_val}" =~ ^/ ]]; then
           local abs_target="$(realpath "${target_val}" 2>/dev/null || echo "${target_val}")"
           [[ -e "${abs_target}" ]] && EXTRA_VOLUMES+=(--volume "${abs_target}:${abs_target}:ro")
@@ -638,19 +647,34 @@ cmd_shell() {
 }
 
 cmd_versions() {
-  require_compose
   header "Versioni tool"
-  ${COMPOSE} run --rm --entrypoint sh orchestrator -lc '
-    echo "semgrep:" && semgrep --version &&
-    echo "bandit:" && bandit --version &&
-    echo "nuclei:" && nuclei -version || true &&
-    echo "trivy:" && trivy --version &&
-    echo "gitleaks:" && gitleaks version &&
-    echo "checkov:" && checkov --version &&
-    echo "grype:" && grype version || true &&
-    echo "zap-cli:" && zap-cli --version || true &&
-    echo "syft:" && syft version
-  '
+  if compose_available; then
+    ${COMPOSE} run --rm --entrypoint sh orchestrator -lc '
+      echo "semgrep:" && semgrep --version &&
+      echo "bandit:" && bandit --version &&
+      echo "nuclei:" && nuclei -version || true &&
+      echo "trivy:" && trivy --version &&
+      echo "gitleaks:" && gitleaks version &&
+      echo "checkov:" && checkov --version &&
+      echo "grype:" && grype version || true &&
+      echo "zap-cli:" && zap-cli --version || true &&
+      echo "syft:" && syft version
+    '
+  else
+    warn "Docker Compose non disponibile: mostro versioni locali"
+    for tool in semgrep bandit nuclei trivy gitleaks checkov grype zap-cli syft; do
+      if command -v "${tool}" >/dev/null 2>&1; then
+        case "${tool}" in
+          nuclei) echo "${tool}:"; "${tool}" -version || true ;;
+          gitleaks) echo "${tool}:"; "${tool}" version || true ;;
+          grype|syft) echo "${tool}:"; "${tool}" version || true ;;
+          *) echo "${tool}:"; "${tool}" --version || true ;;
+        esac
+      else
+        echo "${tool}: not found"
+      fi
+    done
+  fi
 }
 
 cmd_curl() {

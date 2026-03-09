@@ -18,7 +18,7 @@ class MetricsCollector:
 
     def __init__(self):
         self.registry = CollectorRegistry()
-        
+
         # Counters
         self.findings_total = Counter(
             "security_findings_total",
@@ -26,14 +26,14 @@ class MetricsCollector:
             ["severity", "tool"],
             registry=self.registry,
         )
-        
+
         self.scans_total = Counter(
             "security_scans_total",
             "Total scans executed",
             ["target_type", "status"],
             registry=self.registry,
         )
-        
+
         # Gauges
         self.findings_current = Gauge(
             "security_findings_current",
@@ -41,13 +41,13 @@ class MetricsCollector:
             ["severity"],
             registry=self.registry,
         )
-        
+
         self.scan_queue_size = Gauge(
             "security_scan_queue_size",
             "ScanQueue size",
             registry=self.registry,
         )
-        
+
         # Histograms
         self.scan_duration = Histogram(
             "security_scan_duration_seconds",
@@ -55,7 +55,7 @@ class MetricsCollector:
             ["tool"],
             registry=self.registry,
         )
-        
+
         self.findings_per_scan = Histogram(
             "security_findings_per_scan",
             "Findings count per scan",
@@ -90,7 +90,7 @@ class MetricsCollector:
     def generate_text(self) -> str:
         """Generate prometheus text format metrics."""
         from prometheus_client.openmetrics.exposition import generate_latest
-        
+
         return generate_latest(self.registry).decode("utf-8")
 
 

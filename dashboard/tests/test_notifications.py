@@ -42,7 +42,7 @@ def test_get_subscribers():
     conn = sqlite3.connect(":memory:")
     NotificationPreferencesManager.save_preferences(conn, "user1@example.com", {"critical_alerts": True})
     NotificationPreferencesManager.save_preferences(conn, "user2@example.com", {"critical_alerts": False})
-    
+
     subscribers = NotificationPreferencesManager.get_subscribers_for_alerts(conn, "critical_alerts")
     assert "user1@example.com" in subscribers
     assert "user2@example.com" not in subscribers

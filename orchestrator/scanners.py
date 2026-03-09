@@ -30,6 +30,7 @@ class ScannerError(RuntimeError):
 
 class RateLimitError(ScannerError):
     """Raised when API rate limit is hit."""
+
     pass
 
 
@@ -95,7 +96,7 @@ def clone_repo(repo_url: str, destination: str, ref: str | None = None) -> str:
 def run_semgrep(target_path: str, output_path: str, configs: list[str]) -> dict[str, Any]:
     if not command_exists("semgrep"):
         raise ScannerError("semgrep not found in PATH")
-    
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=60),
@@ -108,17 +109,17 @@ def run_semgrep(target_path: str, output_path: str, configs: list[str]) -> dict[
             command.extend(["--config", config])
         command.append(target_path)
         code, stdout, stderr = run_command(command, timeout=3600)
-        
+
         # Detect rate limiting
         if "rate limit" in stderr.lower() or code == 429:
             raise RateLimitError(f"Semgrep rate limit hit: {stderr}")
-        
+
         if code not in (0, 1):
             raise ScannerError(f"semgrep execution failed: {stderr or stdout}")
-        
+
         Path(output_path).write_text(stdout or '{"results": []}', encoding="utf-8")
         return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
-    
+
     return _run_with_retry()
 
 

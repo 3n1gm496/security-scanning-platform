@@ -27,9 +27,20 @@ class PaginationCursor:
             sort_by: Column to sort by (default: id)
             sort_order: 'asc' or 'desc' (default: asc)
         """
-        self.table = table
+        allowed_tables = {"findings", "scans"}
+        self.table = table if table in allowed_tables else "findings"
         self.per_page = min(per_page, 1000)  # Max 1000 per page
-        self.sort_by = sort_by
+        allowed_sort_columns = {
+            "id",
+            "scan_id",
+            "severity",
+            "tool",
+            "created_at",
+            "target_name",
+            "target_type",
+            "status",
+        }
+        self.sort_by = sort_by if sort_by in allowed_sort_columns else "id"
         self.sort_order = sort_order.upper() if sort_order.upper() in ["ASC", "DESC"] else "ASC"
 
     def encode_cursor(self, item: dict[str, Any]) -> str:
@@ -82,7 +93,7 @@ class PaginationCursor:
             WHERE {where_sql}
             ORDER BY {self.sort_by} {self.sort_order}
             LIMIT ?
-        """
+            """  # nosec B608
         params.append(self.per_page + 1)  # Fetch +1 to detect if there's next page
 
         return query, params
@@ -158,15 +169,17 @@ class FindingsPaginator:
         Returns:
             Paginated findings with cursor
         """
+        allowed_sort_columns = {"id", "scan_id", "severity", "tool", "created_at", "line_number"}
+        safe_sort_by = sort_by if sort_by in allowed_sort_columns else "id"
+        safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
+
         where_clauses = ["1=1"]
         params: list[Any] = []
 
         # Search filter (OR across multiple columns)
         if search:
             search_param = f"%{search}%"
-            where_clauses.append(
-                "(title LIKE ? OR description LIKE ? OR file_path LIKE ? OR cve_id LIKE ?)"
-            )
+            where_clauses.append("(title LIKE ? OR description LIKE ? OR file_path LIKE ? OR cve_id LIKE ?)")
             params.extend([search_param] * 4)
 
         # Severity filter
@@ -189,21 +202,21 @@ class FindingsPaginator:
         # Cursor
         if cursor:
             cursor_val = self._decode_cursor(cursor)
-            op = ">" if sort_order == "ASC" else "<"
-            where_clauses.append(f"{sort_by} {op} ?")
+            op = ">" if safe_sort_order == "ASC" else "<"
+            where_clauses.append(f"{safe_sort_by} {op} ?")
             params.append(cursor_val)
 
         where_sql = " AND ".join(where_clauses)
 
         # Query with +1 to detect has_next
         query = f"""
-            SELECT id, scan_id, title, description, severity, file_path, 
+            SELECT id, scan_id, title, description, severity, file_path,
                    line_number, tool, cve_id, fingerprint, created_at
             FROM findings
             WHERE {where_sql}
-            ORDER BY {sort_by} {sort_order.upper()}
+            ORDER BY {safe_sort_by} {safe_sort_order}
             LIMIT ?
-        """
+            """  # nosec B608
         params.append(self.per_page + 1)
 
         rows = conn.execute(query, params).fetchall()
@@ -269,6 +282,10 @@ class ScansPaginator:
         Returns:
             Paginated scans
         """
+        allowed_sort_columns = {"id", "target_name", "target_type", "status", "created_at"}
+        safe_sort_by = sort_by if sort_by in allowed_sort_columns else "created_at"
+        safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
+
         where_clauses = ["1=1"]
         params: list[Any] = []
 
@@ -282,8 +299,8 @@ class ScansPaginator:
 
         if cursor:
             cursor_val = self._decode_cursor(cursor)
-            op = ">" if sort_order == "ASC" else "<"
-            where_clauses.append(f"{sort_by} {op} ?")
+            op = ">" if safe_sort_order == "ASC" else "<"
+            where_clauses.append(f"{safe_sort_by} {op} ?")
             params.append(cursor_val)
 
         where_sql = " AND ".join(where_clauses)
@@ -293,9 +310,9 @@ class ScansPaginator:
                    (SELECT COUNT(*) FROM findings WHERE scan_id = scans.id) as findings_count
             FROM scans
             WHERE {where_sql}
-            ORDER BY {sort_by} {sort_order.upper()}
+            ORDER BY {safe_sort_by} {safe_sort_order}
             LIMIT ?
-        """
+            """  # nosec B608
         params.append(self.per_page + 1)
 
         rows = conn.execute(query, params).fetchall()

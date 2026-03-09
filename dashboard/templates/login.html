@@ -7,11 +7,11 @@
 </head>
 <body>
   <main class="container">
-    <h1>Autenticazione</h1>
-    {% if error %}
-      <p class="error">{{ error }}</p>
-    {% endif %}
     <form method="post" class="login-form">
+      <h1>Autenticazione</h1>
+      {% if error %}
+        <p class="error">{{ error }}</p>
+      {% endif %}
       <label>Username
         <input type="text" name="username" required autofocus>
       </label>

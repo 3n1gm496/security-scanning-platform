@@ -152,20 +152,23 @@ def prepare_target(target: TargetSpec, settings: dict[str, Any], scan_id: str) -
     raise ValueError(f"Unsupported target type: {target.type}")
 
 
-def evaluate_policy(findings: list[dict[str, Any]], settings: dict[str, Any], target_name: str = "", target_type: str = "local") -> str:
+def evaluate_policy(
+    findings: list[dict[str, Any]], settings: dict[str, Any], target_name: str = "", target_type: str = "local"
+) -> str:
     """Evaluate findings against policy engine or fallback to simple rules."""
-    
+
     # Try advanced policy engine first
     policies_file = settings.get("policy", {}).get("policies_file", "/app/config/policies.yaml")
     try:
         from pathlib import Path
+
         if Path(policies_file).exists():
             policy_engine = load_policy_engine(policies_file)
             result = policy_engine.evaluate(findings, target_name, target_type)
             return result["status"]
     except Exception:
         pass  # Fall back to simple policy
-    
+
     # Fallback to simple policy
     blocking_severities = {str(item).upper() for item in settings["policy"].get("block_on_severities", [])}
     block_secret_categories = bool(settings["policy"].get("block_on_secret_categories", True))

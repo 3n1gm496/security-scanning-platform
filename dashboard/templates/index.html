@@ -12,7 +12,7 @@
       <p>MVP Linux-based, open source, centralizzato</p>
     </div>
     <nav>
-      <a href="/">Overview</a>
+      <a href="/" class="active">Overview</a>
       <a href="/scans">Scansioni</a>
       <a href="/findings">Findings</a>
     </nav>
@@ -53,7 +53,8 @@
 
     <section class="grid two-cols">
       <div class="card">
-        <h2>Distribuzione severità</h2>
+        <div class="page-title"><h2>Distribuzione severità</h2></div>
+        <div class="table-wrap">
         <table>
           <thead><tr><th>Severity</th><th>Totale</th></tr></thead>
           <tbody>
@@ -62,10 +63,12 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div class="card">
-        <h2>Distribuzione tool</h2>
+        <div class="page-title"><h2>Distribuzione tool</h2></div>
+        <div class="table-wrap">
         <table>
           <thead><tr><th>Tool</th><th>Totale</th></tr></thead>
           <tbody>
@@ -74,12 +77,14 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
     </section>
 
     <section class="grid two-cols">
       <div class="card">
-        <h2>Trend ultimi 14 giorni</h2>
+        <div class="page-title"><h2>Trend ultimi 14 giorni</h2></div>
+        <div class="table-wrap">
         <table>
           <thead><tr><th>Giorno</th><th>Scansioni</th><th>Findings</th></tr></thead>
           <tbody>
@@ -88,10 +93,12 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div class="card">
-        <h2>Target più esposti</h2>
+        <div class="page-title"><h2>Target più esposti</h2></div>
+        <div class="table-wrap">
         <table>
           <thead><tr><th>Target</th><th>Findings</th></tr></thead>
           <tbody>
@@ -100,13 +107,15 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
     </section>
 
 
 
     <section class="card">
-      <h2>Scansioni recenti non clean</h2>
+      <div class="page-title"><h2>Scansioni recenti non clean</h2></div>
+      <div class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -133,6 +142,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </section>
   </main>
 </body>

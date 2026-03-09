@@ -279,18 +279,21 @@ class NotificationPreferencesManager:
                 )
             """)
 
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO notification_preferences 
                 (user_email, critical_alerts, high_alerts, scan_summaries, weekly_digest, preferred_channel)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                user_email,
-                preferences.get("critical_alerts", True),
-                preferences.get("high_alerts", True),
-                preferences.get("scan_summaries", True),
-                preferences.get("weekly_digest", False),
-                preferences.get("preferred_channel", "email"),
-            ))
+            """,
+                (
+                    user_email,
+                    preferences.get("critical_alerts", True),
+                    preferences.get("high_alerts", True),
+                    preferences.get("scan_summaries", True),
+                    preferences.get("weekly_digest", False),
+                    preferences.get("preferred_channel", "email"),
+                ),
+            )
 
             conn.commit()
             return True
@@ -322,10 +325,36 @@ class NotificationPreferencesManager:
         """Get all email subscribers for a specific alert type."""
         try:
             conn.row_factory = sqlite3.Row
-            query = f"""
-                SELECT user_email FROM notification_preferences
-                WHERE {alert_type} = 1 AND preferred_channel = 'email'
-            """
+            allowed_alert_types = {
+                "critical_alerts": "critical_alerts",
+                "high_alerts": "high_alerts",
+                "scan_summaries": "scan_summaries",
+                "weekly_digest": "weekly_digest",
+            }
+            alert_column = allowed_alert_types.get(alert_type)
+            if not alert_column:
+                return []
+
+            if alert_column == "critical_alerts":
+                query = (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE critical_alerts = 1 AND preferred_channel = 'email'"
+                )
+            elif alert_column == "high_alerts":
+                query = (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE high_alerts = 1 AND preferred_channel = 'email'"
+                )
+            elif alert_column == "scan_summaries":
+                query = (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE scan_summaries = 1 AND preferred_channel = 'email'"
+                )
+            else:
+                query = (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE weekly_digest = 1 AND preferred_channel = 'email'"
+                )
             rows = conn.execute(query).fetchall()
             return [row["user_email"] for row in rows]
         except Exception:

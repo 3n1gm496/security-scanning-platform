@@ -25,26 +25,31 @@ class ChartingEngine:
 
         Returns data for stacked bar chart.
         """
-        where_clause = ""
-        params: list[Any] = []
-
         if days > 0:
             cutoff = datetime.now() - timedelta(days=days)
-            where_clause = "WHERE created_at >= ?"
-            params = [cutoff.isoformat()]
-
-        query = f"""
-            SELECT 
-                DATE(created_at) as date,
-                severity,
-                COUNT(*) as count
-            FROM findings
-            {where_clause}
-            GROUP BY DATE(created_at), severity
-            ORDER BY date ASC
-        """
-
-        rows = conn.execute(query, params).fetchall()
+            rows = conn.execute(
+                """
+                SELECT
+                    DATE(created_at) as date,
+                    severity,
+                    COUNT(*) as count
+                FROM findings
+                WHERE created_at >= ?
+                GROUP BY DATE(created_at), severity
+                ORDER BY date ASC
+                """,
+                [cutoff.isoformat()],
+            ).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT
+                    DATE(created_at) as date,
+                    severity,
+                    COUNT(*) as count
+                FROM findings
+                GROUP BY DATE(created_at), severity
+                ORDER BY date ASC
+                """).fetchall()
 
         # Organize by date and severity
         data_by_date = {}

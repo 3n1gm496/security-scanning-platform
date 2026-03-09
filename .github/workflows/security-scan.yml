@@ -21,28 +21,55 @@ jobs:
       
       - name: Run Security Scan
         run: |
+          set -euo pipefail
+
           # Configure scanner URL
           SCANNER_URL="${{ secrets.SECURITY_SCANNER_URL }}"
           SCANNER_API_KEY="${{ secrets.SECURITY_SCANNER_API_KEY }}"
+
+          if [ -z "${SCANNER_URL}" ] || [ -z "${SCANNER_API_KEY}" ]; then
+            echo "Security scanner secrets are not configured. Skipping remote scan."
+            echo '{"status":"skipped","reason":"missing_secrets"}' > scan-results.json
+            exit 0
+          fi
+
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
           
           # Trigger scan via API
-          SCAN_RESPONSE=$(curl -X POST "${SCANNER_URL}/api/scan/trigger" \
+          SCAN_RESPONSE=$(curl --fail-with-body --silent --show-error --max-time 300 -X POST "${SCANNER_URL}/api/scan/trigger" \
             -H "Authorization: Bearer ${SCANNER_API_KEY}" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "target_type=git" \
             -d "target=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
             -d "name=${GITHUB_REPOSITORY}" \
             -d "async_mode=false")
+
+          if ! echo "${SCAN_RESPONSE}" | jq -e . >/dev/null 2>&1; then
+            echo "Scanner response is not valid JSON"
+            echo '{"status":"error","reason":"invalid_response"}' > scan-results.json
+            exit 1
+          fi
+
+          echo "${SCAN_RESPONSE}" > scan-results.json
           
           echo "Scan Response: ${SCAN_RESPONSE}"
           
           # Check scan status
           SCAN_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.status // "unknown"')
-          POLICY_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.output.results[0].policy_status // "UNKNOWN"')
+          POLICY_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.output.results[0].policy_status // .policy_status // "UNKNOWN"')
           
           echo "Scan Status: ${SCAN_STATUS}"
           echo "Policy Status: ${POLICY_STATUS}"
           
+          # Fail pipeline if scanner reports error
+          if [ "${SCAN_STATUS}" = "error" ] || [ "${SCAN_STATUS}" = "failed" ]; then
+            echo "❌ Security scanner returned error status"
+            exit 1
+          fi
+
           # Fail pipeline if policy blocked
           if [ "${POLICY_STATUS}" == "BLOCK" ]; then
             echo "❌ Security scan failed: Critical findings detected"

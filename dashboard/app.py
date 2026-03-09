@@ -379,7 +379,7 @@ def api_findings(
             WHERE (title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)
         """
         params = [f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"]
-        
+
         if severity:
             query += " AND severity = ?"
             params.append(severity)
@@ -395,14 +395,14 @@ def api_findings(
         if category:
             query += " AND category = ?"
             params.append(category)
-            
+
         query += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
-        
+
         with get_connection(DB_PATH) as conn:
             rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
-    
+
     # Original logic
     return list_findings(
         DB_PATH,
@@ -763,12 +763,13 @@ def trigger_scan(
         return {"status": "queued", "message": "Scan queued and running in background", "target_name": name}
     else:
         # Wait for scan to complete
-        result = run_
+        return run_scan_async(target_type, target, name, str(root_dir))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Finding Management Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/findings/stats-by-status")
 def api_finding_stats_by_status(user: str = Depends(get_current_user)) -> dict:
@@ -909,6 +910,7 @@ def api_bulk_update_status(
 # CI/CD Integration Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @app.get("/api/badge/{target_name}.svg")
 def generate_badge(target_name: str) -> Response:
     """Generate SVG badge for scan status."""
@@ -918,7 +920,7 @@ def generate_badge(target_name: str) -> Response:
             "SELECT status, policy_status, findings_count, critical_count, high_count FROM scans WHERE target_name = ? ORDER BY created_at DESC LIMIT 1",
             (target_name,),
         ).fetchone()
-    
+
     if not scan:
         # No scans found
         svg = """<svg xmlns="http://www.w3.org/2000/svg" width="140" height="20">
@@ -940,13 +942,13 @@ def generate_badge(target_name: str) -> Response:
   </g>
 </svg>"""
         return Response(content=svg, media_type="image/svg+xml")
-    
+
     scan_dict = dict(scan)
     status_val = scan_dict.get("status", "")
     policy_status = scan_dict.get("policy_status", "")
     critical_count = scan_dict.get("critical_count", 0)
     high_count = scan_dict.get("high_count", 0)
-    
+
     # Determine badge color and message
     if policy_status == "BLOCK" or critical_count > 0:
         color = "#e05d44"  # Red
@@ -960,11 +962,11 @@ def generate_badge(target_name: str) -> Response:
     else:
         color = "#dfb317"  # Yellow
         message = "warnings"
-    
+
     # Generate SVG
     message_width = len(message) * 6 + 10
     total_width = 60 + message_width
-    
+
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20">
   <linearGradient id="b" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
@@ -983,7 +985,7 @@ def generate_badge(target_name: str) -> Response:
     <text x="{60 + message_width//2}" y="14">{message}</text>
   </g>
 </svg>"""
-    
+
     return Response(content=svg, media_type="image/svg+xml")
 
 
@@ -994,36 +996,36 @@ def compare_scans(
     user: str = Depends(get_current_user),
 ) -> dict:
     """Compare two scans and show diff (new, resolved, unchanged findings)."""
-    
+
     with get_connection(DB_PATH) as conn:
         # Get findings for both scans
         findings_1 = conn.execute("SELECT * FROM findings WHERE scan_id = ?", (scan_id_1,)).fetchall()
         findings_2 = conn.execute("SELECT * FROM findings WHERE scan_id = ?", (scan_id_2,)).fetchall()
-        
+
         # Get scan metadata
         scan_1 = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id_1,)).fetchone()
         scan_2 = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id_2,)).fetchone()
-    
+
     if not scan_1 or not scan_2:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or both scans not found")
-    
+
     # Convert to dicts
     findings_1_list = [dict(f) for f in findings_1]
     findings_2_list = [dict(f) for f in findings_2]
-    
+
     # Build fingerprint sets
     fingerprints_1 = {f["fingerprint"]: f for f in findings_1_list if f.get("fingerprint")}
     fingerprints_2 = {f["fingerprint"]: f for f in findings_2_list if f.get("fingerprint")}
-    
+
     # Calculate diff
     new_fingerprints = set(fingerprints_2.keys()) - set(fingerprints_1.keys())
     resolved_fingerprints = set(fingerprints_1.keys()) - set(fingerprints_2.keys())
     unchanged_fingerprints = set(fingerprints_1.keys()) & set(fingerprints_2.keys())
-    
+
     new_findings = [fingerprints_2[fp] for fp in new_fingerprints]
     resolved_findings = [fingerprints_1[fp] for fp in resolved_fingerprints]
     unchanged_findings = [fingerprints_2[fp] for fp in unchanged_fingerprints]
-    
+
     # Count by severity
     def count_by_severity(findings_list):
         counts = {}
@@ -1031,7 +1033,7 @@ def compare_scans(
             sev = f.get("severity", "UNKNOWN")
             counts[sev] = counts.get(sev, 0) + 1
         return counts
-    
+
     return {
         "scan_1": {
             "id": scan_id_1,
@@ -1057,8 +1059,6 @@ def compare_scans(
     }
 
 
-
-
 # Pagination endpoints
 @app.get("/api/findings/paginated")
 def paginate_findings(
@@ -1073,7 +1073,7 @@ def paginate_findings(
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Get paginated findings with cursor-based pagination.
-    
+
     Query Parameters:
     - search: Full-text search across title, description, file_path, cve_id
     - severity: Comma-separated list of severities (CRITICAL,HIGH,MEDIUM,LOW)
@@ -1088,7 +1088,7 @@ def paginate_findings(
         paginator = FindingsPaginator(per_page=per_page)
         severity_list = [s.strip() for s in severity.split(",")] if severity else []
         tool_list = [t.strip() for t in tool.split(",")] if tool else []
-        
+
         return paginator.paginate(
             conn,
             search=search,
@@ -1112,7 +1112,7 @@ def paginate_scans(
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Get paginated scans with cursor-based pagination.
-    
+
     Query Parameters:
     - target: Filter by target name (partial match)
     - status: Filter by status (exact match: completed, failed, running)
@@ -1229,15 +1229,11 @@ def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Response:
     """Expose Prometheus metrics in text format."""
     metrics = get_metrics()
     with get_connection(DB_PATH) as conn:
-        severity_rows = conn.execute(
-            "SELECT severity, COUNT(*) AS total FROM findings GROUP BY severity"
-        ).fetchall()
+        severity_rows = conn.execute("SELECT severity, COUNT(*) AS total FROM findings GROUP BY severity").fetchall()
         for row in severity_rows:
             metrics.set_findings_count(row["severity"] or "UNKNOWN", int(row["total"]))
 
-        queue_size = conn.execute(
-            "SELECT COUNT(*) AS total FROM scans WHERE UPPER(status) = 'RUNNING'"
-        ).fetchone()
+        queue_size = conn.execute("SELECT COUNT(*) AS total FROM scans WHERE UPPER(status) = 'RUNNING'").fetchone()
         metrics.set_queue_size(int(queue_size["total"]) if queue_size else 0)
 
     return Response(content=metrics.generate_text(), media_type="text/plain; version=0.0.4")

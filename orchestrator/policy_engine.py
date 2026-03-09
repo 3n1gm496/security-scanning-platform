@@ -79,9 +79,7 @@ class PolicyEngine:
             "total_findings_count": len(findings),
         }
 
-    def _find_matching_policy(
-        self, target_name: str, target_type: str
-    ) -> dict[str, Any] | None:
+    def _find_matching_policy(self, target_name: str, target_type: str) -> dict[str, Any] | None:
         """Find first matching policy based on target patterns."""
         for policy in self.policies:
             if not policy.get("enabled", True):
@@ -103,9 +101,7 @@ class PolicyEngine:
 
         return None
 
-    def _apply_exemptions(
-        self, findings: list[dict[str, Any]], target_name: str
-    ) -> tuple[list[dict[str, Any]], int]:
+    def _apply_exemptions(self, findings: list[dict[str, Any]], target_name: str) -> tuple[list[dict[str, Any]], int]:
         """Apply exemptions and return active findings + exempted count."""
         now = datetime.now(timezone.utc)
         active = []
@@ -145,9 +141,7 @@ class PolicyEngine:
 
         return active, exempted_count
 
-    def _evaluate_rule(
-        self, rule: dict[str, Any], findings: list[dict[str, Any]]
-    ) -> dict[str, Any] | None:
+    def _evaluate_rule(self, rule: dict[str, Any], findings: list[dict[str, Any]]) -> dict[str, Any] | None:
         """Evaluate a single rule against findings."""
         rule_name = rule.get("name", "Unnamed Rule")
         action = rule.get("action", "warn")

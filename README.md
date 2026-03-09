@@ -59,6 +59,8 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - **🔐 Autenticazione** — Login basato su form con sessioni sicure
 - **🚀 Batch Scanning** — Scansione multipla di target da file YAML
 - **📈 Trending e History** — Tracking storico dei finding per analisi nel tempo
+- **📧 Email Notifications** — Alert critici e preferenze notifiche per utente
+- **📡 Prometheus Metrics** — Endpoint `/metrics` per osservabilità e monitoring
 
 ---
 
@@ -284,6 +286,14 @@ DATABASE_PATH=/data/security_scans.db
 
 # Orchestrator
 LOG_LEVEL=INFO
+
+# Email notifications (optional)
+SMTP_SERVER=localhost
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+EMAIL_FROM=security@example.com
+EMAIL_FROM_NAME=Security Scanner
 ```
 
 ---
@@ -428,6 +438,30 @@ curl -X POST http://localhost:8080/api/scan/trigger \
   "message": "Scan queued and running in background",
   "target_name": "example-repo"
 }
+```
+
+#### Notification & Metrics API
+
+```bash
+# Save notification preferences (auth required)
+curl -X POST http://localhost:8080/api/notifications/preferences \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"critical_alerts":true,"high_alerts":false,"weekly_digest":true}'
+
+# Get notification preferences (auth required)
+curl -H "Authorization: Bearer <API_KEY>" \
+  http://localhost:8080/api/notifications/preferences
+
+# Send critical alert for a finding (auth required)
+curl -X POST http://localhost:8080/api/notifications/send-alert \
+  -H "Authorization: Bearer <API_KEY>" \
+  -F "to_email=security-team@example.com" \
+  -F "finding_id=123"
+
+# Prometheus scrape endpoint (auth required)
+curl -H "Authorization: Bearer <API_KEY>" \
+  http://localhost:8080/metrics
 ```
 
 ---

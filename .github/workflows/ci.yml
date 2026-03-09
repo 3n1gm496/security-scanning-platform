@@ -55,7 +55,7 @@ jobs:
     - name: Upload orchestrator coverage
       uses: codecov/codecov-action@v4
       with:
-        file: ./orchestrator/coverage.xml
+        file: ./coverage.xml
         flags: orchestrator
         name: codecov-orchestrator
 
@@ -94,7 +94,7 @@ jobs:
 
     - name: Check code formatting
       run: |
-        black --check dashboard/*.py
+        black --check dashboard
 
     - name: Security scan
       run: |
@@ -107,7 +107,7 @@ jobs:
     - name: Upload dashboard coverage
       uses: codecov/codecov-action@v4
       with:
-        file: ./dashboard/coverage.xml
+        file: ./coverage.xml
         flags: dashboard
         name: codecov-dashboard
 

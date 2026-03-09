@@ -13,7 +13,7 @@
     </div>
     <nav>
       <a href="/">Overview</a>
-      <a href="/scans">Scansioni</a>
+      <a href="/scans" class="active">Scansioni</a>
       <a href="/findings">Findings</a>
     </nav>
     {% if user %}
@@ -58,6 +58,8 @@
     </section>
 
     <section class="card">
+      <div class="page-title"><h2>Lista scansioni</h2></div>
+      <div class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -92,6 +94,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </section>
   </main>
 </body>

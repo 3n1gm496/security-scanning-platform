@@ -109,6 +109,8 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - Esecuzione diretta via `python3 -m orchestrator.main`
 - Usato quando Docker non disponibile
 - Supportato automaticamente da `ops.sh` e `/api/scan/trigger`
+- Disabilita automaticamente scanner non presenti in PATH per evitare errori rumorosi
+- Usa directory locali dedicate (`data/reports-local`, `data/workspaces-local`, `data/cache-local`) per evitare warning di permessi
 - Ideale per development / WSL / ambienti senza Docker
 
 
@@ -306,6 +308,8 @@ Script di utilità per gestire stack, database e launching di scans:
 **Note:**
 - Se Docker è disponibile, `ops.sh` usa Docker Compose per eseguire orchestrator
 - Se Docker NON è disponibile, `ops.sh` automaticamente fallback a Python CLI diretto
+- In fallback Python, `ops.sh` disabilita automaticamente gli scanner non installati localmente
+- In fallback Python, `ops.sh` usa path locali separati per ridurre warning di permessi
 - Entrambi i modelli salvano i risultati nello stesso database SQLite
 - Supporta sia Docker che ambienti Python-only (es. WSL senza Docker)
 

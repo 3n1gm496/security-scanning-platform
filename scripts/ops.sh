@@ -400,6 +400,10 @@ invoke_orchestrator() {
   else
     info "Using direct Python orchestrator (Docker unavailable)"
     local python_exe="python3"
+    local local_reports_dir="${DATA_DIR}/reports-local"
+    local local_workspaces_dir="${DATA_DIR}/workspaces-local"
+    local local_cache_dir="${DATA_DIR}/cache-local/orchestrator"
+    local runtime_settings="${TMP_DIR}/settings-local-$(date +%Y%m%d-%H%M%S)-$$.yaml"
     
     # Verify Python is available
     if ! command -v "${python_exe}" >/dev/null 2>&1; then
@@ -408,16 +412,72 @@ invoke_orchestrator() {
     
     # Add settings if not specified
     local has_settings=0
+    local settings_path="${ROOT_DIR}/config/settings.yaml"
+    local prev_arg=""
     for arg in "$@"; do
-      [[ "${arg}" == "--settings" ]] && { has_settings=1; break; }
+      if [[ "${arg}" == "--settings" ]]; then
+        has_settings=1
+      fi
+      if [[ "${prev_arg}" == "--settings" ]]; then
+        settings_path="${arg}"
+      fi
+      prev_arg="${arg}"
     done
     [[ "${has_settings}" == "0" && -f "${ROOT_DIR}/config/settings.yaml" ]] && set -- "$@" --settings config/settings.yaml
 
+    mkdir -p "${local_reports_dir}" "${local_workspaces_dir}" "${local_cache_dir}"
+
+    if [[ -f "${settings_path}" ]]; then
+      "${python_exe}" - "${settings_path}" "${runtime_settings}" <<'PY'
+import shutil
+import sys
+import yaml
+
+src, dst = sys.argv[1], sys.argv[2]
+with open(src, "r", encoding="utf-8") as f:
+    cfg = yaml.safe_load(f) or {}
+
+cfg.setdefault("scanners", {})
+cfg.setdefault("retention", {})
+
+tool_cmd = {
+    "semgrep": ["semgrep"],
+    "bandit": ["bandit"],
+    "nuclei": ["nuclei"],
+    "trivy": ["trivy"],
+    "gitleaks": ["gitleaks"],
+    "checkov": ["checkov"],
+    "grype": ["grype"],
+    "owasp_zap": ["zap-cli", "zap.sh"],
+    "syft": ["syft"],
+}
+
+disabled = []
+for tool, commands in tool_cmd.items():
+    tool_cfg = cfg["scanners"].setdefault(tool, {"enabled": False})
+    enabled = bool(tool_cfg.get("enabled", False))
+    available = any(shutil.which(cmd) for cmd in commands)
+    if enabled and not available:
+        tool_cfg["enabled"] = False
+        disabled.append(tool)
+
+cfg["retention"]["enabled"] = False
+
+with open(dst, "w", encoding="utf-8") as f:
+    yaml.safe_dump(cfg, f, sort_keys=False)
+
+if disabled:
+    print("[INFO] Disabled local scanners not found in PATH: " + ", ".join(disabled))
+PY
+      set -- "$@" --settings "${runtime_settings}"
+    fi
+
     export PYTHONPATH="${ROOT_DIR}:${PYTHONPATH:-}"
     export ORCH_DB_PATH="${DB_FILE}"
-    export REPORTS_DIR="${REPORTS_DIR}"
-    export WORKSPACE_DIR="${WORKSPACES_DIR}"
-    export ORCH_CACHE_DIR="${CACHE_DIR}"
+    export REPORTS_DIR="${local_reports_dir}"
+    export WORKSPACE_DIR="${local_workspaces_dir}"
+    export ORCH_CACHE_DIR="${local_cache_dir}"
+    export ORCH_RETENTION_ENABLED="false"
     export DASHBOARD_DB_PATH="${DB_FILE}"
     
     "${python_exe}" -m orchestrator.main "$@" --json-output "${host_json}" 2>&1 || true

@@ -73,9 +73,13 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings.setdefault("cache", {})
     settings.setdefault("retention", {})
     # Environment variables have priority over settings.yaml
-    settings["paths"]["db_path"] = os.getenv("ORCH_DB_PATH", settings["paths"].get("db_path", "/data/security_scans.db"))
+    settings["paths"]["db_path"] = os.getenv(
+        "ORCH_DB_PATH", settings["paths"].get("db_path", "/data/security_scans.db")
+    )
     settings["paths"]["reports_dir"] = os.getenv("REPORTS_DIR", settings["paths"].get("reports_dir", "/data/reports"))
-    settings["paths"]["workspace_dir"] = os.getenv("WORKSPACE_DIR", settings["paths"].get("workspace_dir", "/data/workspaces"))
+    settings["paths"]["workspace_dir"] = os.getenv(
+        "WORKSPACE_DIR", settings["paths"].get("workspace_dir", "/data/workspaces")
+    )
     settings["scanners"].setdefault("semgrep", {"enabled": True, "configs": ["p/default"]})
     settings["scanners"].setdefault(
         "trivy", {"enabled": True, "severities": ["CRITICAL", "HIGH", "MEDIUM"], "ignore_unfixed": False}

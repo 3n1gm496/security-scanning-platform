@@ -600,6 +600,7 @@ def analytics_finding_risk(finding_id: int, auth: AuthContext = Depends(require_
         "has_location": bool(finding_dict.get("file") and finding_dict.get("line")),
     }
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Scan Trigger Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
@@ -674,9 +675,7 @@ def trigger_scan(
         )
 
     if not target or not name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="target and name are required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target and name are required")
 
     root_dir = Path(__file__).parent.parent.absolute()
 

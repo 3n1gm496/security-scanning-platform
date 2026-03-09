@@ -389,7 +389,7 @@ def api_findings(
     if search:
         # Full-text search across title, description, file
         query = """
-            SELECT * FROM findings 
+            SELECT * FROM findings
             WHERE (title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)
         """
         params = [f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"]
@@ -770,6 +770,28 @@ def trigger_scan(
 
     root_dir = Path(__file__).parent.parent.absolute()
 
+    # Path traversal protection: for local targets, ensure the resolved path
+    # stays within the allowed workspace directory (/data/workspaces).
+    if target_type == "local":
+        allowed_base = Path(os.getenv("WORKSPACE_DIR", str(root_dir / "data" / "workspaces"))).resolve()
+        try:
+            resolved_target = Path(target).resolve()
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid target path: {exc}",
+            ) from exc
+        try:
+            resolved_target.relative_to(allowed_base)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Local target must be inside the workspace directory "
+                    f"({allowed_base}). Got: {resolved_target}"
+                ),
+            )
+
     if async_mode:
         # Launch scan in background and return immediately
         thread = Thread(target=run_scan_async, args=(target_type, target, name, str(root_dir)), daemon=True)
@@ -931,7 +953,8 @@ def generate_badge(target_name: str) -> Response:
     # Get latest scan for target
     with get_connection(DB_PATH) as conn:
         scan = conn.execute(
-            "SELECT status, policy_status, findings_count, critical_count, high_count FROM scans WHERE target_name = ? ORDER BY created_at DESC LIMIT 1",
+            "SELECT status, policy_status, findings_count, critical_count,"
+            " high_count FROM scans WHERE target_name = ? ORDER BY created_at DESC LIMIT 1",
             (target_name,),
         ).fetchone()
 

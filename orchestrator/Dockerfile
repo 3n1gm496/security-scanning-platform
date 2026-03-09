@@ -15,11 +15,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY orchestrator/requirements.txt /tmp/requirements.txt
+
+# Build context is ./orchestrator (both CI and docker-compose use this directory
+# as the build context). All COPY paths are relative to ./orchestrator/.
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     pip install --no-cache-dir semgrep checkov bandit
 
-COPY orchestrator /app/orchestrator
+COPY . /app/orchestrator
+
 WORKDIR /app/orchestrator
 RUN pip install -e . && \
     chown -R scanuser:scanuser /app
@@ -28,4 +32,3 @@ USER scanuser
 
 ENTRYPOINT ["python", "-m", "orchestrator.main"]
 CMD ["--help"]
-

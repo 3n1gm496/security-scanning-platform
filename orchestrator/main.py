@@ -72,9 +72,10 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings.setdefault("execution", {})
     settings.setdefault("cache", {})
     settings.setdefault("retention", {})
-    settings["paths"].setdefault("db_path", os.getenv("ORCH_DB_PATH", "/data/security_scans.db"))
-    settings["paths"].setdefault("reports_dir", os.getenv("REPORTS_DIR", "/data/reports"))
-    settings["paths"].setdefault("workspace_dir", os.getenv("WORKSPACE_DIR", "/data/workspaces"))
+    # Environment variables have priority over settings.yaml
+    settings["paths"]["db_path"] = os.getenv("ORCH_DB_PATH", settings["paths"].get("db_path", "/data/security_scans.db"))
+    settings["paths"]["reports_dir"] = os.getenv("REPORTS_DIR", settings["paths"].get("reports_dir", "/data/reports"))
+    settings["paths"]["workspace_dir"] = os.getenv("WORKSPACE_DIR", settings["paths"].get("workspace_dir", "/data/workspaces"))
     settings["scanners"].setdefault("semgrep", {"enabled": True, "configs": ["p/default"]})
     settings["scanners"].setdefault(
         "trivy", {"enabled": True, "severities": ["CRITICAL", "HIGH", "MEDIUM"], "ignore_unfixed": False}
@@ -93,7 +94,7 @@ def resolve_settings(path: str) -> dict[str, Any]:
         "enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     )
     settings["cache"].setdefault("ttl_seconds", int(os.getenv("ORCH_CACHE_TTL_SECONDS", "900")))
-    settings["cache"].setdefault("dir", os.getenv("ORCH_CACHE_DIR", "/data/cache/orchestrator"))
+    settings["cache"]["dir"] = os.getenv("ORCH_CACHE_DIR", settings["cache"].get("dir", "/data/cache/orchestrator"))
     settings["retention"].setdefault(
         "enabled", os.getenv("ORCH_RETENTION_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     )

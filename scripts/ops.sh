@@ -348,18 +348,89 @@ cmd_open() {
 # ------------------------------
 # Scan commands
 # ------------------------------
+
+invoke_orchestrator() {
+  local label="$1"
+  shift
+
+  ensure_dirs
+
+  local ts host_json container_json
+  ts="$(date +%Y%m%d-%H%M%S)-$$"
+  host_json="${TMP_DIR}/ops-summary-${ts}.json"
+
+  header "${label}"
+
+  if command -v docker >/dev/null 2>&1 && ${COMPOSE} ps >/dev/null 2>&1; then
+    info "Using Docker Compose orchestrator"
+    EXTRA_VOLUMES=()
+    
+    # Mount entire project read-only for local scans
+    EXTRA_VOLUMES+=(--volume "${ROOT_DIR}:${ROOT_DIR}:ro")
+    
+    # Apply target-specific mounts
+    local i=0
+    for ((i=0; i<$#; i++)); do
+      if [[ "${!i}" == "--target" && $((i+1)) -lt $# ]]; then
+        local target_val="${@:$((i+2)):1}"
+        if [[ "${target_val}" =~ ^/ ]]; then
+          local abs_target="$(realpath "${target_val}" 2>/dev/null || echo "${target_val}")"
+          [[ -e "${abs_target}" ]] && EXTRA_VOLUMES+=(--volume "${abs_target}:${abs_target}:ro")
+        fi
+      fi
+    done
+
+    # Add settings if not specified
+    local has_settings=0
+    for arg in "$@"; do
+      [[ "${arg}" == "--settings" ]] && { has_settings=1; break; }
+    done
+    [[ "${has_settings}" == "0" && -f "${ROOT_DIR}/config/settings.yaml" ]] && set -- "$@" --settings config/settings.yaml
+
+    ${COMPOSE} run --rm "${EXTRA_VOLUMES[@]}" orchestrator "$@" --json-output "${host_json}" || true
+  else
+    info "Using direct Python orchestrator (Docker unavailable)"
+    local python_exe="python3"
+    
+    # Verify Python is available
+    if ! command -v "${python_exe}" >/dev/null 2>&1; then
+      die "Python3 not found in PATH"
+    fi
+    
+    # Add settings if not specified
+    local has_settings=0
+    for arg in "$@"; do
+      [[ "${arg}" == "--settings" ]] && { has_settings=1; break; }
+    done
+    [[ "${has_settings}" == "0" && -f "${ROOT_DIR}/config/settings.yaml" ]] && set -- "$@" --settings config/settings.yaml
+
+    export PYTHONPATH="${ROOT_DIR}:${PYTHONPATH:-}"
+    export ORCH_DB_PATH="${DB_FILE}"
+    export REPORTS_DIR="${REPORTS_DIR}"
+    export WORKSPACE_DIR="${WORKSPACES_DIR}"
+    export ORCH_CACHE_DIR="${CACHE_DIR}"
+    export DASHBOARD_DB_PATH="${DB_FILE}"
+    
+    "${python_exe}" -m orchestrator.main "$@" --json-output "${host_json}" 2>&1 || true
+  fi
+
+  if [[ -s "${host_json}" ]]; then
+    render_scan_summary "${host_json}"
+  else
+    warn "No summary produced. Check reports in ${REPORTS_DIR}"
+  fi
+}
+
 cmd_scan_demo() {
-  require_run_scan
-  run_scan_and_summarize \
+  ensure_dirs
+  invoke_orchestrator \
     "Demo scan" \
-    ./scripts/run_scan.sh \
     --target-type local \
     --target "${ROOT_DIR}/demo/demo-app" \
     --target-name "demo-local-app"
 }
 
 cmd_scan_local() {
-  require_run_scan
   ensure_dirs
 
   local path="" name="" fail="0" json_out=""
@@ -377,36 +448,14 @@ cmd_scan_local() {
   [[ -n "${name}" ]] || die "Manca --name"
   [[ -e "${path}" ]] || die "Path locale non trovato: ${path}"
 
-  if [[ -n "${json_out}" ]]; then
-    header "Scan local"
-    ./scripts/run_scan.sh \
-      --target-type local \
-      --target "${path}" \
-      --target-name "${name}" \
-      ${fail:+--fail-on-policy-block} \
-      --json-output "${json_out}" || true
-  else
-    if [[ "${fail}" == "1" ]]; then
-      run_scan_and_summarize \
-        "Scan local" \
-        ./scripts/run_scan.sh \
-        --target-type local \
-        --target "${path}" \
-        --target-name "${name}" \
-        --fail-on-policy-block
-    else
-      run_scan_and_summarize \
-        "Scan local" \
-        ./scripts/run_scan.sh \
-        --target-type local \
-        --target "${path}" \
-        --target-name "${name}"
-    fi
-  fi
+  local args=(--target-type local --target "${path}" --target-name "${name}")
+  [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
+  [[ -n "${json_out}" ]] && args+=(--json-output "${json_out}")
+  
+  invoke_orchestrator "Scan local" "${args[@]}"
 }
 
 cmd_scan_git() {
-  require_run_scan
   ensure_dirs
 
   local url="" name="" ref="" fail="0" json_out=""
@@ -424,23 +473,15 @@ cmd_scan_git() {
   [[ -n "${url}" ]] || die "Manca --url"
   [[ -n "${name}" ]] || die "Manca --name"
 
-  if [[ -n "${json_out}" ]]; then
-    header "Scan git"
-    local args=(--target-type git --target "${url}" --target-name "${name}")
-    [[ -n "${ref}" ]] && args+=(--ref "${ref}")
-    [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
-    args+=(--json-output "${json_out}")
-    ./scripts/run_scan.sh "${args[@]}" || true
-  else
-    local args=(./scripts/run_scan.sh --target-type git --target "${url}" --target-name "${name}")
-    [[ -n "${ref}" ]] && args+=(--ref "${ref}")
-    [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
-    run_scan_and_summarize "Scan git" "${args[@]}"
-  fi
+  local args=(--target-type git --target "${url}" --target-name "${name}")
+  [[ -n "${ref}" ]] && args+=(--ref "${ref}")
+  [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
+  [[ -n "${json_out}" ]] && args+=(--json-output "${json_out}")
+  
+  invoke_orchestrator "Scan git" "${args[@]}"
 }
 
 cmd_scan_image() {
-  require_run_scan
   ensure_dirs
 
   local image="" name="" fail="0" json_out=""
@@ -457,21 +498,14 @@ cmd_scan_image() {
   [[ -n "${image}" ]] || die "Manca --image"
   [[ -n "${name}" ]] || die "Manca --name"
 
-  if [[ -n "${json_out}" ]]; then
-    header "Scan image"
-    local args=(--target-type image --target "${image}" --target-name "${name}")
-    [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
-    args+=(--json-output "${json_out}")
-    ./scripts/run_scan.sh "${args[@]}" || true
-  else
-    local args=(./scripts/run_scan.sh --target-type image --target "${image}" --target-name "${name}")
-    [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
-    run_scan_and_summarize "Scan image" "${args[@]}"
-  fi
+  local args=(--target-type image --target "${image}" --target-name "${name}")
+  [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
+  [[ -n "${json_out}" ]] && args+=(--json-output "${json_out}")
+  
+  invoke_orchestrator "Scan image" "${args[@]}"
 }
 
 cmd_scan_batch() {
-  require_run_scan
   ensure_dirs
 
   local file="" fail="0" json_out=""
@@ -487,17 +521,11 @@ cmd_scan_batch() {
   [[ -n "${file}" ]] || die "Manca --file"
   [[ -f "${file}" ]] || die "File target non trovato: ${file}"
 
-  if [[ -n "${json_out}" ]]; then
-    header "Batch scan"
-    local args=(--targets-file "${file}")
-    [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
-    args+=(--json-output "${json_out}")
-    ./scripts/run_scan.sh "${args[@]}" || true
-  else
-    local args=(./scripts/run_scan.sh --targets-file "${file}")
-    [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
-    run_scan_and_summarize "Batch scan" "${args[@]}"
-  fi
+  local args=(--targets-file "${file}")
+  [[ "${fail}" == "1" ]] && args+=(--fail-on-policy-block)
+  [[ -n "${json_out}" ]] && args+=(--json-output "${json_out}")
+  
+  invoke_orchestrator "Batch scan" "${args[@]}"
 }
 
 # ------------------------------

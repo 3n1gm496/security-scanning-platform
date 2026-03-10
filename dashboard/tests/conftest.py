@@ -35,4 +35,31 @@ def isolated_db():
     conn.commit()
     conn.close()
 
+    # Recreate the schema so the app can start cleanly
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    import db as _db
+
+    _db.init_db(db_path)
+
+    # Also initialise auxiliary tables created by app-level helpers
+    try:
+        import app as _app
+
+        _app.init_finding_management_tables()
+        _app.init_rbac_tables()
+        _app.init_webhook_tables()
+    except Exception:
+        pass
+
     yield db_path
+
+    # Reset the in-process rate limiter after each test to prevent
+    # state leaking between tests (e.g. 429 Too Many Requests).
+    try:
+        import app as _app
+
+        _app._rate_buckets.clear()
+    except Exception:
+        pass

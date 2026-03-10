@@ -104,6 +104,13 @@
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="margin-right:4px"><polyline points="23 4 23 10 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Aggiorna
           </button>
+          <button class="btn-icon" @click="toggleDarkMode" :title="darkMode ? 'Modalit\u00e0 chiara' : 'Modalit\u00e0 scura'" style="margin-left:6px">
+            <svg v-if="darkMode" viewBox="0 0 24 24" fill="none" width="16" height="16"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="btn-icon" @click="showShortcutsHelp = true" title="Scorciatoie da tastiera (?)" style="margin-left:4px">
+            <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
         </div>
       </header>
 
@@ -1201,6 +1208,41 @@
             <button class="btn-secondary" @click="showCreateWebhookModal = false">Annulla</button>
             <button class="btn-primary" @click="createWebhook" :disabled="!newWebhookForm.name || !newWebhookForm.url">Crea</button>
           </div>
+        </div>
+      </div>
+     </div>
+
+    <!-- ================================================================
+         KEYBOARD SHORTCUTS MODAL
+    ================================================================ -->
+    <div class="modal-overlay" v-if="showShortcutsHelp" @click.self="showShortcutsHelp = false">
+      <div class="modal-box" style="max-width:520px">
+        <div class="modal-header">
+          <h3>Scorciatoie da tastiera</h3>
+          <button class="modal-close" @click="showShortcutsHelp = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Premi <kbd>?</kbd> in qualsiasi momento per mostrare questa guida.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Scorciatoia</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Azione</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>d</kbd></td><td style="padding:6px 8px">Vai a Dashboard</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>s</kbd></td><td style="padding:6px 8px">Vai a Scansioni</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>f</kbd></td><td style="padding:6px 8px">Vai a Findings</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>a</kbd></td><td style="padding:6px 8px">Vai ad Analytics</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>c</kbd></td><td style="padding:6px 8px">Vai a Confronta</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>x</kbd></td><td style="padding:6px 8px">Vai a Settings</td></tr>
+              <tr style="border-top:1px solid var(--border)"><td style="padding:6px 8px"><kbd>n</kbd></td><td style="padding:6px 8px">Nuova scansione (nella pagina Scansioni)</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>r</kbd></td><td style="padding:6px 8px">Aggiorna pagina corrente</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>Esc</kbd></td><td style="padding:6px 8px">Chiudi modal / overlay</td></tr>
+              <tr><td style="padding:6px 8px"><kbd>?</kbd></td><td style="padding:6px 8px">Mostra/nascondi questa guida</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

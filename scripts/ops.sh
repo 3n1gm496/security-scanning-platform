@@ -132,6 +132,7 @@ DEV / CI
   api-key revoke --prefix P
   dev                          Avvia stack in modalità dev (live-reload)
   down-dev                     Ferma stack dev
+  seed [--clear]               Popola il database con dati demo realistici
 
 ESEMPI
   ./scripts/ops.sh up
@@ -1317,6 +1318,12 @@ main() {
      "api-key") cmd_api_key "$@" ;;
     "dev") cmd_dev "$@" ;;
     "down-dev") cmd_down_dev "$@" ;;
+    "seed")
+      DB_PATH="${DASHBOARD_DB_PATH:-${DATA_DIR}/security_scans.db}"
+      CLEAR_FLAG=""
+      if [ "${1:-}" = "--clear" ]; then CLEAR_FLAG="--clear"; fi
+      python3 "${ROOT_DIR}/scripts/seed_dev_data.py" --db-path "${DB_PATH}" ${CLEAR_FLAG}
+      ;;
     *)
       die "Comando non valido: ${cmd}. Usa ./scripts/ops.sh help"
       ;;

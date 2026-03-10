@@ -1,4 +1,5 @@
 """Extended scanner tests covering semgrep, trivy, gitleaks, checkov, syft with mocks."""
+
 from __future__ import annotations
 
 import json
@@ -21,10 +22,10 @@ from orchestrator.scanners import (
     load_json,
 )
 
-
 # ---------------------------------------------------------------------------
 # ensure_json_file
 # ---------------------------------------------------------------------------
+
 
 def test_ensure_json_file_creates_file(tmp_path):
     output = tmp_path / "out.json"
@@ -52,6 +53,7 @@ def test_ensure_json_file_creates_parent_dirs(tmp_path):
 # load_json
 # ---------------------------------------------------------------------------
 
+
 def test_load_json_dict(tmp_path):
     f = tmp_path / "data.json"
     f.write_text('{"a": 1}', encoding="utf-8")
@@ -61,7 +63,7 @@ def test_load_json_dict(tmp_path):
 
 def test_load_json_list(tmp_path):
     f = tmp_path / "data.json"
-    f.write_text('[1, 2, 3]', encoding="utf-8")
+    f.write_text("[1, 2, 3]", encoding="utf-8")
     result = load_json(str(f))
     assert result == [1, 2, 3]
 
@@ -69,6 +71,7 @@ def test_load_json_list(tmp_path):
 # ---------------------------------------------------------------------------
 # run_semgrep
 # ---------------------------------------------------------------------------
+
 
 def test_semgrep_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
@@ -120,6 +123,7 @@ def test_semgrep_fatal_error_raises(tmp_path, monkeypatch):
 def test_semgrep_rate_limit_raises(tmp_path, monkeypatch):
     """Rate limit errors should eventually raise after retries."""
     import tenacity
+
     output = tmp_path / "out.json"
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: True)
 
@@ -151,6 +155,7 @@ def test_semgrep_includes_configs_in_command(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # run_trivy_fs
 # ---------------------------------------------------------------------------
+
 
 def test_trivy_fs_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
@@ -220,6 +225,7 @@ def test_trivy_fs_empty_output_fallback(tmp_path, monkeypatch):
 # run_trivy_image
 # ---------------------------------------------------------------------------
 
+
 def test_trivy_image_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
@@ -270,6 +276,7 @@ def test_trivy_image_fatal_error_raises(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # run_gitleaks
 # ---------------------------------------------------------------------------
+
 
 def test_gitleaks_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
@@ -358,6 +365,7 @@ def test_gitleaks_git_mode(tmp_path, monkeypatch):
 # run_checkov
 # ---------------------------------------------------------------------------
 
+
 def test_checkov_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
@@ -444,6 +452,7 @@ def test_checkov_command_flags(tmp_path, monkeypatch):
 # run_syft
 # ---------------------------------------------------------------------------
 
+
 def test_syft_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
@@ -501,6 +510,7 @@ def test_syft_command_format(tmp_path, monkeypatch):
 # run_bandit (extended)
 # ---------------------------------------------------------------------------
 
+
 def test_bandit_success_with_findings(tmp_path, monkeypatch):
     output = tmp_path / "out.json"
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: True)
@@ -547,6 +557,7 @@ def test_bandit_empty_output_fallback(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # run_grype (extended)
 # ---------------------------------------------------------------------------
+
 
 def test_grype_success(tmp_path, monkeypatch):
     output = tmp_path / "out.json"

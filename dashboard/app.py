@@ -275,8 +275,7 @@ async def security_middleware(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     # Permissions-Policy: disable browser features not needed by this app
     response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(), geolocation=(), payment=(), usb=(), "
-        "interest-cohort=()"
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=(), " "interest-cohort=()"
     )
     return response
 

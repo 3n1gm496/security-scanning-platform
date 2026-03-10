@@ -1,4 +1,5 @@
 """Extended normalizer tests covering trivy, gitleaks, checkov, and sbom_metadata."""
+
 from __future__ import annotations
 
 import json
@@ -25,6 +26,7 @@ TARGET_IMAGE = TargetSpec(name="myimage", type="image", path="nginx:latest")
 # ---------------------------------------------------------------------------
 # _severity helper
 # ---------------------------------------------------------------------------
+
 
 def test_severity_known_values():
     assert _severity("CRITICAL") == "CRITICAL"
@@ -55,6 +57,7 @@ def test_severity_passthrough_unknown_value():
 # _fingerprint helper
 # ---------------------------------------------------------------------------
 
+
 def test_fingerprint_deterministic():
     a = _fingerprint("tool", "target", "file.py", 42, "CVE-1234")
     b = _fingerprint("tool", "target", "file.py", 42, "CVE-1234")
@@ -76,6 +79,7 @@ def test_fingerprint_handles_none():
 # ---------------------------------------------------------------------------
 # _rel_path helper
 # ---------------------------------------------------------------------------
+
 
 def test_rel_path_with_base():
     result = _rel_path("/tmp/repo", "/tmp/repo/src/app.py")
@@ -100,6 +104,7 @@ def test_rel_path_outside_base():
 # ---------------------------------------------------------------------------
 # normalize_trivy
 # ---------------------------------------------------------------------------
+
 
 def test_normalize_trivy_empty():
     findings = normalize_trivy("s1", TARGET_LOCAL, {"Results": []}, "ref")
@@ -284,6 +289,7 @@ def test_normalize_trivy_custom_category():
 # normalize_gitleaks
 # ---------------------------------------------------------------------------
 
+
 def test_normalize_gitleaks_empty():
     findings = normalize_gitleaks("s1", TARGET_LOCAL, [], "ref")
     assert findings == []
@@ -359,6 +365,7 @@ def test_normalize_gitleaks_with_base_path():
 # ---------------------------------------------------------------------------
 # normalize_checkov
 # ---------------------------------------------------------------------------
+
 
 def test_normalize_checkov_empty_dict():
     raw = {"results": {"failed_checks": [], "passed_checks": []}}
@@ -481,6 +488,7 @@ def test_normalize_checkov_guideline_list():
 # ---------------------------------------------------------------------------
 # sbom_metadata
 # ---------------------------------------------------------------------------
+
 
 def test_sbom_metadata_basic(tmp_path):
     sbom_file = tmp_path / "sbom.json"

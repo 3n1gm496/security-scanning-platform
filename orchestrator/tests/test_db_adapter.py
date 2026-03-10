@@ -1,4 +1,5 @@
 """Tests for orchestrator/db_adapter.py covering SQLite connection and wrapper classes."""
+
 from __future__ import annotations
 
 import os
@@ -19,10 +20,10 @@ from orchestrator.db_adapter import (
     _ConnectionWrapper,
 )
 
-
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
+
 
 def test_is_postgres_default():
     """Without DATABASE_URL set, should not be postgres."""
@@ -46,6 +47,7 @@ def test_adapt_schema_sqlite_passthrough():
 # ---------------------------------------------------------------------------
 # _sqlite_connect
 # ---------------------------------------------------------------------------
+
 
 def test_sqlite_connect_in_memory():
     conn = _sqlite_connect(":memory:")
@@ -84,6 +86,7 @@ def test_sqlite_connect_row_factory():
 # _RowProxy
 # ---------------------------------------------------------------------------
 
+
 def test_row_proxy_dict_access():
     proxy = _RowProxy({"name": "test", "value": 42})
     assert proxy["name"] == "test"
@@ -107,6 +110,7 @@ def test_row_proxy_keys():
 # ---------------------------------------------------------------------------
 # _CursorWrapper (SQLite mode)
 # ---------------------------------------------------------------------------
+
 
 def test_cursor_wrapper_execute():
     raw_conn = sqlite3.connect(":memory:")
@@ -182,6 +186,7 @@ def test_cursor_wrapper_executescript():
 # ---------------------------------------------------------------------------
 # _ConnectionWrapper (SQLite mode)
 # ---------------------------------------------------------------------------
+
 
 def test_connection_wrapper_basic():
     raw_conn = sqlite3.connect(":memory:")
@@ -276,6 +281,7 @@ def test_connection_wrapper_row_factory_setter():
 # get_connection
 # ---------------------------------------------------------------------------
 
+
 def test_get_connection_sqlite(tmp_path, monkeypatch):
     """get_connection should return a working SQLite connection."""
     db_path = str(tmp_path / "test.db")
@@ -306,6 +312,3 @@ def test_get_connection_in_memory():
     conn.execute("CREATE TABLE t (id INTEGER)")
     conn.commit()
     conn.close()
-
-
-

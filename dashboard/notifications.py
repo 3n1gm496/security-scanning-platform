@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import smtplib
+from urllib.parse import quote_plus
 
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -37,6 +38,7 @@ class EmailNotificationEngine:
     ) -> bool:
         """Send alert for critical finding."""
         subject = f"[CRITICAL] Security Finding: {finding.get('title', 'Unknown')}"
+        encoded_email = quote_plus(to_email)
 
         html_body = f"""
         <html>
@@ -70,7 +72,7 @@ class EmailNotificationEngine:
                 <hr>
                 <p style="color: #999; font-size: 12px;">
                     This is an automated alert from the Security Scanner.
-                    <a href="{dashboard_url}/notifications/unsubscribe?email={to_email}">Unsubscribe</a>
+                    <a href="{dashboard_url}/notifications/unsubscribe?email={encoded_email}">Unsubscribe</a>
                 </p>
             </body>
         </html>

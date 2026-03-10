@@ -15,13 +15,24 @@ function debounce(fn, delay) {
   };
 }
 
-async function apiFetch(url, options = {}) {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+async function apiFetch(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal, ...options });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return res.json();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 function formatDate(iso) {
@@ -306,7 +317,9 @@ createApp({
         if (this.currentPage === 'dashboard') {
           try {
             this.kpis = await apiFetch('/api/kpi');
-          } catch { /* silent */ }
+          } catch (e) {
+            console.debug('[autoRefresh] KPI poll failed:', e.message);
+          }
         }
       }, 30000);
     },
@@ -642,9 +655,11 @@ createApp({
         try {
           const fullFinding = await apiFetch(`/api/findings/${finding.id}`);
           this.selectedFinding = { ...finding, ...fullFinding };
-        } catch { /* use partial data */ }
+        } catch (e) {
+          console.debug('[openFindingModal] Could not load full finding detail, using partial data:', e.message);
+        }
       } catch (e) {
-        // Non-critical: show modal anyway
+        console.debug('[openFindingModal] Non-critical error, showing modal with available data:', e.message);
       }
     },
 
@@ -947,7 +962,9 @@ createApp({
         if (resp && resp.preferences) {
           this.notifPrefs = { ...this.notifPrefs, ...resp.preferences };
         }
-      } catch { /* use defaults */ }
+      } catch (e) {
+        console.debug('[loadNotificationPrefs] Could not load preferences, using defaults:', e.message);
+      }
     },
 
     async saveNotificationPrefs() {

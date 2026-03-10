@@ -1,10 +1,10 @@
 # Orchestrator runtime dependencies
 # Edit this file, then run: pip-compile requirements.in
-PyYAML==6.0.2
+PyYAML>=6.0.2
 requests>=2.31.0
-tenacity>=8.2,<10
+tenacity>=8.2
 
 # additional tools used by scanner wrappers
-bandit==1.7.0
+bandit>=1.7.0
 pbr>=5.11.0
 psycopg2-binary>=2.9.9

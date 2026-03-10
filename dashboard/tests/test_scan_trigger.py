@@ -54,23 +54,37 @@ def test_trigger_scan_invalid_target_type(client, admin_headers):
 
 
 def test_trigger_scan_missing_target(client, admin_headers):
-    """Empty target must be rejected."""
+    """Empty target must be rejected.
+
+    FastAPI 0.115 + Pydantic v1: empty string passes Form validation, rejected
+    with HTTP 400 by application logic.
+    FastAPI 0.135 + Pydantic v2: empty string is treated as missing field,
+    rejected with HTTP 422 by Pydantic before reaching application logic.
+    Both are correct rejections; we accept any 4xx response.
+    """
     resp = client.post(
         "/api/scan/trigger",
         data={"target_type": "git", "target": "", "name": "test"},
         headers=admin_headers,
     )
-    assert resp.status_code == 400
+    assert resp.status_code in (400, 422), f"Expected 400 or 422, got {resp.status_code}"
 
 
 def test_trigger_scan_missing_name(client, admin_headers):
-    """Empty name must be rejected."""
+    """Empty name must be rejected.
+
+    FastAPI 0.115 + Pydantic v1: empty string passes Form validation, rejected
+    with HTTP 400 by application logic.
+    FastAPI 0.135 + Pydantic v2: empty string is treated as missing field,
+    rejected with HTTP 422 by Pydantic before reaching application logic.
+    Both are correct rejections; we accept any 4xx response.
+    """
     resp = client.post(
         "/api/scan/trigger",
         data={"target_type": "git", "target": "https://github.com/example/repo", "name": ""},
         headers=admin_headers,
     )
-    assert resp.status_code == 400
+    assert resp.status_code in (400, 422), f"Expected 400 or 422, got {resp.status_code}"
 
 
 # ---------------------------------------------------------------------------

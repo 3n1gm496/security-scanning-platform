@@ -143,6 +143,75 @@ app.add_middleware(
     same_site="lax",
 )
 
+# ── Inizializzazione del database principale (scans + findings) ──────────────
+# Il dashboard può avviarsi prima che l'orchestratore abbia mai scritto sul DB.
+# Questo blocco garantisce che le tabelle esistano, evitando OperationalError
+# su un database vuoto (es. primo avvio, ambiente di sviluppo, CI).
+_MAIN_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS scans (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_name TEXT NOT NULL,
+    target_value TEXT NOT NULL,
+    status TEXT NOT NULL,
+    policy_status TEXT NOT NULL,
+    findings_count INTEGER NOT NULL DEFAULT 0,
+    critical_count INTEGER NOT NULL DEFAULT 0,
+    high_count INTEGER NOT NULL DEFAULT 0,
+    medium_count INTEGER NOT NULL DEFAULT 0,
+    low_count INTEGER NOT NULL DEFAULT 0,
+    info_count INTEGER NOT NULL DEFAULT 0,
+    unknown_count INTEGER NOT NULL DEFAULT 0,
+    raw_report_dir TEXT NOT NULL DEFAULT '',
+    normalized_report_path TEXT NOT NULL DEFAULT '',
+    artifacts_json TEXT NOT NULL DEFAULT '{}',
+    tools_json TEXT NOT NULL DEFAULT '[]',
+    error_message TEXT
+);
+CREATE TABLE IF NOT EXISTS findings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_name TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    category TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    file TEXT,
+    line INTEGER,
+    package TEXT,
+    version TEXT,
+    cve TEXT,
+    remediation TEXT,
+    raw_reference TEXT,
+    fingerprint TEXT,
+    FOREIGN KEY (scan_id) REFERENCES scans(id)
+);
+CREATE INDEX IF NOT EXISTS idx_findings_scan_id ON findings(scan_id);
+CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+CREATE INDEX IF NOT EXISTS idx_findings_tool ON findings(tool);
+CREATE INDEX IF NOT EXISTS idx_findings_target_name ON findings(target_name);
+CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
+"""
+try:
+    from db_adapter import adapt_schema as _adapt_schema
+
+    _adapted_main_schema = _adapt_schema(_MAIN_SCHEMA_SQL)
+except Exception:
+    _adapted_main_schema = _MAIN_SCHEMA_SQL
+try:
+    with get_connection(DB_PATH) as _init_conn:
+        _init_conn.executescript(_adapted_main_schema)
+        _init_conn.commit()
+except Exception as _init_err:
+    import logging as _logging
+
+    _logging.getLogger(__name__).warning("DB schema init warning: %s", _init_err)
+
 # Initialize RBAC tables
 init_rbac_tables()
 init_webhook_tables()

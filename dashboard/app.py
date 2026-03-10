@@ -199,6 +199,7 @@ CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
 """
 try:
     from db_adapter import adapt_schema as _adapt_schema
+
     _adapted_main_schema = _adapt_schema(_MAIN_SCHEMA_SQL)
 except Exception:
     _adapted_main_schema = _MAIN_SCHEMA_SQL
@@ -208,6 +209,7 @@ try:
         _init_conn.commit()
 except Exception as _init_err:
     import logging as _logging
+
     _logging.getLogger(__name__).warning("DB schema init warning: %s", _init_err)
 
 # Initialize RBAC tables

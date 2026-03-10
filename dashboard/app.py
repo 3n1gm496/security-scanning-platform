@@ -275,6 +275,11 @@ async def security_middleware(request: Request, call_next):
     )
     # HSTS: only sent over HTTPS; max-age 1 year
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Permissions-Policy: disable browser features not needed by this app
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=(), "
+        "interest-cohort=()"
+    )
     return response
 
 

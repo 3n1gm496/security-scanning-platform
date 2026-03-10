@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
 Piattaforma open source, Linux-based e CI-agnostic per security scanning centralizzato in ambienti enterprise eterogenei. Orchestrazione automatica di 10+ scanner OSS con dashboard unificata e normalizzazione dei risultati.
@@ -58,7 +58,7 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - **🎯 Policy-based Blocking** — Blocco automatico della pipeline su finding critici
 - **💾 SQLite Backend** — Persistenza dati semplice, backup facili, zero dipendenze esterne
 - **🔐 Autenticazione** — Login basato su form con sessioni sicure; password con hashing bcrypt; cookie `HttpOnly`/`Secure`
-- **🛡️ Security Headers** — `Content-Security-Policy`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`
+- **🛡️ Security Headers** — `Content-Security-Policy`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`, `Permissions-Policy`
 - **⚡ Rate Limiting** — Protezione brute-force su `/login` (10 req/min) e API (180 req/min) con sliding window
 - **🔒 Path Traversal Protection** — Validazione e sanitizzazione degli input su tutti gli endpoint di scan
 - **🚀 Batch Scanning** — Scansione multipla di target da file YAML
@@ -94,33 +94,6 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - **Docker Compose**: deploy rapido su server Linux standard
 - **CI-agnostic**: utilizzabile da GitLab, Jenkins, Azure DevOps, cron, systemd o run manuali
 
-### Scelte Architetturali
-
-
-- **Orchestratore Python 3.11** — Semplice da mantenere per team IT/Security
-- **Scanner CLI OSS** — Riutilizzabili anche fuori dalla piattaforma
-- **SQLite** — Sufficiente per MVP singolo nodo, backup semplici, costo nullo
-- **FastAPI Dashboard** — API + UI nello stesso componente
-- **Docker Compose** — Deploy rapido su server Linux standard (opzionale)
-- **Python-only Mode** — Fallback automatico quando Docker non disponibile (es. WSL)
-- **CI-agnostic** — Utilizzabile da qualsiasi tool CI/CD o schedulatore
-
-### Modalità Esecuzione dell'Orchestrator
-
-**Docker Mode (predefinito):**
-- Isolamento environment via container
-- Gestito da `run_scan.sh` e `docker compose run`
-- Ideale per production / ambienti multi-user
-
-**Python-only Mode (fallback automatico):**
-- Esecuzione diretta via `python3 -m orchestrator.main`
-- Usato quando Docker non disponibile
-- Supportato automaticamente da `ops.sh` e `/api/scan/trigger`
-- Disabilita automaticamente scanner non presenti in PATH per evitare errori rumorosi
-- Usa directory locali dedicate (`data/reports-local`, `data/workspaces-local`, `data/cache-local`) per evitare warning di permessi
-- Ideale per development / WSL / ambienti senza Docker
-
-
 ### Componenti
 
 ```
@@ -143,7 +116,6 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 .
 ├── .github/workflows/       # GitHub Actions CI (test, lint, SAST, docker build)
 ├── .gitlab-ci.yml           # GitLab Enterprise CI/CD pipeline
-├── .gitlab-ci.yml.example   # Snippet minimale per altri repository GitLab
 ├── config/
 │   ├── settings.yaml        # Configurazione scanner e policy
 │   ├── policies.yaml        # Policy di blocco pipeline
@@ -157,8 +129,6 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 │   ├── static/
 │   ├── templates/
 │   └── tests/
-├── docs/
-│   └── gitlab-integration.md  # Guida integrazione GitLab Enterprise
 ├── orchestrator/
 │   ├── main.py
 │   ├── requirements.in      # Dipendenze sorgente (pip-tools)
@@ -167,11 +137,8 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 ├── scripts/
 │   ├── ops.sh               # CLI unificata per tutte le operazioni
 │   ├── run_scan.sh
-│   ├── schedule_scan.sh
-│   └── schedule_retention.sh
+│   └── schedule_scan.sh
 ├── systemd/                 # Service e timer systemd
-├── templates/
-│   └── gitlab-scan-template.yml  # Template riutilizzabile per altri repo
 ├── CHANGELOG.md
 ├── docker-compose.yml
 └── .env.example
@@ -186,18 +153,6 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
   - fetch regole Semgrep community se si usa `p/default`
 - opzionale: accesso a registry container e repository Git remoti
 - opzionale: mount del Docker socket host se si vogliono scansionare immagini locali
-- per utilizzare **Bandit / Nuclei / Grype / OWASP ZAP** la macchina/container deve poter scaricare i rispettivi binari (il `Dockerfile` prova a scaricarli durante la build).
-  Se la rete non è disponibile la build continuerà comunque ma gli scanner non saranno presenti: in quel caso è possibile
-  * installarli manualmente all'interno dell'immagine (`docker exec`),
-  * estendere il `Dockerfile` con i passi di download oppure
-  * montare i binari nella cartella `/usr/local/bin`.
-  I wrapper implementano un controllo sul `PATH` e, in assenza degli eseguibili, emettono un warning
-  e restituiscono risultati vuoti anziché far fallire l'esecuzione.
-  
-  **Nota**: nuclei ha modificato l'interfaccia CLI a partire dalla serie v2.x.  In particolare il flag
-  `-json` utilizzato nelle versioni precedenti non esiste più; il wrapper interno utilizza
-  `-json-export`/`-je` e il Dockerfile costruisce sempre una versione v2 compatibile.  Se vedete un errore
-  `flag provided but not defined: -json` significa che avete in PATH un'installazione troppo vecchia.
 
 ---
 
@@ -216,7 +171,7 @@ mkdir -p data/{reports,workspaces,cache/trivy,backups}
 
 # Build e avvio
 docker compose build
-docker compose up -d dashboard
+docker compose up -d
 ```
 
 **Dashboard:** `http://localhost:8080`  
@@ -272,7 +227,7 @@ targets:
   
   - name: production-image
     type: image
-    image: myregistry/app:latest
+    image: my-registry/my-app:latest
     enabled: true
 ```
 
@@ -338,75 +293,6 @@ Script di utilità per gestire stack, database, scansioni e operazioni di svilup
 ./scripts/ops.sh logs dashboard
 ```
 
-**Note:**
-- `./scripts/ops.sh up` crea/inizializza automaticamente `.env` (se mancante), directory dati e database SQLite
-- Se Docker è disponibile, `ops.sh` usa Docker Compose per eseguire l'orchestrator
-- Se Docker **non** è disponibile, `ops.sh` fa fallback automatico a Python CLI diretto
-- In modalità Python, disabilita automaticamente gli scanner non presenti in PATH
-- I comandi `test`, `lint`, `deps-compile` funzionano sempre senza Docker
-
-### Scan Singolo - Repository Locale
-
-```bash
-./scripts/run_scan.sh \
-  --target-type local \
-  --target /path/to/repo \
-  --target-name my-project \
-  --fail-on-policy-block
-```
-
-### Scan Singolo - Repository Git
-
-```bash
-./scripts/run_scan.sh \
-  --target-type git \
-  --target https://github.com/OWASP/NodeGoat.git \
-  --target-name nodegoat
-```
-
-### Scan Singolo - Container Image
-
-```bash
-./scripts/run_scan.sh \
-  --target-type image \
-  --target nginx:1.27-alpine \
-  --target-name nginx-demo
-```
-
-### Scan Batch da File
-
-```bash
-./scripts/run_scan.sh --targets-file config/targets.yaml
-```
-
-### Scheduling con Cron
-
-> **Nota:** Per deployment production si raccomanda l'uso di systemd timers (vedi sezione [Systemd Service](#-deployment)).
-
-```bash
-# Aggiungi a crontab
-0 2 * * * /opt/security-scanner/scripts/schedule_scan.sh >> /var/log/security-scanner/cron.log 2>&1
-```
-
-### Retention Manuale (Cleanup)
-
-```bash
-# Esegue solo retention e termina
-./scripts/run_scan.sh --retention-only --settings config/settings.yaml
-
-# Dry-run retention (nessuna cancellazione)
-./scripts/run_scan.sh --retention-only --retention-dry-run --settings config/settings.yaml
-```
-
-### Scheduling Retention con Cron
-
-> **Nota:** Per deployment production si raccomanda l'uso di systemd timers (vedi sezione [Systemd Service](#-deployment)).
-
-```bash
-# Esegue retention giornaliera alle 03:30
-30 3 * * * /opt/security-scanner/scripts/schedule_retention.sh >> /var/log/security-scanner/retention.log 2>&1
-```
-
 ### API REST
 
 #### Query Scanning Results
@@ -436,12 +322,6 @@ curl -X POST http://localhost:8080/api/scan/trigger \
   -F "async_mode=false"
 ```
 
-**Parametri:**
-- `target_type` (required): `local`, `git`, o `image`
-- `target` (required): percorso locale, URL git, o referenza immagine
-- `name` (required): nome display per il target
-- `async_mode` (optional, default=false): Se true, ritorna subito con job status; se false, attende completamento
-
 **Trigger Scan Asincrono:**
 
 ```bash
@@ -450,15 +330,6 @@ curl -X POST http://localhost:8080/api/scan/trigger \
   -F "target=https://github.com/example/repo.git" \
   -F "name=example-repo" \
   -F "async_mode=true"
-```
-
-**Risposta (asincrono):**
-```json
-{
-  "status": "queued",
-  "message": "Scan queued and running in background",
-  "target_name": "example-repo"
-}
 ```
 
 #### Notification & Metrics API
@@ -473,12 +344,6 @@ curl -X POST http://localhost:8080/api/notifications/preferences \
 # Get notification preferences (auth required)
 curl -H "Authorization: Bearer <API_KEY>" \
   http://localhost:8080/api/notifications/preferences
-
-# Send critical alert for a finding (auth required)
-curl -X POST http://localhost:8080/api/notifications/send-alert \
-  -H "Authorization: Bearer <API_KEY>" \
-  -F "to_email=security-team@example.com" \
-  -F "finding_id=123"
 
 # Prometheus scrape endpoint (auth required)
 curl -H "Authorization: Bearer <API_KEY>" \
@@ -511,18 +376,7 @@ sudo systemctl enable --now security-scanner.timer
 
 # Enable timer per retention giornaliera (ore 03:30)
 sudo systemctl enable --now security-retention.timer
-
-# Verifica prossima esecuzione timer
-systemctl list-timers security-scanner.timer security-retention.timer
-
-# Esecuzione manuale immediata (senza attendere timer)
-sudo systemctl start security-scanner.service
-sudo systemctl start security-retention.service
 ```
-
-### Kubernetes (Avanzato)
-
-Vedi [`docs/kubernetes-deployment.md`](docs/kubernetes-deployment.md) per configurazione completa.
 
 ---
 
@@ -587,9 +441,6 @@ uvicorn app:app --reload --port 8080
 
 # Oppure direttamente con pytest
 PYTHONPATH=. pytest dashboard/tests/ orchestrator/tests/ -v
-
-# Solo un modulo
-PYTHONPATH=. pytest dashboard/tests/test_auth.py -v
 ```
 
 ### Lint
@@ -609,27 +460,6 @@ vim dashboard/requirements.in
 
 # Rigenera i .txt pinnati
 ./scripts/ops.sh deps-compile
-
-# Verifica le modifiche
-git diff dashboard/requirements.txt
-```
-
-### Struttura Codebase
-
-```
-security-scanning-platform/
-├── orchestrator/           # CLI orchestration engine
-│   ├── main.py            # Entry point
-│   ├── scanners.py        # Scanner wrappers
-│   ├── normalizer.py      # Output normalization
-│   └── storage.py         # Data persistence
-├── dashboard/             # FastAPI web interface
-│   ├── app.py            # Main application
-│   ├── db.py             # Database models
-│   └── templates/        # Jinja2 templates
-├── config/               # Configuration files
-├── scripts/              # Helper scripts
-└── docs/                # Documentation
 ```
 
 ---
@@ -644,29 +474,11 @@ Le contribuzioni sono benvenute! Per contribuire:
 4. **Push** al branch (`git push origin feature/NewScanner`)
 5. **Pull Request** con descrizione dettagliata
 
-### Aggiungere un Nuovo Scanner
-
-1. Crea wrapper in [`orchestrator/scanners.py`](orchestrator/scanners.py)
-2. Aggiungi normalizzatore in [`orchestrator/normalizer.py`](orchestrator/normalizer.py)
-3. Aggiorna configurazione in `config/settings.yaml`
-4. Aggiungi test in `orchestrator/tests/`
-5. Documenta in README
-
 ---
 
 ## 📄 Licenza
 
 Questo progetto è distribuito sotto licenza MIT. Vedi il file [`LICENSE`](LICENSE) per maggiori dettagli.
-
----
-
-## 📚 Documentazione Aggiuntiva
-
-- [GitLab Enterprise CI/CD Integration](docs/gitlab-integration.md)
-- [Architettura Tecnica](docs/technical-architecture.md)
-- [API Reference](docs/api-reference.md)
-- [Scanner Integration Guide](docs/scanner-integration.md)
-- [Troubleshooting](docs/troubleshooting.md)
 
 ---
 
@@ -691,4 +503,3 @@ Grazie alla community open source e ai maintainer degli scanner integrati:
 [Segnala Bug](https://github.com/3n1gm496/security-scanning-platform/issues) · [Richiedi Feature](https://github.com/3n1gm496/security-scanning-platform/issues) · [Discussioni](https://github.com/3n1gm496/security-scanning-platform/discussions)
 
 </div>
-

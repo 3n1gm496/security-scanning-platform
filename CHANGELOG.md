@@ -9,6 +9,29 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e il p
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-03-10
+
+Questa release è il risultato di un secondo audit maniacale completo della codebase, focalizzato su sicurezza, qualità del codice, test coverage e edge case. Sono stati corretti 5 bug critici di sicurezza e 6 problemi di qualità del codice.
+
+### Security (S)
+
+- **S1 — Aggiunto Subresource Integrity (SRI) per i CDN**: Aggiunti hash `integrity` ai tag `<script>` per Vue.js e Chart.js, prevenendo il caricamento di risorse compromesse (XSS).
+- **S2 — Aggiunto `Permissions-Policy` header**: Limita l'accesso a feature sensibili del browser (es. `geolocation=()`, `microphone=()`), riducendo la superficie d'attacco.
+- **S3 — Encoding email nel link unsubscribe**: L'email dell'utente viene ora codificata con `urllib.parse.quote_plus` prima di essere inserita nel link, prevenendo problemi con caratteri speciali.
+- **S4 — Validazione `sort_by` in `BasePaginator`**: Aggiunta una whitelist di colonne valide per prevenire SQL injection nel `ORDER BY`.
+- **S5 — Cookie di sessione `HttpOnly`**: Il cookie di sessione è ora `HttpOnly` di default, prevenendo l'accesso da JavaScript (XSS).
+
+### Code Quality (Q)
+
+- **Q1 — Workspace cleanup nell'orchestratore**: Aggiunto un blocco `try...finally` in `prepare_target` per garantire che la directory di lavoro temporanea venga sempre rimossa, anche in caso di errore durante il clone git.
+- **Q2 — Catch silenzioso in `evaluate_policy`**: Aggiunto un log `warning` quando il file di policy non viene trovato, invece di fallire silenziosamente.
+- **Q3 — Timeout globale per `fetch`**: Aggiunto un timeout di 30 secondi a tutte le chiamate `fetch` nel frontend tramite `AbortController`, prevenendo richieste bloccate a tempo indeterminato.
+- **Q4 — Catch silenziosi nel frontend**: Corretti 3 `catch` silenziosi in `app.js` aggiungendo `console.debug` per loggare gli errori in modalità debug.
+- **Q5 — Test coverage gaps**: Aggiunti 15 nuovi test in `test_coverage_gaps.py` per coprire le aree non testate di `db.py`, `finding_management.py` e gli endpoint non coperti di `app.py`.
+- **Q6 — Dipendenze di test non pinnate**: Aggiunto `requirements-test.in` all'orchestratore per pinnare anche le dipendenze di test.
+
+---
+
 ## [1.3.0] — 2026-03-10
 
 Questa release risolve **11 bug** scoperti durante un audit maniacale completo della codebase (backend, frontend, orchestratore, Docker, CI). Il container è ora self-contained con tutti gli scanner installati.
@@ -191,7 +214,8 @@ Versione iniziale della piattaforma.
 
 ---
 
-[Unreleased]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.0.0...v1.1.0

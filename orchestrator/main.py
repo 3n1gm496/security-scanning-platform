@@ -5,6 +5,7 @@ import copy
 import json
 import logging
 import os
+import shutil
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -141,7 +142,15 @@ def prepare_target(target: TargetSpec, settings: dict[str, Any], scan_id: str) -
 
     if target.type == "git":
         destination = workspace_root / scan_id / "repo"
-        clone_repo(target.repo or "", str(destination), target.ref)
+        try:
+            clone_repo(target.repo or "", str(destination), target.ref)
+        except Exception:
+            # Clean up partial workspace to avoid disk leaks
+            scan_workspace = workspace_root / scan_id
+            if scan_workspace.exists():
+                shutil.rmtree(scan_workspace, ignore_errors=True)
+                LOGGER.warning("Cleaned up partial workspace for scan_id=%s after clone failure", scan_id)
+            raise
         return str(destination), target.repo or ""
     if target.type == "local":
         if not target.path or not Path(target.path).exists():
@@ -166,8 +175,8 @@ def evaluate_policy(
             policy_engine = load_policy_engine(policies_file)
             result = policy_engine.evaluate(findings, target_name, target_type)
             return result["status"]
-    except Exception:
-        pass  # Fall back to simple policy
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning("Policy engine failed, falling back to simple policy: %s", exc)
 
     # Fallback to simple policy
     blocking_severities = {str(item).upper() for item in settings["policy"].get("block_on_severities", [])}

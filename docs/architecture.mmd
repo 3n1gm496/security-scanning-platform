@@ -1,0 +1,41 @@
+graph TD
+    subgraph User Interface
+        A[Web Dashboard - Vue.js] --> B{FastAPI Backend}
+    end
+
+    subgraph Core Services
+        B --> C[Orchestrator CLI]
+        B --> D[SQLite Database]
+    end
+
+    subgraph Scanners
+        C --> E[Semgrep]
+        C --> F[Bandit]
+        C --> G[Gitleaks]
+        C --> H[Trivy]
+        C --> I[Checkov]
+        C --> J[Syft]
+        C --> K[Grype]
+        C --> L[Nuclei]
+        C --> M[OWASP ZAP]
+    end
+
+    subgraph Inputs
+        N[Git Repository] --> C
+        O[Docker Image] --> C
+        P[Local Filesystem] --> C
+    end
+
+    subgraph Outputs
+        B --> Q[JSON API]
+        B --> R[Prometheus Metrics]
+        B --> S[Email Notifications]
+    end
+
+    style A fill:#42b883,stroke:#35495e,stroke-width:2px
+    style B fill:#009688,stroke:#fff,stroke-width:2px,color:#fff
+    style C fill:#333,stroke:#fff,stroke-width:2px,color:#fff
+    style D fill:#f29111,stroke:#fff,stroke-width:2px,color:#fff
+    style N fill:#f1502f,stroke:#fff,stroke-width:2px,color:#fff
+    style O fill:#0db7ed,stroke:#fff,stroke-width:2px,color:#fff
+    style P fill:#ccc,stroke:#333,stroke-width:2px

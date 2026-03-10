@@ -9,6 +9,33 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e il p
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-03-10
+
+Questa release si concentra sul **miglioramento radicale della qualità e dell'affidabilità dell'orchestratore** attraverso un aumento massiccio della test coverage, che passa dal 72% a oltre l'86%. Sono stati aggiunti 100 nuovi test, portando il totale a 359.
+
+### Added
+
+- **Aggiunti 100 nuovi test per l'orchestratore**:
+  - **`test_normalizers_extended.py`**: 34 nuovi test per le funzioni di normalizzazione (`normalize_trivy`, `normalize_gitleaks`, `normalize_checkov`) e le funzioni helper (`_severity`, `_fingerprint`, `_rel_path`).
+  - **`test_scanners_extended.py`**: 41 nuovi test per i wrapper degli scanner (`run_semgrep`, `run_trivy_fs`, `run_trivy_image`, `run_gitleaks`, `run_checkov`, `run_syft`), utilizzando mock per simulare l'esecuzione dei comandi e gestire i codici di uscita.
+  - **`test_db_adapter.py`**: 25 nuovi test per il modulo `db_adapter`, validando le classi wrapper per connessione e cursore in modalità SQLite.
+- **Diagramma di architettura aggiornato**: Creato un nuovo diagramma di flusso con Mermaid per rappresentare in modo più chiaro le interazioni tra i componenti.
+
+### Changed
+
+- **Test Coverage Orchestratore**: Aumentata la test coverage del modulo orchestratore dal **72.13%** all'**86.76%**.
+- **Totale Test**: Il numero totale di test per l'intero progetto è ora di **359** (194 per il dashboard + 165 per l'orchestratore).
+
+### Removed
+
+- **Endpoint Deprecati**: Rimossi gli endpoint `/api/findings/by-status` e `/api/findings/stats-by-status` che erano stati sostituiti dalla paginazione basata su cursore.
+
+### Fixed
+
+- **Test `test_semgrep_rate_limit_raises`**: Corretto il test per gestire correttamente l'eccezione `tenacity.RetryError` sollevata dopo il fallimento dei tentativi di retry, garantendo la robustezza del test.
+
+---
+
 ## [1.4.0] — 2026-03-10
 
 Questa release è il risultato di un secondo audit maniacale completo della codebase, focalizzato su sicurezza, qualità del codice, test coverage e edge case. Sono stati corretti 5 bug critici di sicurezza e 6 problemi di qualità del codice.

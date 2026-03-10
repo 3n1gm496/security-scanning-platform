@@ -81,8 +81,6 @@ from finding_management import (
     add_finding_comment,
     get_finding_comments,
     bulk_update_status,
-    get_findings_by_status,
-    get_finding_stats_by_status,
     get_finding_state,
 )
 from pagination import FindingsPaginator, ScansPaginator
@@ -930,22 +928,6 @@ def trigger_scan(
 # ──────────────────────────────────────────────────────────────────────────────
 # Finding Management Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
-
-
-@app.get("/api/findings/stats-by-status")
-def api_finding_stats_by_status(auth: AuthContext = Depends(require_auth)) -> dict:
-    """Get finding statistics grouped by status."""
-    return get_finding_stats_by_status()
-
-
-@app.get("/api/findings/by-status")
-def api_findings_by_status(
-    status: str | None = None,
-    limit: int = Query(100, le=1000),
-    auth: AuthContext = Depends(require_auth),
-) -> list[dict]:
-    """Get findings filtered by management status."""
-    return get_findings_by_status(status, limit)
 
 
 @app.get("/api/findings/{finding_id}/state")

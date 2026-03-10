@@ -250,7 +250,7 @@ async def security_middleware(request: Request, call_next):
     # for Jinja2 templates and Chart.js canvas rendering.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
@@ -329,15 +329,15 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
     context = {
         "user": user,
         "kpis": fetch_kpis(DB_PATH),
-        "cache_stats": cache_hit_stats(DB_PATH),
-        "cache_trend": cache_hit_trend(DB_PATH, 14),
         "severity_breakdown": severity_breakdown(DB_PATH),
         "tool_breakdown": tool_breakdown(DB_PATH),
         "target_breakdown": target_breakdown(DB_PATH),
         "trend": scans_trend(DB_PATH, 14),
         "recent_scans": recent_failed_scans(DB_PATH, 10),
+        "available_targets": distinct_targets(DB_PATH),
+        "available_tools": distinct_tools(DB_PATH),
     }
-    return templates.TemplateResponse(request, "index.html", context)
+    return templates.TemplateResponse(request, "app.html", context)
 
 
 @app.get("/scans", response_class=HTMLResponse)

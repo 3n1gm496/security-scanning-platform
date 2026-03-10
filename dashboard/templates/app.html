@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Scanning Platform</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <!-- Vue.js 3 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  {% raw %}
+  <div id="app">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" v-if="!sidebarCollapsed">
+          <span class="logo-icon">&#x1F512;</span>
+          <span class="logo-text">SecScan</span>
+        </div>
+        <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" title="Toggle sidebar">
+          <span v-if="sidebarCollapsed">&#x25B6;</span>
+          <span v-else>&#x25C0;</span>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click.prevent="navigate('dashboard')" href="#">
+          <span class="nav-icon">&#x1F4CA;</span>
+          <span class="nav-label" v-if="!sidebarCollapsed">Dashboard</span>
+        </a>
+        <a class="nav-item" :class="{ active: currentPage === 'scans' }" @click.prevent="navigate('scans')" href="#">
+          <span class="nav-icon">&#x1F50D;</span>
+          <span class="nav-label" v-if="!sidebarCollapsed">Scansioni</span>
+        </a>
+        <a class="nav-item" :class="{ active: currentPage === 'findings' }" @click.prevent="navigate('findings')" href="#">
+          <span class="nav-icon">&#x26A0;</span>
+          <span class="nav-label" v-if="!sidebarCollapsed">Findings</span>
+          <span class="nav-badge" v-if="!sidebarCollapsed && kpis.critical_findings > 0">{{ kpis.critical_findings }}</span>
+        </a>
+        <a class="nav-item" :class="{ active: currentPage === 'analytics' }" @click.prevent="navigate('analytics')" href="#">
+          <span class="nav-icon">&#x1F4C8;</span>
+          <span class="nav-label" v-if="!sidebarCollapsed">Analytics</span>
+        </a>
+        <a class="nav-item" :class="{ active: currentPage === 'settings' }" @click.prevent="navigate('settings')" href="#">
+          <span class="nav-icon">&#x2699;</span>
+          <span class="nav-label" v-if="!sidebarCollapsed">Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer" v-if="!sidebarCollapsed">
+        <div class="user-chip">
+          <span class="user-avatar">{{ currentUser ? currentUser[0].toUpperCase() : 'U' }}</span>
+          <span class="user-name">{{ currentUser }}</span>
+        </div>
+        <a href="/logout" class="logout-link">Esci</a>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+      <!-- Top bar -->
+      <header class="topbar-slim">
+        <div class="topbar-left">
+          <h1 class="page-heading">{{ pageTitle }}</h1>
+          <span class="page-subtitle">{{ pageSubtitle }}</span>
+        </div>
+        <div class="topbar-right">
+          <div class="refresh-control">
+            <span class="refresh-dot" :class="{ active: autoRefresh }"></span>
+            <span class="refresh-label">{{ autoRefresh ? 'Live' : 'Paused' }}</span>
+            <button class="btn-icon" @click="autoRefresh = !autoRefresh" :title="autoRefresh ? 'Pausa auto-refresh' : 'Avvia auto-refresh'">
+              {{ autoRefresh ? '&#x23F8;' : '&#x25B6;' }}
+            </button>
+          </div>
+          <button class="btn-secondary btn-sm" @click="refreshCurrentPage">
+            &#x21BB; Aggiorna
+          </button>
+        </div>
+      </header>
+
+      <!-- Toast notifications -->
+      <div class="toast-container">
+        <div v-for="toast in toasts" :key="toast.id" class="toast" :class="'toast-' + toast.type">
+          {{ toast.message }}
+        </div>
+      </div>
+
+      <!-- Loading overlay -->
+      <div class="loading-overlay" v-if="loading">
+        <div class="spinner"></div>
+      </div>
+
+      <!-- ================================================================
+           PAGE: DASHBOARD
+      ================================================================ -->
+      <div v-if="currentPage === 'dashboard'" class="page-content">
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon-blue">&#x1F4CB;</div>
+            <div class="kpi-body">
+              <div class="kpi-value">{{ kpis.total_scans ?? '—' }}</div>
+              <div class="kpi-label">Scansioni totali</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon-purple">&#x26A0;</div>
+            <div class="kpi-body">
+              <div class="kpi-value">{{ kpis.total_findings ?? '—' }}</div>
+              <div class="kpi-label">Findings totali</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-card-danger">
+            <div class="kpi-icon kpi-icon-red">&#x1F525;</div>
+            <div class="kpi-body">
+              <div class="kpi-value">{{ kpis.critical_findings ?? '—' }}</div>
+              <div class="kpi-label">Critical</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-card-warning">
+            <div class="kpi-icon kpi-icon-orange">&#x1F4A5;</div>
+            <div class="kpi-body">
+              <div class="kpi-value">{{ kpis.high_findings ?? '—' }}</div>
+              <div class="kpi-label">High</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon-teal">&#x1F3AF;</div>
+            <div class="kpi-body">
+              <div class="kpi-value">{{ kpis.open_targets ?? '—' }}</div>
+              <div class="kpi-label">Target distinti</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon-green">&#x1F4C5;</div>
+            <div class="kpi-body">
+              <div class="kpi-value">{{ kpis.last_7d_scans ?? '—' }}</div>
+              <div class="kpi-label">Scansioni (7gg)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="chart-grid">
+          <div class="card chart-card">
+            <div class="card-header">
+              <h2>Distribuzione Severità</h2>
+            </div>
+            <div class="chart-container">
+              <canvas ref="severityChart"></canvas>
+            </div>
+          </div>
+          <div class="card chart-card">
+            <div class="card-header">
+              <h2>Findings per Tool</h2>
+            </div>
+            <div class="chart-container">
+              <canvas ref="toolChart"></canvas>
+            </div>
+          </div>
+          <div class="card chart-card chart-card-wide">
+            <div class="card-header">
+              <h2>Trend Scansioni (14 giorni)</h2>
+            </div>
+            <div class="chart-container">
+              <canvas ref="trendChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent scans table -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Scansioni recenti con findings</h2>
+            <button class="btn-secondary btn-sm" @click="navigate('scans')">Vedi tutte</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Scan ID</th>
+                  <th>Target</th>
+                  <th>Tipo</th>
+                  <th>Stato</th>
+                  <th>Policy</th>
+                  <th>Findings</th>
+                  <th>Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="recentScans.length === 0">
+                  <td colspan="7" class="empty-state">Nessuna scansione con findings</td>
+                </tr>
+                <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" class="row-clickable">
+                  <td><code>{{ scan.id }}</code></td>
+                  <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
+                  <td><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
+                  <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
+                  <td><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status }}</span></td>
+                  <td><strong>{{ scan.findings_count }}</strong></td>
+                  <td class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================
+           PAGE: SCANSIONI
+      ================================================================ -->
+      <div v-if="currentPage === 'scans'" class="page-content">
+        <!-- Filters -->
+        <div class="card filters-card">
+          <div class="filters-row">
+            <div class="filter-group">
+              <label class="filter-label">Target</label>
+              <select v-model="scansFilter.target" @change="loadScans(true)" class="filter-select">
+                <option value="">Tutti</option>
+                <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Stato</label>
+              <select v-model="scansFilter.status" @change="loadScans(true)" class="filter-select">
+                <option value="">Tutti</option>
+                <option value="COMPLETED_CLEAN">COMPLETED_CLEAN</option>
+                <option value="COMPLETED_WITH_FINDINGS">COMPLETED_WITH_FINDINGS</option>
+                <option value="PARTIAL_FAILED">PARTIAL_FAILED</option>
+                <option value="FAILED">FAILED</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Policy</label>
+              <select v-model="scansFilter.policy" @change="loadScans(true)" class="filter-select">
+                <option value="">Tutte</option>
+                <option value="PASS">PASS</option>
+                <option value="BLOCK">BLOCK</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+              </select>
+            </div>
+            <button class="btn-secondary btn-sm" @click="resetScansFilter">Reset</button>
+          </div>
+        </div>
+
+        <!-- Scans table -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Lista scansioni <span class="count-badge">{{ scansTotal }}</span></h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="th-sortable" @click="sortScans('id')">Scan ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
+                  <th class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
+                  <th>Tipo</th>
+                  <th>Stato</th>
+                  <th>Policy</th>
+                  <th class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
+                  <th>Critical</th>
+                  <th>High</th>
+                  <th class="th-sortable" @click="sortScans('created_at')">Data <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="scansLoading">
+                  <td colspan="10" class="loading-row"><div class="spinner-sm"></div> Caricamento...</td>
+                </tr>
+                <tr v-else-if="scans.length === 0">
+                  <td colspan="10" class="empty-state">Nessuna scansione trovata</td>
+                </tr>
+                <tr v-for="scan in scans" :key="scan.id" class="row-clickable" @click="openScanDetail(scan)">
+                  <td><code class="id-code">{{ scan.id }}</code></td>
+                  <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
+                  <td><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
+                  <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
+                  <td><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status }}</span></td>
+                  <td><strong>{{ scan.findings_count }}</strong></td>
+                  <td><span v-if="scan.critical_count > 0" class="sev-pill sev-critical">{{ scan.critical_count }}</span><span v-else class="text-muted">—</span></td>
+                  <td><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
+                  <td class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
+                  <td @click.stop>
+                    <button class="btn-icon-sm" @click="openScanDetail(scan)" title="Dettaglio">&#x1F441;</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Pagination -->
+          <div class="pagination-bar" v-if="scansCursor || scansPage > 1">
+            <button class="btn-secondary btn-sm" @click="prevScansPage" :disabled="scansPage <= 1">&#x2190; Precedente</button>
+            <span class="page-info">Pagina {{ scansPage }}</span>
+            <button class="btn-secondary btn-sm" @click="nextScansPage" :disabled="!scansCursor">Successiva &#x2192;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================
+           PAGE: FINDINGS
+      ================================================================ -->
+      <div v-if="currentPage === 'findings'" class="page-content">
+        <!-- Filters -->
+        <div class="card filters-card">
+          <div class="filters-row">
+            <div class="filter-group filter-search">
+              <label class="filter-label">Cerca</label>
+              <input type="text" v-model="findingsFilter.search" @input="debouncedLoadFindings" placeholder="Titolo, CVE, file..." class="filter-input">
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Severity</label>
+              <select v-model="findingsFilter.severity" @change="loadFindings(true)" class="filter-select">
+                <option value="">Tutte</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="LOW">LOW</option>
+                <option value="INFO">INFO</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Tool</label>
+              <select v-model="findingsFilter.tool" @change="loadFindings(true)" class="filter-select">
+                <option value="">Tutti</option>
+                <option v-for="t in availableTools" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Target</label>
+              <select v-model="findingsFilter.target" @change="loadFindings(true)" class="filter-select">
+                <option value="">Tutti</option>
+                <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Stato</label>
+              <select v-model="findingsFilter.status" @change="loadFindings(true)" class="filter-select">
+                <option value="">Tutti</option>
+                <option value="new">New</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="false_positive">False Positive</option>
+                <option value="risk_accepted">Risk Accepted</option>
+              </select>
+            </div>
+            <button class="btn-secondary btn-sm" @click="resetFindingsFilter">Reset</button>
+          </div>
+          <!-- Export bar -->
+          <div class="export-bar">
+            <span class="export-label">Esporta:</span>
+            <button class="btn-export" @click="exportFindings('json')">JSON</button>
+            <button class="btn-export" @click="exportFindings('csv')">CSV</button>
+            <button class="btn-export" @click="exportFindings('sarif')">SARIF</button>
+            <button class="btn-export" @click="exportFindings('html')">HTML</button>
+            <button class="btn-export btn-export-primary" @click="exportFindings('pdf', true)">PDF + Analytics</button>
+          </div>
+        </div>
+
+        <!-- Findings table -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Lista findings <span class="count-badge">{{ findingsTotal }}</span></h2>
+            <div class="bulk-actions" v-if="selectedFindings.length > 0">
+              <span class="bulk-count">{{ selectedFindings.length }} selezionati</span>
+              <select v-model="bulkStatus" class="filter-select filter-select-sm">
+                <option value="">Cambia stato...</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="false_positive">False Positive</option>
+              </select>
+              <button class="btn-primary btn-sm" @click="applyBulkStatus" :disabled="!bulkStatus">Applica</button>
+              <button class="btn-secondary btn-sm" @click="selectedFindings = []">Deseleziona</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="th-check">
+                    <input type="checkbox" @change="toggleSelectAll" :checked="allSelected">
+                  </th>
+                  <th>Severity</th>
+                  <th>Tool</th>
+                  <th>Target</th>
+                  <th>Titolo</th>
+                  <th>CVE / ID</th>
+                  <th>File</th>
+                  <th>Stato</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="findingsLoading">
+                  <td colspan="9" class="loading-row"><div class="spinner-sm"></div> Caricamento...</td>
+                </tr>
+                <tr v-else-if="findings.length === 0">
+                  <td colspan="9" class="empty-state">Nessun finding trovato</td>
+                </tr>
+                <tr v-for="finding in findings" :key="finding.id" class="row-clickable" :class="{ 'row-selected': selectedFindings.includes(finding.id) }">
+                  <td class="th-check" @click.stop>
+                    <input type="checkbox" :value="finding.id" v-model="selectedFindings">
+                  </td>
+                  <td @click="openFindingDetail(finding)">
+                    <span class="severity-badge" :class="'sev-' + (finding.severity || 'unknown').toLowerCase()">{{ finding.severity }}</span>
+                  </td>
+                  <td @click="openFindingDetail(finding)" class="cell-nowrap">{{ finding.tool }}</td>
+                  <td @click="openFindingDetail(finding)" class="cell-wrap">{{ finding.target_name }}</td>
+                  <td @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title">{{ finding.title }}</td>
+                  <td @click="openFindingDetail(finding)" class="cell-nowrap">
+                    <a v-if="finding.cve" :href="'https://nvd.nist.gov/vuln/detail/' + finding.cve" target="_blank" class="cve-link" @click.stop>{{ finding.cve }}</a>
+                    <span v-else class="text-muted">—</span>
+                  </td>
+                  <td @click="openFindingDetail(finding)" class="cell-wrap">
+                    <code v-if="finding.file" class="file-code">{{ finding.file }}</code>
+                    <span v-else class="text-muted">—</span>
+                  </td>
+                  <td @click="openFindingDetail(finding)">
+                    <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ finding.mgmt_status || 'new' }}</span>
+                  </td>
+                  <td @click.stop>
+                    <button class="btn-icon-sm" @click="openFindingDetail(finding)" title="Dettaglio">&#x1F441;</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Pagination -->
+          <div class="pagination-bar">
+            <button class="btn-secondary btn-sm" @click="prevFindingsPage" :disabled="findingsPage <= 1">&#x2190; Precedente</button>
+            <span class="page-info">Pagina {{ findingsPage }} &bull; {{ findings.length }} risultati</span>
+            <button class="btn-secondary btn-sm" @click="nextFindingsPage" :disabled="!findingsCursor">Successiva &#x2192;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================
+           PAGE: ANALYTICS
+      ================================================================ -->
+      <div v-if="currentPage === 'analytics'" class="page-content">
+        <div class="chart-grid">
+          <div class="card chart-card">
+            <div class="card-header"><h2>Distribuzione Risk Score</h2></div>
+            <div class="chart-container"><canvas ref="riskChart"></canvas></div>
+            <div class="chart-stat" v-if="analyticsData.riskDistribution">
+              Avg Risk: <strong>{{ analyticsData.riskDistribution.average_risk }}/100</strong>
+              &bull; High Risk: <strong>{{ analyticsData.riskDistribution.high_risk_count }}</strong>
+            </div>
+          </div>
+          <div class="card chart-card">
+            <div class="card-header"><h2>OWASP Top 10 Compliance</h2></div>
+            <div class="chart-container"><canvas ref="owaspChart"></canvas></div>
+          </div>
+          <div class="card chart-card chart-card-wide">
+            <div class="card-header">
+              <h2>Trend Risk (ultimi
+                <select v-model="analyticsDays" @change="loadAnalytics" class="filter-select filter-select-sm inline-select">
+                  <option :value="30">30</option>
+                  <option :value="60">60</option>
+                  <option :value="90">90</option>
+                </select>
+              giorni)</h2>
+            </div>
+            <div class="chart-container"><canvas ref="analyticsTrendChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="two-cols-grid">
+          <div class="card">
+            <div class="card-header"><h2>Target Risk Ranking</h2></div>
+            <div class="risk-ranking" v-if="analyticsData.targetRisk">
+              <div v-for="(target, idx) in analyticsData.targetRisk.slice(0, 10)" :key="target.target" class="risk-row">
+                <span class="risk-rank">#{{ idx + 1 }}</span>
+                <span class="risk-name">{{ target.target }}</span>
+                <div class="risk-bar-wrap">
+                  <div class="risk-bar" :style="{ width: (target.average_risk) + '%' }" :class="riskBarClass(target.average_risk)"></div>
+                </div>
+                <span class="risk-score-pill" :class="riskBarClass(target.average_risk)">{{ target.average_risk }}/100</span>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Tool Effectiveness</h2></div>
+            <div class="tool-effectiveness" v-if="analyticsData.toolEffectiveness">
+              <div v-for="tool in analyticsData.toolEffectiveness.slice(0, 8)" :key="tool.tool" class="tool-row">
+                <span class="tool-name">{{ tool.tool }}</span>
+                <div class="tool-stats">
+                  <span class="sev-pill sev-critical" v-if="tool.critical_count > 0">{{ tool.critical_count }} C</span>
+                  <span class="sev-pill sev-high" v-if="tool.high_count > 0">{{ tool.high_count }} H</span>
+                  <span class="text-muted">{{ tool.total_findings }} tot</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Compliance table -->
+        <div class="card" v-if="analyticsData.compliance">
+          <div class="card-header"><h2>Mapping OWASP Top 10 2021</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Categoria OWASP</th><th>Findings</th><th>Distribuzione</th></tr></thead>
+              <tbody>
+                <tr v-for="item in analyticsData.compliance.owasp_top_10" :key="item.category">
+                  <td>{{ item.category }}</td>
+                  <td><strong>{{ item.count }}</strong></td>
+                  <td>
+                    <div class="mini-bar-wrap">
+                      <div class="mini-bar" :style="{ width: owaspBarWidth(item.count) + '%' }"></div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================
+           PAGE: SETTINGS
+      ================================================================ -->
+      <div v-if="currentPage === 'settings'" class="page-content">
+        <div class="settings-tabs">
+          <button class="tab-btn" :class="{ active: settingsTab === 'apikeys' }" @click="settingsTab = 'apikeys'; loadApiKeys()">API Keys</button>
+          <button class="tab-btn" :class="{ active: settingsTab === 'webhooks' }" @click="settingsTab = 'webhooks'; loadWebhooks()">Webhooks</button>
+          <button class="tab-btn" :class="{ active: settingsTab === 'export' }" @click="settingsTab = 'export'">Export</button>
+        </div>
+
+        <!-- API Keys Tab -->
+        <div v-if="settingsTab === 'apikeys'" class="settings-panel">
+          <div class="card">
+            <div class="card-header">
+              <h2>API Keys</h2>
+              <button class="btn-primary btn-sm" @click="showCreateKeyModal = true">+ Nuova chiave</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Nome</th><th>Prefix</th><th>Ruolo</th><th>Creata da</th><th>Scadenza</th><th>Azioni</th></tr></thead>
+                <tbody>
+                  <tr v-if="apiKeys.length === 0"><td colspan="6" class="empty-state">Nessuna API key</td></tr>
+                  <tr v-for="key in apiKeys" :key="key.prefix">
+                    <td><strong>{{ key.name }}</strong></td>
+                    <td><code>{{ key.prefix }}...</code></td>
+                    <td><span class="badge badge-neutral">{{ key.role }}</span></td>
+                    <td>{{ key.created_by }}</td>
+                    <td>{{ key.expires_at ? formatDate(key.expires_at) : 'Mai' }}</td>
+                    <td>
+                      <button class="btn-danger btn-sm" @click="revokeApiKey(key.prefix)">Revoca</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Webhooks Tab -->
+        <div v-if="settingsTab === 'webhooks'" class="settings-panel">
+          <div class="card">
+            <div class="card-header">
+              <h2>Webhooks</h2>
+              <button class="btn-primary btn-sm" @click="showCreateWebhookModal = true">+ Nuovo webhook</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Nome</th><th>URL</th><th>Eventi</th><th>Attivo</th><th>Azioni</th></tr></thead>
+                <tbody>
+                  <tr v-if="webhooks.length === 0"><td colspan="5" class="empty-state">Nessun webhook configurato</td></tr>
+                  <tr v-for="wh in webhooks" :key="wh.id">
+                    <td><strong>{{ wh.name }}</strong></td>
+                    <td class="cell-wrap"><code>{{ wh.url }}</code></td>
+                    <td>{{ wh.events }}</td>
+                    <td>
+                      <label class="toggle-switch">
+                        <input type="checkbox" :checked="wh.is_active" @change="toggleWebhook(wh.id, !wh.is_active)">
+                        <span class="toggle-slider"></span>
+                      </label>
+                    </td>
+                    <td>
+                      <button class="btn-danger btn-sm" @click="deleteWebhook(wh.id)">Elimina</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Export Tab -->
+        <div v-if="settingsTab === 'export'" class="settings-panel">
+          <div class="card">
+            <div class="card-header"><h2>Esporta Report</h2></div>
+            <div class="export-grid">
+              <div class="export-option" @click="exportFindings('json')">
+                <div class="export-icon">{ }</div>
+                <div class="export-name">JSON</div>
+                <div class="export-desc">Dati strutturati per integrazione</div>
+              </div>
+              <div class="export-option" @click="exportFindings('csv')">
+                <div class="export-icon">&#x1F4C4;</div>
+                <div class="export-name">CSV</div>
+                <div class="export-desc">Foglio di calcolo per analisi</div>
+              </div>
+              <div class="export-option" @click="exportFindings('sarif')">
+                <div class="export-icon">&#x1F50D;</div>
+                <div class="export-name">SARIF</div>
+                <div class="export-desc">Standard per tool di sicurezza</div>
+              </div>
+              <div class="export-option" @click="exportFindings('html')">
+                <div class="export-icon">&#x1F310;</div>
+                <div class="export-name">HTML</div>
+                <div class="export-desc">Report leggibile nel browser</div>
+              </div>
+              <div class="export-option export-option-primary" @click="exportFindings('pdf', true)">
+                <div class="export-icon">&#x1F4D5;</div>
+                <div class="export-name">PDF + Analytics</div>
+                <div class="export-desc">Report completo con grafici</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         MODAL: FINDING DETAIL
+    ================================================================ -->
+    <div class="modal-overlay" v-if="selectedFinding" @click.self="closeFindingModal">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <span class="severity-badge" :class="'sev-' + (selectedFinding.severity || 'unknown').toLowerCase()">{{ selectedFinding.severity }}</span>
+            <h2 class="modal-title">{{ selectedFinding.title }}</h2>
+          </div>
+          <button class="modal-close" @click="closeFindingModal">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="detail-grid">
+            <div class="detail-col">
+              <div class="detail-section">
+                <h3>Informazioni</h3>
+                <div class="detail-row"><span class="detail-key">Tool</span><span class="detail-val">{{ selectedFinding.tool }}</span></div>
+                <div class="detail-row"><span class="detail-key">Categoria</span><span class="detail-val">{{ selectedFinding.category || '—' }}</span></div>
+                <div class="detail-row"><span class="detail-key">Target</span><span class="detail-val">{{ selectedFinding.target_name }}</span></div>
+                <div class="detail-row" v-if="selectedFinding.cve">
+                  <span class="detail-key">CVE</span>
+                  <span class="detail-val">
+                    <a :href="'https://nvd.nist.gov/vuln/detail/' + selectedFinding.cve" target="_blank" class="cve-link">{{ selectedFinding.cve }}</a>
+                  </span>
+                </div>
+                <div class="detail-row" v-if="selectedFinding.file">
+                  <span class="detail-key">File</span>
+                  <span class="detail-val"><code>{{ selectedFinding.file }}{{ selectedFinding.line ? ':' + selectedFinding.line : '' }}</code></span>
+                </div>
+                <div class="detail-row" v-if="selectedFinding.package">
+                  <span class="detail-key">Package</span>
+                  <span class="detail-val">{{ selectedFinding.package }} {{ selectedFinding.version }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Scan ID</span>
+                  <span class="detail-val"><code>{{ selectedFinding.scan_id }}</code></span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Data</span>
+                  <span class="detail-val">{{ formatDate(selectedFinding.timestamp) }}</span>
+                </div>
+              </div>
+
+              <div class="detail-section" v-if="selectedFinding.description">
+                <h3>Descrizione</h3>
+                <p class="detail-text">{{ selectedFinding.description }}</p>
+              </div>
+
+              <div class="detail-section" v-if="selectedFinding.remediation">
+                <h3>Remediation</h3>
+                <p class="detail-text remediation-text">{{ selectedFinding.remediation }}</p>
+              </div>
+            </div>
+
+            <div class="detail-col">
+              <!-- Finding Management -->
+              <div class="detail-section">
+                <h3>Gestione</h3>
+                <div class="mgmt-status-row">
+                  <span class="status-pill" :class="'status-' + (findingState.status || 'new')">{{ findingState.status || 'new' }}</span>
+                  <span v-if="findingState.assigned_to" class="assigned-to">Assegnato a: <strong>{{ findingState.assigned_to }}</strong></span>
+                </div>
+                <div class="mgmt-actions">
+                  <select v-model="newFindingStatus" class="filter-select">
+                    <option value="">Cambia stato...</option>
+                    <option value="acknowledged">Acknowledged</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="false_positive">False Positive</option>
+                    <option value="risk_accepted">Risk Accepted</option>
+                  </select>
+                  <button class="btn-primary btn-sm" @click="updateFindingStatus" :disabled="!newFindingStatus">Aggiorna</button>
+                </div>
+                <div class="assign-row">
+                  <input type="text" v-model="assignTo" placeholder="Assegna a (username)..." class="filter-input">
+                  <button class="btn-secondary btn-sm" @click="assignFinding" :disabled="!assignTo">Assegna</button>
+                </div>
+              </div>
+
+              <!-- Comments -->
+              <div class="detail-section">
+                <h3>Commenti</h3>
+                <div class="comments-list" v-if="findingComments.length > 0">
+                  <div v-for="comment in findingComments" :key="comment.id" class="comment-item">
+                    <div class="comment-header">
+                      <span class="comment-user">{{ comment.user }}</span>
+                      <span class="comment-date">{{ formatDate(comment.created_at) }}</span>
+                    </div>
+                    <p class="comment-text">{{ comment.comment }}</p>
+                  </div>
+                </div>
+                <p v-else class="text-muted">Nessun commento</p>
+                <div class="add-comment">
+                  <textarea v-model="newComment" placeholder="Aggiungi un commento..." class="comment-input" rows="2"></textarea>
+                  <button class="btn-primary btn-sm" @click="addComment" :disabled="!newComment.trim()">Aggiungi</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         MODAL: SCAN DETAIL
+    ================================================================ -->
+    <div class="modal-overlay" v-if="selectedScan" @click.self="selectedScan = null">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <span class="badge" :class="statusBadgeClass(selectedScan.status)">{{ selectedScan.status }}</span>
+            <h2 class="modal-title">{{ selectedScan.target_name }}</h2>
+          </div>
+          <button class="modal-close" @click="selectedScan = null">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="detail-grid">
+            <div class="detail-col">
+              <div class="detail-section">
+                <h3>Informazioni Scansione</h3>
+                <div class="detail-row"><span class="detail-key">Scan ID</span><span class="detail-val"><code>{{ selectedScan.id }}</code></span></div>
+                <div class="detail-row"><span class="detail-key">Tipo</span><span class="detail-val">{{ selectedScan.target_type }}</span></div>
+                <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status }}</span></span></div>
+                <div class="detail-row"><span class="detail-key">Findings</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
+                <div class="detail-row"><span class="detail-key">Critical</span><span class="detail-val"><span class="sev-pill sev-critical" v-if="selectedScan.critical_count > 0">{{ selectedScan.critical_count }}</span><span v-else>0</span></span></div>
+                <div class="detail-row"><span class="detail-key">High</span><span class="detail-val"><span class="sev-pill sev-high" v-if="selectedScan.high_count > 0">{{ selectedScan.high_count }}</span><span v-else>0</span></span></div>
+                <div class="detail-row"><span class="detail-key">Data</span><span class="detail-val">{{ formatDate(selectedScan.created_at) }}</span></div>
+              </div>
+            </div>
+            <div class="detail-col">
+              <div class="detail-section">
+                <h3>Azioni</h3>
+                <button class="btn-secondary btn-block" @click="viewScanFindings(selectedScan)">Vedi findings di questa scansione</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         MODAL: CREATE API KEY
+    ================================================================ -->
+    <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="showCreateKeyModal = false">
+      <div class="modal modal-sm">
+        <div class="modal-header">
+          <h2 class="modal-title">Nuova API Key</h2>
+          <button class="modal-close" @click="showCreateKeyModal = false">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Nome</label>
+            <input type="text" v-model="newKeyForm.name" class="filter-input" placeholder="es. ci-runner">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ruolo</label>
+            <select v-model="newKeyForm.role" class="filter-select">
+              <option value="admin">Admin</option>
+              <option value="operator">Operator</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Scadenza (giorni, opzionale)</label>
+            <input type="number" v-model="newKeyForm.expires_days" class="filter-input" placeholder="es. 90">
+          </div>
+          <div v-if="newKeyResult" class="new-key-result">
+            <p>Chiave creata. Copiala subito, non sarà più visibile:</p>
+            <code class="key-display">{{ newKeyResult }}</code>
+            <button class="btn-secondary btn-sm" @click="copyToClipboard(newKeyResult)">Copia</button>
+          </div>
+          <div class="modal-actions" v-if="!newKeyResult">
+            <button class="btn-secondary" @click="showCreateKeyModal = false">Annulla</button>
+            <button class="btn-primary" @click="createApiKey" :disabled="!newKeyForm.name">Crea</button>
+          </div>
+          <div class="modal-actions" v-else>
+            <button class="btn-primary" @click="showCreateKeyModal = false; newKeyResult = ''">Chiudi</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         MODAL: CREATE WEBHOOK
+    ================================================================ -->
+    <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="showCreateWebhookModal = false">
+      <div class="modal modal-sm">
+        <div class="modal-header">
+          <h2 class="modal-title">Nuovo Webhook</h2>
+          <button class="modal-close" @click="showCreateWebhookModal = false">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Nome</label>
+            <input type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="es. slack-alerts">
+          </div>
+          <div class="form-group">
+            <label class="form-label">URL</label>
+            <input type="url" v-model="newWebhookForm.url" class="filter-input" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Eventi (separati da virgola)</label>
+            <input type="text" v-model="newWebhookForm.events" class="filter-input" placeholder="scan.completed,finding.critical">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Secret (opzionale)</label>
+            <input type="password" v-model="newWebhookForm.secret" class="filter-input">
+          </div>
+          <div class="modal-actions">
+            <button class="btn-secondary" @click="showCreateWebhookModal = false">Annulla</button>
+            <button class="btn-primary" @click="createWebhook" :disabled="!newWebhookForm.name || !newWebhookForm.url">Crea</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- #app -->
+  {% endraw %}
+
+  <script>
+    window.__INIT_DATA__ = {
+      user: {{ user | tojson }},
+      kpis: {{ kpis | tojson }},
+      recentScans: {{ recent_scans | tojson }},
+      severityBreakdown: {{ severity_breakdown | tojson }},
+      toolBreakdown: {{ tool_breakdown | tojson }},
+      trend: {{ trend | tojson }},
+      availableTargets: {{ available_targets | tojson }},
+      availableTools: {{ available_tools | tojson }},
+    };
+  </script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

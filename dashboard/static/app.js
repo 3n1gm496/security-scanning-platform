@@ -1,0 +1,768 @@
+/**
+ * Security Scanning Platform — SPA Vue.js
+ * Versione 2.0 — Architettura SPA completa con paginazione, triage e analytics
+ */
+
+const { createApp, ref, reactive, computed, onMounted, nextTick, watch } = Vue;
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('it-IT', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch {
+    return iso;
+  }
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+
+createApp({
+  data() {
+    const init = window.__INIT_DATA__ || {};
+    return {
+      // ── Auth / User
+      currentUser: init.user || 'unknown',
+
+      // ── Navigation
+      currentPage: 'dashboard',
+      sidebarCollapsed: false,
+
+      // ── Global state
+      loading: false,
+      autoRefresh: true,
+      refreshInterval: null,
+      toasts: [],
+      toastCounter: 0,
+
+      // ── Dashboard data
+      kpis: init.kpis || {},
+      recentScans: init.recentScans || [],
+      severityBreakdown: init.severityBreakdown || {},
+      toolBreakdown: init.toolBreakdown || {},
+      trend: init.trend || [],
+      availableTargets: init.availableTargets || [],
+      availableTools: init.availableTools || [],
+
+      // ── Charts refs (managed via $refs)
+      charts: {},
+
+      // ── Scans page
+      scans: [],
+      scansLoading: false,
+      scansTotal: 0,
+      scansPage: 1,
+      scansCursor: null,
+      scansCursorStack: [],
+      scansSort: { by: 'created_at', order: 'DESC' },
+      scansFilter: { target: '', status: '', policy: '' },
+
+      // ── Findings page
+      findings: [],
+      findingsLoading: false,
+      findingsTotal: 0,
+      findingsPage: 1,
+      findingsCursor: null,
+      findingsCursorStack: [],
+      findingsFilter: { search: '', severity: '', tool: '', target: '', status: '' },
+      selectedFindings: [],
+      bulkStatus: '',
+
+      // ── Finding detail modal
+      selectedFinding: null,
+      findingState: {},
+      findingComments: [],
+      newFindingStatus: '',
+      assignTo: '',
+      newComment: '',
+
+      // ── Scan detail modal
+      selectedScan: null,
+
+      // ── Analytics page
+      analyticsData: {
+        riskDistribution: null,
+        compliance: null,
+        trends: null,
+        targetRisk: null,
+        toolEffectiveness: null,
+      },
+      analyticsDays: 30,
+
+      // ── Settings page
+      settingsTab: 'apikeys',
+      apiKeys: [],
+      webhooks: [],
+      showCreateKeyModal: false,
+      showCreateWebhookModal: false,
+      newKeyForm: { name: '', role: 'operator', expires_days: null },
+      newKeyResult: '',
+      newWebhookForm: { name: '', url: '', events: 'scan.completed', secret: '' },
+    };
+  },
+
+  computed: {
+    pageTitle() {
+      const titles = {
+        dashboard: 'Dashboard',
+        scans: 'Scansioni',
+        findings: 'Findings',
+        analytics: 'Analytics',
+        settings: 'Settings',
+      };
+      return titles[this.currentPage] || '';
+    },
+    pageSubtitle() {
+      const subs = {
+        dashboard: 'Panoramica della postura di sicurezza',
+        scans: 'Storico delle esecuzioni di scansione',
+        findings: 'Vulnerabilità rilevate e gestione del ciclo di vita',
+        analytics: 'Risk scoring, compliance e trend',
+        settings: 'Gestione API keys, webhooks e configurazione',
+      };
+      return subs[this.currentPage] || '';
+    },
+    allSelected() {
+      return this.findings.length > 0 && this.selectedFindings.length === this.findings.length;
+    },
+  },
+
+  async mounted() {
+    this.debouncedLoadFindings = debounce(() => this.loadFindings(true), 400);
+    await this.initDashboardCharts();
+    this.startAutoRefresh();
+  },
+
+  beforeUnmount() {
+    if (this.refreshInterval) clearInterval(this.refreshInterval);
+    Object.values(this.charts).forEach(c => c && c.destroy());
+  },
+
+  methods: {
+    // ── Navigation ────────────────────────────────────────────────────────────
+
+    async navigate(page) {
+      this.currentPage = page;
+      window.scrollTo(0, 0);
+      await nextTick();
+      if (page === 'dashboard') await this.initDashboardCharts();
+      if (page === 'scans') await this.loadScans(true);
+      if (page === 'findings') await this.loadFindings(true);
+      if (page === 'analytics') await this.loadAnalytics();
+      if (page === 'settings') {
+        this.settingsTab = 'apikeys';
+        await this.loadApiKeys();
+      }
+    },
+
+    async refreshCurrentPage() {
+      await this.navigate(this.currentPage);
+    },
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+
+    showToast(message, type = 'success') {
+      const id = ++this.toastCounter;
+      this.toasts.push({ id, message, type });
+      setTimeout(() => {
+        this.toasts = this.toasts.filter(t => t.id !== id);
+      }, 4000);
+    },
+
+    // ── Auto-refresh ──────────────────────────────────────────────────────────
+
+    startAutoRefresh() {
+      this.refreshInterval = setInterval(async () => {
+        if (!this.autoRefresh) return;
+        if (this.currentPage === 'dashboard') {
+          try {
+            this.kpis = await apiFetch('/api/kpi');
+          } catch { /* silent */ }
+        }
+      }, 30000);
+    },
+
+    // ── Dashboard Charts ──────────────────────────────────────────────────────
+
+    async initDashboardCharts() {
+      await nextTick();
+      this.buildSeverityChart();
+      this.buildToolChart();
+      this.buildTrendChart();
+    },
+
+    buildSeverityChart() {
+      const canvas = this.$refs.severityChart;
+      if (!canvas) return;
+      if (this.charts.severity) this.charts.severity.destroy();
+      const data = this.severityBreakdown;
+      const colorMap = {
+        CRITICAL: '#dc2626', HIGH: '#f97316', MEDIUM: '#f59e0b',
+        LOW: '#3b82f6', INFO: '#6b7280', UNKNOWN: '#9ca3af',
+      };
+      this.charts.severity = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(data),
+          datasets: [{
+            data: Object.values(data),
+            backgroundColor: Object.keys(data).map(k => colorMap[k] || '#9ca3af'),
+            borderWidth: 2,
+            borderColor: '#fff',
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } } },
+          cutout: '65%',
+        },
+      });
+    },
+
+    buildToolChart() {
+      const canvas = this.$refs.toolChart;
+      if (!canvas) return;
+      if (this.charts.tool) this.charts.tool.destroy();
+      const data = this.toolBreakdown;
+      const labels = Object.keys(data).slice(0, 10);
+      const values = Object.values(data).slice(0, 10);
+      this.charts.tool = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Findings', data: values, backgroundColor: '#4f46e5', borderRadius: 6 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, grid: { color: '#f3f4f6' } }, y: { grid: { display: false } } },
+        },
+      });
+    },
+
+    buildTrendChart() {
+      const canvas = this.$refs.trendChart;
+      if (!canvas) return;
+      if (this.charts.trend) this.charts.trend.destroy();
+      const trendData = this.trend.slice(-14);
+      this.charts.trend = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: trendData.map(t => t.day),
+          datasets: [
+            {
+              label: 'Scansioni', data: trendData.map(t => t.scans),
+              borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)',
+              tension: 0.3, fill: true, pointRadius: 4,
+            },
+            {
+              label: 'Findings', data: trendData.map(t => t.findings || 0),
+              borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.05)',
+              tension: 0.3, fill: true, pointRadius: 4,
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } },
+          scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } },
+        },
+      });
+    },
+
+    // ── Scans ─────────────────────────────────────────────────────────────────
+
+    async loadScans(reset = false) {
+      if (reset) {
+        this.scansPage = 1;
+        this.scansCursor = null;
+        this.scansCursorStack = [];
+      }
+      this.scansLoading = true;
+      try {
+        const params = new URLSearchParams({
+          per_page: 20,
+          sort_by: this.scansSort.by,
+          sort_order: this.scansSort.order,
+        });
+        if (this.scansFilter.target) params.set('target', this.scansFilter.target);
+        if (this.scansFilter.status) params.set('status', this.scansFilter.status);
+        if (this.scansCursor) params.set('cursor', this.scansCursor);
+        const result = await apiFetch(`/api/scans/paginated?${params}`);
+        this.scans = result.items || [];
+        this.scansTotal = result.total || this.scans.length;
+        this.scansCursor = result.next_cursor || null;
+      } catch (e) {
+        this.showToast('Errore nel caricamento delle scansioni: ' + e.message, 'error');
+      } finally {
+        this.scansLoading = false;
+      }
+    },
+
+    sortScans(col) {
+      if (this.scansSort.by === col) {
+        this.scansSort.order = this.scansSort.order === 'ASC' ? 'DESC' : 'ASC';
+      } else {
+        this.scansSort.by = col;
+        this.scansSort.order = 'DESC';
+      }
+      this.loadScans(true);
+    },
+
+    sortIcon(table, col) {
+      const sort = table === 'scans' ? this.scansSort : this.findingsSort;
+      if (!sort || sort.by !== col) return '↕';
+      return sort.order === 'ASC' ? '↑' : '↓';
+    },
+
+    async nextScansPage() {
+      if (!this.scansCursor) return;
+      this.scansCursorStack.push(this.scansCursor);
+      this.scansPage++;
+      await this.loadScans();
+    },
+
+    async prevScansPage() {
+      if (this.scansPage <= 1) return;
+      this.scansPage--;
+      this.scansCursor = this.scansCursorStack.pop() || null;
+      await this.loadScans();
+    },
+
+    resetScansFilter() {
+      this.scansFilter = { target: '', status: '', policy: '' };
+      this.loadScans(true);
+    },
+
+    openScanDetail(scan) {
+      this.selectedScan = scan;
+    },
+
+    viewScanFindings(scan) {
+      this.selectedScan = null;
+      this.findingsFilter.target = '';
+      this.findingsFilter.search = scan.id;
+      this.navigate('findings');
+    },
+
+    // ── Findings ──────────────────────────────────────────────────────────────
+
+    async loadFindings(reset = false) {
+      if (reset) {
+        this.findingsPage = 1;
+        this.findingsCursor = null;
+        this.findingsCursorStack = [];
+        this.selectedFindings = [];
+      }
+      this.findingsLoading = true;
+      try {
+        const params = new URLSearchParams({ per_page: 50 });
+        if (this.findingsFilter.search) params.set('search', this.findingsFilter.search);
+        if (this.findingsFilter.severity) params.set('severity', this.findingsFilter.severity);
+        if (this.findingsFilter.tool) params.set('tool', this.findingsFilter.tool);
+        if (this.findingsCursor) params.set('cursor', this.findingsCursor);
+
+        let result;
+        if (this.findingsFilter.status) {
+          // Use the by-status endpoint for status filtering
+          const statusParams = new URLSearchParams({ limit: 50 });
+          statusParams.set('status', this.findingsFilter.status);
+          if (this.findingsFilter.target) statusParams.set('target', this.findingsFilter.target);
+          const items = await apiFetch(`/api/findings/by-status?${statusParams}`);
+          result = { items: items || [], next_cursor: null, total: (items || []).length };
+        } else {
+          if (this.findingsFilter.target) params.set('target', this.findingsFilter.target);
+          result = await apiFetch(`/api/findings/paginated?${params}`);
+        }
+
+        this.findings = result.items || [];
+        this.findingsTotal = result.total || this.findings.length;
+        this.findingsCursor = result.next_cursor || null;
+      } catch (e) {
+        this.showToast('Errore nel caricamento dei findings: ' + e.message, 'error');
+      } finally {
+        this.findingsLoading = false;
+      }
+    },
+
+    async nextFindingsPage() {
+      if (!this.findingsCursor) return;
+      this.findingsCursorStack.push(this.findingsCursor);
+      this.findingsPage++;
+      await this.loadFindings();
+    },
+
+    async prevFindingsPage() {
+      if (this.findingsPage <= 1) return;
+      this.findingsPage--;
+      this.findingsCursor = this.findingsCursorStack.pop() || null;
+      await this.loadFindings();
+    },
+
+    resetFindingsFilter() {
+      this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '' };
+      this.loadFindings(true);
+    },
+
+    toggleSelectAll(e) {
+      if (e.target.checked) {
+        this.selectedFindings = this.findings.map(f => f.id);
+      } else {
+        this.selectedFindings = [];
+      }
+    },
+
+    async applyBulkStatus() {
+      if (!this.bulkStatus || this.selectedFindings.length === 0) return;
+      try {
+        await apiFetch('/api/findings/bulk/update-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ finding_ids: this.selectedFindings, status: this.bulkStatus }),
+        });
+        this.showToast(`Stato aggiornato per ${this.selectedFindings.length} findings`);
+        this.selectedFindings = [];
+        this.bulkStatus = '';
+        await this.loadFindings(true);
+      } catch (e) {
+        this.showToast('Errore aggiornamento bulk: ' + e.message, 'error');
+      }
+    },
+
+    // ── Finding Detail ────────────────────────────────────────────────────────
+
+    async openFindingDetail(finding) {
+      this.selectedFinding = finding;
+      this.newFindingStatus = '';
+      this.assignTo = '';
+      this.newComment = '';
+      this.findingState = {};
+      this.findingComments = [];
+      try {
+        const [state, comments] = await Promise.all([
+          apiFetch(`/api/findings/${finding.id}/state`),
+          apiFetch(`/api/findings/${finding.id}/comments`),
+        ]);
+        this.findingState = state;
+        this.findingComments = comments;
+      } catch (e) {
+        // Non-critical: show modal anyway
+      }
+    },
+
+    closeFindingModal() {
+      this.selectedFinding = null;
+    },
+
+    async updateFindingStatus() {
+      if (!this.newFindingStatus || !this.selectedFinding) return;
+      try {
+        const fd = new FormData();
+        fd.append('status', this.newFindingStatus);
+        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        this.findingState.status = this.newFindingStatus;
+        this.newFindingStatus = '';
+        this.showToast('Stato aggiornato');
+        await this.loadFindings(true);
+      } catch (e) {
+        this.showToast('Errore: ' + e.message, 'error');
+      }
+    },
+
+    async assignFinding() {
+      if (!this.assignTo || !this.selectedFinding) return;
+      try {
+        const fd = new FormData();
+        fd.append('assigned_to', this.assignTo);
+        await fetch(`/api/findings/${this.selectedFinding.id}/assign`, { method: 'POST', body: fd });
+        this.findingState.assigned_to = this.assignTo;
+        this.assignTo = '';
+        this.showToast('Finding assegnato');
+      } catch (e) {
+        this.showToast('Errore: ' + e.message, 'error');
+      }
+    },
+
+    async addComment() {
+      if (!this.newComment.trim() || !this.selectedFinding) return;
+      try {
+        const fd = new FormData();
+        fd.append('comment', this.newComment);
+        await fetch(`/api/findings/${this.selectedFinding.id}/comment`, { method: 'POST', body: fd });
+        this.findingComments = await apiFetch(`/api/findings/${this.selectedFinding.id}/comments`);
+        this.newComment = '';
+        this.showToast('Commento aggiunto');
+      } catch (e) {
+        this.showToast('Errore: ' + e.message, 'error');
+      }
+    },
+
+    // ── Analytics ─────────────────────────────────────────────────────────────
+
+    async loadAnalytics() {
+      this.loading = true;
+      try {
+        const [riskDist, compliance, trends, targetRisk, toolEffectiveness] = await Promise.all([
+          apiFetch('/api/analytics/risk-distribution'),
+          apiFetch('/api/analytics/compliance'),
+          apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`),
+          apiFetch('/api/analytics/target-risk'),
+          apiFetch('/api/analytics/tool-effectiveness'),
+        ]);
+        this.analyticsData = { riskDistribution: riskDist, compliance, trends, targetRisk, toolEffectiveness };
+        await nextTick();
+        this.buildRiskChart();
+        this.buildOwaspChart();
+        this.buildAnalyticsTrendChart();
+      } catch (e) {
+        this.showToast('Errore caricamento analytics: ' + e.message, 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    buildRiskChart() {
+      const canvas = this.$refs.riskChart;
+      if (!canvas || !this.analyticsData.riskDistribution) return;
+      if (this.charts.risk) this.charts.risk.destroy();
+      const dist = this.analyticsData.riskDistribution.distribution;
+      this.charts.risk = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(dist),
+          datasets: [{
+            label: 'Findings', data: Object.values(dist),
+            backgroundColor: ['#10b981', '#f59e0b', '#f97316', '#dc2626'],
+            borderRadius: 6,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } },
+        },
+      });
+    },
+
+    buildOwaspChart() {
+      const canvas = this.$refs.owaspChart;
+      if (!canvas || !this.analyticsData.compliance) return;
+      if (this.charts.owasp) this.charts.owasp.destroy();
+      const owasp = this.analyticsData.compliance.owasp_top_10.slice(0, 6);
+      this.charts.owasp = new Chart(canvas.getContext('2d'), {
+        type: 'pie',
+        data: {
+          labels: owasp.map(o => o.category.split(' - ')[0]),
+          datasets: [{
+            data: owasp.map(o => o.count),
+            backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#14b8a6', '#3b82f6', '#8b5cf6'],
+            borderWidth: 2, borderColor: '#fff',
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        },
+      });
+    },
+
+    buildAnalyticsTrendChart() {
+      const canvas = this.$refs.analyticsTrendChart;
+      if (!canvas || !this.analyticsData.trends) return;
+      if (this.charts.analyticsTrend) this.charts.analyticsTrend.destroy();
+      const trendData = this.analyticsData.trends.trend;
+      this.charts.analyticsTrend = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: trendData.map(t => t.date),
+          datasets: [
+            {
+              label: 'Avg Risk', data: trendData.map(t => t.average_risk),
+              borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)',
+              tension: 0.3, fill: true,
+            },
+            {
+              label: 'Max Risk', data: trendData.map(t => t.max_risk),
+              borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.04)',
+              tension: 0.3, fill: false, borderDash: [4, 4],
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } },
+          scales: {
+            y: { beginAtZero: true, max: 100, grid: { color: '#f3f4f6' } },
+            x: { grid: { display: false } },
+          },
+        },
+      });
+    },
+
+    owaspBarWidth(count) {
+      if (!this.analyticsData.compliance) return 0;
+      const max = Math.max(...this.analyticsData.compliance.owasp_top_10.map(o => o.count), 1);
+      return Math.round((count / max) * 100);
+    },
+
+    riskBarClass(risk) {
+      if (risk >= 75) return 'risk-critical';
+      if (risk >= 50) return 'risk-high';
+      if (risk >= 25) return 'risk-medium';
+      return 'risk-low';
+    },
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    async loadApiKeys() {
+      try {
+        this.apiKeys = await apiFetch('/api/keys');
+      } catch (e) {
+        this.showToast('Errore caricamento API keys: ' + e.message, 'error');
+      }
+    },
+
+    async createApiKey() {
+      try {
+        const fd = new FormData();
+        fd.append('name', this.newKeyForm.name);
+        fd.append('role', this.newKeyForm.role);
+        if (this.newKeyForm.expires_days) fd.append('expires_days', this.newKeyForm.expires_days);
+        const res = await fetch('/api/keys', { method: 'POST', body: fd });
+        const data = await res.json();
+        this.newKeyResult = data.key;
+        await this.loadApiKeys();
+        this.showToast('API key creata');
+      } catch (e) {
+        this.showToast('Errore creazione key: ' + e.message, 'error');
+      }
+    },
+
+    async revokeApiKey(prefix) {
+      if (!confirm(`Revocare la chiave ${prefix}?`)) return;
+      try {
+        await apiFetch(`/api/keys/${prefix}`, { method: 'DELETE' });
+        await this.loadApiKeys();
+        this.showToast('API key revocata');
+      } catch (e) {
+        this.showToast('Errore revoca: ' + e.message, 'error');
+      }
+    },
+
+    async loadWebhooks() {
+      try {
+        this.webhooks = await apiFetch('/api/webhooks');
+      } catch (e) {
+        this.showToast('Errore caricamento webhooks: ' + e.message, 'error');
+      }
+    },
+
+    async createWebhook() {
+      try {
+        const fd = new FormData();
+        fd.append('name', this.newWebhookForm.name);
+        fd.append('url', this.newWebhookForm.url);
+        fd.append('events', this.newWebhookForm.events);
+        if (this.newWebhookForm.secret) fd.append('secret', this.newWebhookForm.secret);
+        await fetch('/api/webhooks', { method: 'POST', body: fd });
+        this.showCreateWebhookModal = false;
+        this.newWebhookForm = { name: '', url: '', events: 'scan.completed', secret: '' };
+        await this.loadWebhooks();
+        this.showToast('Webhook creato');
+      } catch (e) {
+        this.showToast('Errore creazione webhook: ' + e.message, 'error');
+      }
+    },
+
+    async toggleWebhook(id, isActive) {
+      try {
+        const fd = new FormData();
+        fd.append('is_active', isActive);
+        await fetch(`/api/webhooks/${id}`, { method: 'PATCH', body: fd });
+        await this.loadWebhooks();
+      } catch (e) {
+        this.showToast('Errore toggle webhook: ' + e.message, 'error');
+      }
+    },
+
+    async deleteWebhook(id) {
+      if (!confirm('Eliminare questo webhook?')) return;
+      try {
+        await apiFetch(`/api/webhooks/${id}`, { method: 'DELETE' });
+        await this.loadWebhooks();
+        this.showToast('Webhook eliminato');
+      } catch (e) {
+        this.showToast('Errore eliminazione: ' + e.message, 'error');
+      }
+    },
+
+    // ── Export ────────────────────────────────────────────────────────────────
+
+    async exportFindings(format, includeAnalytics = false) {
+      try {
+        const params = new URLSearchParams({ format, limit: 1000 });
+        if (includeAnalytics) params.set('include_analytics', true);
+        const res = await fetch(`/api/export/findings?${params}`);
+        if (!res.ok) throw new Error('Export fallito');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `findings_${Date.now()}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        this.showToast(`Export ${format.toUpperCase()} avviato`);
+      } catch (e) {
+        this.showToast('Errore export: ' + e.message, 'error');
+      }
+    },
+
+    // ── UI Helpers ────────────────────────────────────────────────────────────
+
+    formatDate,
+
+    statusBadgeClass(status) {
+      const map = {
+        COMPLETED_CLEAN: 'badge-success',
+        COMPLETED_WITH_FINDINGS: 'badge-warning',
+        PARTIAL_FAILED: 'badge-danger',
+        FAILED: 'badge-danger',
+        RUNNING: 'badge-info',
+      };
+      return map[status] || 'badge-neutral';
+    },
+
+    policyBadgeClass(policy) {
+      const map = { PASS: 'badge-success', BLOCK: 'badge-danger', UNKNOWN: 'badge-neutral' };
+      return map[policy] || 'badge-neutral';
+    },
+
+    copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => this.showToast('Copiato negli appunti'));
+    },
+  },
+}).mount('#app');

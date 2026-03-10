@@ -25,7 +25,6 @@ from app import app  # noqa: E402
 import db as _db  # noqa: E402
 import finding_management as _fm  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Shared fixture
 # ---------------------------------------------------------------------------
@@ -85,7 +84,17 @@ def client_with_data(isolated_db):
         conn.execute(
             "INSERT INTO findings (scan_id, timestamp, target_type, target_name, "
             "tool, category, severity, title, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("scan-a", "2024-03-01T10:01:00", "git", "myrepo", "bandit", "injection", "CRITICAL", "SQL Injection", "desc"),
+            (
+                "scan-a",
+                "2024-03-01T10:01:00",
+                "git",
+                "myrepo",
+                "bandit",
+                "injection",
+                "CRITICAL",
+                "SQL Injection",
+                "desc",
+            ),
         )
         conn.execute(
             "INSERT INTO findings (scan_id, timestamp, target_type, target_name, "

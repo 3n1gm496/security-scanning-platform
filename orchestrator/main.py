@@ -327,7 +327,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
             )
 
     if target.type in {"git", "local"}:
-        if settings["scanners"]["semgrep"].get("enabled", True):
+        if settings["scanners"]["semgrep"].get("enabled", False):
             execute_tool(
                 "semgrep",
                 lambda output_path: run_semgrep(
@@ -366,7 +366,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     "tags": settings["scanners"]["nuclei"].get("tags"),
                 },
             )
-        if settings["scanners"]["trivy"].get("enabled", True):
+        if settings["scanners"]["trivy"].get("enabled", False):
             execute_tool(
                 "trivy_fs",
                 lambda output_path: run_trivy_fs(
@@ -383,7 +383,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
                 },
             )
-        if settings["scanners"]["gitleaks"].get("enabled", True):
+        if settings["scanners"]["gitleaks"].get("enabled", False):
             use_git = Path(target_input, ".git").exists()
             execute_tool(
                 "gitleaks",
@@ -393,7 +393,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 ),
                 cache_context={"use_git_history": use_git},
             )
-        if settings["scanners"]["checkov"].get("enabled", True):
+        if settings["scanners"]["checkov"].get("enabled", False):
             execute_tool(
                 "checkov",
                 lambda output_path: run_checkov(target_input, output_path),
@@ -420,7 +420,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 ),
                 cache_context={"mode": "zap"},
             )
-        if settings["scanners"]["syft"].get("enabled", True):
+        if settings["scanners"]["syft"].get("enabled", False):
             execute_syft()
 
     elif target.type == "image":
@@ -445,7 +445,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     "tags": settings["scanners"]["nuclei"].get("tags"),
                 },
             )
-        if settings["scanners"]["trivy"].get("enabled", True):
+        if settings["scanners"]["trivy"].get("enabled", False):
             execute_tool(
                 "trivy_image",
                 lambda output_path: run_trivy_image(
@@ -469,7 +469,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 lambda raw_payload, output_path, **_: normalize_grype(scan_id, target, raw_payload, output_path),
                 cache_context={"mode": "grype"},
             )
-        if settings["scanners"]["syft"].get("enabled", True):
+        if settings["scanners"]["syft"].get("enabled", False):
             execute_syft()
     else:
         raise ValueError(f"Unsupported target type: {target.type}")

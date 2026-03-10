@@ -368,8 +368,8 @@ createApp({
       // Carica i dati reali dall'API
       const statusKeys = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
       Promise.all(statusKeys.map(s =>
-        apiFetch(`/api/findings/paginated?status=${s}&page_size=1`)
-          .then(r => r.pagination ? r.pagination.total : 0)
+        apiFetch(`/api/findings/paginated?status=${s}&per_page=1`)
+          .then(r => r.pagination ? r.pagination.count : 0)
           .catch(() => 0)
       )).then(counts => {
         if (this.charts.remediation) {
@@ -916,7 +916,25 @@ createApp({
       this.compareResult = null;
       try {
         const result = await apiFetch(`/api/scans/compare?scan_id_1=${this.compareIdA}&scan_id_2=${this.compareIdB}`);
-        this.compareResult = result;
+        // Normalizza la risposta API: l'API restituisce { scan_1, scan_2, diff: { new_count, ... } }
+        // Il template si aspetta { summary: { new, resolved, unchanged }, new_findings, resolved_findings }
+        if (result && result.diff) {
+          this.compareResult = {
+            scan_1: result.scan_1,
+            scan_2: result.scan_2,
+            summary: {
+              new: result.diff.new_count || 0,
+              resolved: result.diff.resolved_count || 0,
+              unchanged: result.diff.unchanged_count || 0,
+            },
+            new_findings: result.diff.new_findings || [],
+            resolved_findings: result.diff.resolved_findings || [],
+            new_by_severity: result.diff.new_by_severity || {},
+            resolved_by_severity: result.diff.resolved_by_severity || {},
+          };
+        } else {
+          this.compareResult = result;
+        }
       } catch (e) {
         this.showToast('Errore comparazione: ' + e.message, 'error');
       } finally {
@@ -960,7 +978,14 @@ createApp({
       try {
         const resp = await apiFetch('/api/notifications/preferences').catch(() => null);
         if (resp && resp.preferences) {
-          this.notifPrefs = { ...this.notifPrefs, ...resp.preferences };
+          // Non sovrascrivere user_email con l'identificatore interno (es. "admin"):
+          // il campo user_email nel DB è usato come chiave di lookup, non come email destinatario.
+          // Se il valore non contiene "@" non è un'email valida e va ignorato.
+          const prefs = { ...resp.preferences };
+          if (prefs.user_email && !prefs.user_email.includes('@')) {
+            delete prefs.user_email;
+          }
+          this.notifPrefs = { ...this.notifPrefs, ...prefs };
         }
       } catch (e) {
         console.debug('[loadNotificationPrefs] Could not load preferences, using defaults:', e.message);

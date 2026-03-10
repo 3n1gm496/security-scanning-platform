@@ -1,11 +1,15 @@
 services:
   dashboard:
+    build:
+      network: host
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
     volumes:
       - ./dashboard:/app
       - ./data:/data
 
   orchestrator:
+    build:
+      network: host
     # Per lo sviluppo, manteniamo il container in esecuzione per consentire l'esecuzione manuale dei comandi.
     command: ["tail", "-f", "/dev/null"]
     volumes:

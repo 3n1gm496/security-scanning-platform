@@ -7,7 +7,7 @@ from typing import Any
 from db_adapter import get_connection
 
 # Re-export get_connection so existing callers (app.py etc.) continue to work
-__all__ = ["get_connection"]
+__all__ = ["get_connection", "init_db"]
 
 _DB_PATH = os.environ.get("DASHBOARD_DB_PATH", "/data/security_scans.db")
 
@@ -273,3 +273,60 @@ def cache_hit_trend(db_path: str, days: int = 14) -> list[dict[str, Any]]:
         )
 
     return payload
+
+
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS scans (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_name TEXT NOT NULL,
+    target_value TEXT NOT NULL,
+    status TEXT NOT NULL,
+    policy_status TEXT NOT NULL,
+    findings_count INTEGER NOT NULL DEFAULT 0,
+    critical_count INTEGER NOT NULL DEFAULT 0,
+    high_count INTEGER NOT NULL DEFAULT 0,
+    medium_count INTEGER NOT NULL DEFAULT 0,
+    low_count INTEGER NOT NULL DEFAULT 0,
+    info_count INTEGER NOT NULL DEFAULT 0,
+    unknown_count INTEGER NOT NULL DEFAULT 0,
+    raw_report_dir TEXT NOT NULL DEFAULT '',
+    normalized_report_path TEXT NOT NULL DEFAULT '',
+    artifacts_json TEXT NOT NULL DEFAULT '{}',
+    tools_json TEXT NOT NULL DEFAULT '[]',
+    error_message TEXT
+);
+CREATE TABLE IF NOT EXISTS findings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_name TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    category TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    file TEXT,
+    line INTEGER,
+    package TEXT,
+    version TEXT,
+    cve TEXT,
+    remediation TEXT,
+    raw_reference TEXT,
+    fingerprint TEXT,
+    FOREIGN KEY (scan_id) REFERENCES scans(id)
+);
+CREATE INDEX IF NOT EXISTS idx_findings_scan_id ON findings(scan_id);
+CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+CREATE INDEX IF NOT EXISTS idx_findings_tool ON findings(tool);
+CREATE INDEX IF NOT EXISTS idx_findings_target_name ON findings(target_name);
+CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
+"""
+
+def init_db(db_path: str):
+    """Inizializza lo schema del database se non esiste."""
+    with _conn(db_path) as conn:
+        conn.executescript(SCHEMA_SQL)

@@ -52,7 +52,7 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 
 - **🔄 CI-Agnostic** — Integrabile con GitLab, Jenkins, Azure DevOps, GitHub Actions o cron/systemd
 - **🐳 Containerizzato** — Deploy rapido con Docker Compose su qualsiasi server Linux
-- **📊 Dashboard Centralizzata** — API REST + UI web per visualizzare scan, findings e trend
+- **📊 Dashboard Centralizzata** — API REST + UI web per visualizzare scan, findings e trend, con paginazione cursor-based e filtri per stato
 - **🔍 10+ Scanner OSS** — Semgrep, Bandit, Nuclei, Trivy, Grype, Gitleaks, Checkov, ZAP, Syft e altri
 - **📝 Normalizzazione Intelligente** — Output unificato in formato standard per tutti gli scanner
 - **🎯 Policy-based Blocking** — Blocco automatico della pipeline su finding critici
@@ -63,7 +63,7 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - **🔒 Path Traversal Protection** — Validazione e sanitizzazione degli input su tutti gli endpoint di scan
 - **🚀 Batch Scanning** — Scansione multipla di target da file YAML
 - **📈 Trending e History** — Tracking storico dei finding per analisi nel tempo
-- **📧 Email Notifications** — Alert critici e preferenze notifiche per utente
+- **📧 Email Notifications** — Alert critici e preferenze di notifica granulari per utente (email, canale preferito, digest settimanali/giornalieri)
 - **📡 Prometheus Metrics** — Endpoint `/metrics` per osservabilità e monitoring
 - **🔁 GitLab Enterprise CI** — Pipeline `.gitlab-ci.yml` completa (lint → test → SAST → build → scan-self → deploy)
 
@@ -216,7 +216,7 @@ mkdir -p data/{reports,workspaces,cache/trivy,backups}
 
 # Build e avvio
 docker compose build
-docker compose up -d dashboard orchestrator
+docker compose up -d dashboard
 ```
 
 **Dashboard:** `http://localhost:8080`  

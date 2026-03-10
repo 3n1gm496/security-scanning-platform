@@ -9,6 +9,27 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e il p
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-03-10
+
+Questa release completa la modernizzazione del frontend e degli endpoint API, allineando la paginazione, correggendo le preferenze di notifica e migliorando la compatibilità con Docker in ambienti sandbox.
+
+### Added
+
+- **Filtro per stato nella paginazione dei findings**: Aggiunto parametro `status` alla route `GET /api/findings/paginated` e al `FindingsPaginator` per filtrare i risultati per stato di triage (`open`, `resolved`, `in_progress`, etc.).
+- **Test di integrazione per filtro stato**: Aggiunto `test_findings_paginator_with_status_filter` per validare il nuovo filtro.
+- **Test di integrazione per preferenze notifiche**: Aggiunto `test_notification_preferences_api_flow` per un test E2E del salvataggio e recupero delle preferenze.
+
+### Changed
+
+- **Allineamento paginazione frontend**: La funzione `loadFindings()` in `app.js` ora usa esclusivamente l'endpoint `/api/findings/paginated` per tutti i filtri, garantendo una paginazione cursor-based consistente.
+- **Correzione estrazione cursore**: `loadFindings()` e `loadScans()` ora estraggono correttamente `result.pagination.next_cursor` invece di `result.next_cursor`, allineandosi alla struttura della risposta del backend.
+- **Correzione endpoint notifiche**: L'endpoint per le preferenze di notifica è stato corretto da `/api/settings/notifications` a `/api/notifications/preferences` in `app.js`.
+- **Allineamento campi notifiche**: I nomi dei campi nel form delle notifiche (`app.html`) e nel modello Vue (`app.js`) sono stati allineati allo schema del backend (`notify_critical` → `critical_alerts`, etc.).
+
+### Fixed
+
+- **Compatibilità Docker in sandbox**: Abilitato `network_mode: "host"` nel `docker-compose.yml` per il servizio `dashboard`, risolvendo l'errore di creazione della rete in ambienti senza supporto per `iptables raw`.
+
 ---
 
 ## [1.1.0] — 2026-03-09
@@ -145,6 +166,7 @@ Versione iniziale della piattaforma.
 
 ---
 
-[Unreleased]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/3n1gm496/security-scanning-platform/releases/tag/v1.0.0

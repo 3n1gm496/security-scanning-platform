@@ -2,6 +2,7 @@
 # Edit this file, then run: pip-compile requirements-test.in
 -r requirements.in
 pytest>=7.0
-pytest-asyncio>=0.23
+pytest-asyncio>=1.0
 pytest-cov>=4.0
 pytest-mock>=3.12
+httpx>=0.28

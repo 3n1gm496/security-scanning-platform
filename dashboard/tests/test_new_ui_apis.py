@@ -38,9 +38,21 @@ def seeded_client(isolated_db):
             "high_count, medium_count, low_count, info_count, unknown_count) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "scan-001", "2024-01-01T12:00:00", "2024-01-01T12:05:00",
-                "url", "example.com", "http://example.com",
-                "completed", "pass", 1, 0, 1, 0, 0, 0, 0,
+                "scan-001",
+                "2024-01-01T12:00:00",
+                "2024-01-01T12:05:00",
+                "url",
+                "example.com",
+                "http://example.com",
+                "completed",
+                "pass",
+                1,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
             ),
         )
         conn.execute(
@@ -49,9 +61,21 @@ def seeded_client(isolated_db):
             "high_count, medium_count, low_count, info_count, unknown_count) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "scan-002", "2024-01-02T12:00:00", "2024-01-02T12:05:00",
-                "url", "example.org", "http://example.org",
-                "completed", "pass", 0, 0, 0, 0, 0, 0, 0,
+                "scan-002",
+                "2024-01-02T12:00:00",
+                "2024-01-02T12:05:00",
+                "url",
+                "example.org",
+                "http://example.org",
+                "completed",
+                "pass",
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             ),
         )
         conn.execute(
@@ -59,8 +83,14 @@ def seeded_client(isolated_db):
             "tool, category, severity, title, description) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "scan-001", "2024-01-01T12:02:00", "url", "example.com",
-                "sqlmap", "sqli", "HIGH", "SQL Injection",
+                "scan-001",
+                "2024-01-01T12:02:00",
+                "url",
+                "example.com",
+                "sqlmap",
+                "sqli",
+                "HIGH",
+                "SQL Injection",
                 "A SQL injection vulnerability was found.",
             ),
         )
@@ -77,6 +107,7 @@ def seeded_client(isolated_db):
 # ---------------------------------------------------------------------------
 # Single resource endpoints
 # ---------------------------------------------------------------------------
+
 
 def test_get_single_scan(seeded_client):
     """GET /api/scans/{scan_id} returns scan details — uses string scan_id."""
@@ -112,6 +143,7 @@ def test_get_single_finding_not_found(seeded_client):
 # Scan comparison
 # ---------------------------------------------------------------------------
 
+
 def test_compare_scans(seeded_client):
     """GET /api/scans/compare returns a comparison of two scans."""
     resp = seeded_client.get("/api/scans/compare?scan_id_1=scan-001&scan_id_2=scan-002")
@@ -124,6 +156,7 @@ def test_compare_scans(seeded_client):
 # ---------------------------------------------------------------------------
 # Chart endpoints
 # ---------------------------------------------------------------------------
+
 
 def test_remediation_progress_chart(seeded_client):
     """GET /api/chart/remediation-progress returns chart data."""
@@ -140,6 +173,7 @@ def test_cve_distribution_chart(seeded_client):
 # ---------------------------------------------------------------------------
 # Notification preferences
 # ---------------------------------------------------------------------------
+
 
 def test_get_notification_preferences_default(seeded_client):
     """GET /api/notifications/preferences returns default preferences."""

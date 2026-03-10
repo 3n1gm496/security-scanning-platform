@@ -149,9 +149,11 @@ app.add_middleware(
 # su un database vuoto (es. primo avvio, ambiente di sviluppo, CI).
 try:
     from db import init_db
+
     init_db(DB_PATH)
 except Exception as _init_err:
     import logging as _logging
+
     _logging.getLogger(__name__).warning("DB schema init warning: %s", _init_err)
 
 # Initialize RBAC tables

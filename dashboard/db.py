@@ -326,6 +326,7 @@ CREATE INDEX IF NOT EXISTS idx_findings_target_name ON findings(target_name);
 CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
 """
 
+
 def init_db(db_path: str):
     """Inizializza lo schema del database se non esiste."""
     with _conn(db_path) as conn:

@@ -149,6 +149,13 @@ createApp({
       showAcceptRiskForm: false,
       acceptRiskJustification: '',
       acceptRiskExpiry: '',
+
+      // ── Dark mode
+      darkMode: false,
+
+      // ── UI overlays
+      showShortcutsHelp: false,
+      showFindingModal: false,
     };
   },
 
@@ -180,15 +187,77 @@ createApp({
     },
   },
 
-  async mounted() {
+   async mounted() {
     this.debouncedLoadFindings = debounce(() => this.loadFindings(true), 400);
+
+    // ── URL Routing: read initial page from URL hash
+    const validPages = ['dashboard', 'scans', 'findings', 'analytics', 'settings', 'compare'];
+    const hashPage = window.location.hash.replace('#', '');
+    const initialPage = validPages.includes(hashPage) ? hashPage : 'dashboard';
+    if (initialPage !== 'dashboard') this.currentPage = initialPage;
+    history.replaceState({ page: initialPage }, '', '#' + initialPage);
+
+    // ── History API: back/forward button support
+    window.addEventListener('popstate', (e) => {
+      const page = (e.state && e.state.page) ? e.state.page : 'dashboard';
+      if (validPages.includes(page)) {
+        this.currentPage = page;
+        if (page === 'dashboard') this.initDashboardCharts();
+        else if (page === 'scans') this.loadScans(true);
+        else if (page === 'findings') this.loadFindings(true);
+        else if (page === 'analytics') this.loadAnalytics();
+        else if (page === 'settings') { this.settingsTab = 'apikeys'; this.loadApiKeys(); }
+        else if (page === 'compare') this.loadCompareScanList();
+      }
+    });
+
+    // ── Dark mode: restore preference from localStorage
+    const savedTheme = localStorage.getItem('ssp-theme');
+    if (savedTheme === 'dark') {
+      this.darkMode = true;
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+
+    // ── Keyboard shortcuts (GitHub-style G+key navigation)
+    this._gPressed = false;
+    this._gTimer = null;
+    this._keyHandler = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === '?') { this.showShortcutsHelp = !this.showShortcutsHelp; return; }
+      if (e.key === 'Escape') {
+        this.showShortcutsHelp = false;
+        this.showFindingModal = false;
+        this.showScanModal = false;
+        return;
+      }
+      if ((e.key === 'n' || e.key === 'N') && this.currentPage === 'scans') {
+        this.showScanModal = true; return;
+      }
+      if (e.key === 'r' || e.key === 'R') { this.refreshCurrentPage(); return; }
+      if (this._gPressed) {
+        this._gPressed = false;
+        clearTimeout(this._gTimer);
+        const navMap = { d: 'dashboard', s: 'scans', f: 'findings', a: 'analytics', x: 'settings', c: 'compare' };
+        const target = navMap[e.key.toLowerCase()];
+        if (target) this.navigate(target);
+        return;
+      }
+      if (e.key === 'g') {
+        this._gPressed = true;
+        this._gTimer = setTimeout(() => { this._gPressed = false; }, 1000);
+      }
+    };
+    document.addEventListener('keydown', this._keyHandler);
+
     await this.initDashboardCharts();
+    if (initialPage !== 'dashboard') await this.navigate(initialPage);
     this.startAutoRefresh();
   },
-
   beforeUnmount() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     Object.values(this.charts).forEach(c => c && c.destroy());
+    if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
   },
 
   methods: {
@@ -196,6 +265,8 @@ createApp({
 
     async navigate(page) {
       this.currentPage = page;
+      // Update URL hash for bookmarkability and back/forward support
+      history.pushState({ page }, '', '#' + page);
       window.scrollTo(0, 0);
       await nextTick();
       if (page === 'dashboard') await this.initDashboardCharts();
@@ -998,6 +1069,23 @@ createApp({
 
     copyToClipboard(text) {
       navigator.clipboard.writeText(text).then(() => this.showToast('Copiato negli appunti'));
+    },
+
+    // ── Dark Mode ────────────────────────────────────────────────────────────────
+    toggleDarkMode() {
+      this.darkMode = !this.darkMode;
+      if (this.darkMode) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('ssp-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('ssp-theme', 'light');
+      }
+    },
+
+    // ── Export SARIF ────────────────────────────────────────────────────────────
+    async exportSarif() {
+      await this.exportFindings('sarif');
     },
   },
 }).mount('#app');

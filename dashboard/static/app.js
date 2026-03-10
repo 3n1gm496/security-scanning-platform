@@ -808,7 +808,7 @@ createApp({
       this.compareLoading = true;
       this.compareResult = null;
       try {
-        const result = await apiFetch(`/api/scans/compare?scan_a=${this.compareIdA}&scan_b=${this.compareIdB}`);
+        const result = await apiFetch(`/api/scans/compare?scan_id_1=${this.compareIdA}&scan_id_2=${this.compareIdB}`);
         this.compareResult = result;
       } catch (e) {
         this.showToast('Errore comparazione: ' + e.message, 'error');

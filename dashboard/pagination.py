@@ -150,6 +150,7 @@ class FindingsPaginator:
         severity_filter: list[str] | None = None,
         tool_filter: list[str] | None = None,
         scan_id: int | None = None,
+        status_filter: str | None = None,
         cursor: str | None = None,
         sort_by: str = "id",
         sort_order: str = "ASC",
@@ -162,6 +163,7 @@ class FindingsPaginator:
             severity_filter: List of severities to include
             tool_filter: List of tools to include
             scan_id: Optional scan ID filter
+            status_filter: Filter by triage status via finding_states JOIN
             cursor: Pagination cursor
             sort_by: Column to sort by
             sort_order: ASC or DESC
@@ -202,24 +204,45 @@ class FindingsPaginator:
             where_clauses.append("scan_id = ?")
             params.append(scan_id)
 
-        # Cursor
+        # Status filter: requires LEFT JOIN with finding_states
+        use_status_join = status_filter is not None
+        if use_status_join:
+            # Treat findings with no state record as 'open'
+            where_clauses.append("COALESCE(fs.status, 'open') = ?")
+            params.append(status_filter)
+
+        # Cursor — use table-qualified column when JOIN is active
         if cursor:
             cursor_val = self._decode_cursor(cursor)
             op = ">" if safe_sort_order == "ASC" else "<"
-            where_clauses.append(f"{safe_sort_by} {op} ?")
+            col_ref = f"f.{safe_sort_by}" if use_status_join else safe_sort_by
+            where_clauses.append(f"{col_ref} {op} ?")
             params.append(cursor_val)
 
         where_sql = " AND ".join(where_clauses)
 
-        # Query with +1 to detect has_next
-        query = f"""
-            SELECT id, scan_id, title, description, severity, file,
-                   line, tool, cve, fingerprint, timestamp
-            FROM findings
-            WHERE {where_sql}
-            ORDER BY {safe_sort_by} {safe_sort_order}
-            LIMIT ?
-            """
+        # Build query — use JOIN only when status filter is active
+        if use_status_join:
+            query = f"""
+                SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,
+                       f.line, f.tool, f.cve, f.fingerprint, f.timestamp,
+                       COALESCE(fs.status, 'open') AS triage_status
+                FROM findings f
+                LEFT JOIN finding_states fs ON fs.finding_id = f.id
+                WHERE {where_sql}
+                ORDER BY f.{safe_sort_by} {safe_sort_order}
+                LIMIT ?
+                """
+        else:
+            # Standard query without JOIN
+            query = f"""
+                SELECT id, scan_id, title, description, severity, file,
+                       line, tool, cve, fingerprint, timestamp
+                FROM findings
+                WHERE {where_sql}
+                ORDER BY {safe_sort_by} {safe_sort_order}
+                LIMIT ?
+                """
         params.append(self.per_page + 1)
 
         rows = conn.execute(query, params).fetchall()

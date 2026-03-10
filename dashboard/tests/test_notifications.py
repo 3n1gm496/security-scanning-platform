@@ -46,3 +46,45 @@ def test_get_subscribers():
     subscribers = NotificationPreferencesManager.get_subscribers_for_alerts(conn, "critical_alerts")
     assert "user1@example.com" in subscribers
     assert "user2@example.com" not in subscribers
+
+
+import os
+from fastapi.testclient import TestClient
+
+os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
+os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
+
+from app import app  # noqa: E402
+
+
+def test_notification_preferences_api_flow(isolated_db):
+    """Test the full API flow for saving and retrieving notification preferences."""
+    test_prefs = {
+        "user_email": "test.user@example.com",
+        "critical_alerts": False,
+        "high_alerts": True,
+        "scan_summaries": True,
+        "weekly_digest": False,
+    }
+
+    with TestClient(app) as client:
+        # Authenticate
+        client.post("/login", data={"username": "testuser", "password": "testpass"})
+
+        # 1. Save preferences
+        save_response = client.post("/api/notifications/preferences", json=test_prefs)
+        assert save_response.status_code == 200
+        assert save_response.json()["status"] == "saved"
+
+        # 2. Retrieve preferences
+        get_response = client.get("/api/notifications/preferences")
+        assert get_response.status_code == 200
+        retrieved_prefs = get_response.json().get("preferences", {})
+
+        # 3. Verify they match
+        # user_email in the DB is the user_identifier (username), not the form email field
+        assert retrieved_prefs["user_email"] == "testuser"
+        assert retrieved_prefs["critical_alerts"] == test_prefs["critical_alerts"]
+        assert retrieved_prefs["high_alerts"] == test_prefs["high_alerts"]
+        assert retrieved_prefs["scan_summaries"] == test_prefs["scan_summaries"]
+        assert retrieved_prefs["weekly_digest"] == test_prefs["weekly_digest"]

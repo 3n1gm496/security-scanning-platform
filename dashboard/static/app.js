@@ -123,11 +123,12 @@ createApp({
 
       // ── Notifications settings
       notifPrefs: {
-        email: '',
-        notify_critical: true,
-        notify_high: false,
-        daily_digest: false,
-        notify_scan_complete: false,
+        user_email: '',
+        critical_alerts: true,
+        high_alerts: false,
+        weekly_digest: false,
+        scan_summaries: false,
+        preferred_channel: 'email',
       },
 
       // ── Compare page
@@ -457,8 +458,9 @@ createApp({
         if (this.scansCursor) params.set('cursor', this.scansCursor);
         const result = await apiFetch(`/api/scans/paginated?${params}`);
         this.scans = result.items || [];
-        this.scansTotal = result.total || this.scans.length;
-        this.scansCursor = result.next_cursor || null;
+        const scanPag = result.pagination || {};
+        this.scansTotal = scanPag.count || this.scans.length;
+        this.scansCursor = scanPag.next_cursor || null;
       } catch (e) {
         this.showToast('Errore nel caricamento delle scansioni: ' + e.message, 'error');
       } finally {
@@ -529,22 +531,15 @@ createApp({
         if (this.findingsFilter.tool) params.set('tool', this.findingsFilter.tool);
         if (this.findingsCursor) params.set('cursor', this.findingsCursor);
 
-        let result;
-        if (this.findingsFilter.status) {
-          // Use the by-status endpoint for status filtering
-          const statusParams = new URLSearchParams({ limit: 50 });
-          statusParams.set('status', this.findingsFilter.status);
-          if (this.findingsFilter.target) statusParams.set('target', this.findingsFilter.target);
-          const items = await apiFetch(`/api/findings/by-status?${statusParams}`);
-          result = { items: items || [], next_cursor: null, total: (items || []).length };
-        } else {
-          if (this.findingsFilter.target) params.set('target', this.findingsFilter.target);
-          result = await apiFetch(`/api/findings/paginated?${params}`);
-        }
+        // Always use cursor-based pagination endpoint (supports status filter via LEFT JOIN)
+        if (this.findingsFilter.status) params.set('status', this.findingsFilter.status);
+        if (this.findingsFilter.target) params.set('target', this.findingsFilter.target);
+        const result = await apiFetch(`/api/findings/paginated?${params}`);
 
         this.findings = result.items || [];
-        this.findingsTotal = result.total || this.findings.length;
-        this.findingsCursor = result.next_cursor || null;
+        const pag = result.pagination || {};
+        this.findingsTotal = pag.count || this.findings.length;
+        this.findingsCursor = pag.next_cursor || null;
       } catch (e) {
         this.showToast('Errore nel caricamento dei findings: ' + e.message, 'error');
       } finally {
@@ -920,23 +915,23 @@ createApp({
 
     async loadNotificationPrefs() {
       try {
-        const prefs = await apiFetch('/api/settings/notifications').catch(() => null);
-        if (prefs) this.notifPrefs = { ...this.notifPrefs, ...prefs };
+        const resp = await apiFetch('/api/notifications/preferences').catch(() => null);
+        if (resp && resp.preferences) {
+          this.notifPrefs = { ...this.notifPrefs, ...resp.preferences };
+        }
       } catch { /* use defaults */ }
     },
 
     async saveNotificationPrefs() {
       try {
-        await apiFetch('/api/settings/notifications', {
+        await apiFetch('/api/notifications/preferences', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.notifPrefs),
         });
         this.showToast('Preferenze salvate');
       } catch (e) {
-        // Endpoint may not exist yet — save locally
-        localStorage.setItem('notif_prefs', JSON.stringify(this.notifPrefs));
-        this.showToast('Preferenze salvate localmente');
+        this.showToast('Errore salvataggio preferenze: ' + e.message, 'error');
       }
     },
 

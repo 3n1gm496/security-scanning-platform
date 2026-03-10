@@ -1219,6 +1219,7 @@ def paginate_findings(
     severity: str = Query(""),
     tool: str = Query(""),
     scan_id: int | None = Query(None),
+    status: str | None = Query(None),
     cursor: str | None = Query(None),
     per_page: int = Query(50, ge=1, le=1000),
     sort_by: str = Query("id"),
@@ -1232,6 +1233,7 @@ def paginate_findings(
     - severity: Comma-separated list of severities (CRITICAL,HIGH,MEDIUM,LOW)
     - tool: Comma-separated list of tools (semgrep,bandit,nuclei,etc)
     - scan_id: Filter by specific scan ID
+    - status: Filter by triage status (open, in_progress, resolved, false_positive, accepted_risk)
     - cursor: Pagination cursor from previous response
     - per_page: Items per page (1-1000, default 50)
     - sort_by: Column to sort by (default: id)
@@ -1248,6 +1250,7 @@ def paginate_findings(
             severity_filter=severity_list if severity_list else None,
             tool_filter=tool_list if tool_list else None,
             scan_id=scan_id,
+            status_filter=status if status else None,
             cursor=cursor,
             sort_by=sort_by,
             sort_order=sort_order,

@@ -72,7 +72,7 @@ services:
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
     # network_mode: host è necessario in ambienti senza iptables raw (sandbox, alcuni CI)
     # Decommentare la riga seguente se si ottiene l'errore "can't initialize iptables table `raw'"
-    # network_mode: "host"
+    network_mode: "host"
     depends_on:
       postgres:
         condition: service_healthy

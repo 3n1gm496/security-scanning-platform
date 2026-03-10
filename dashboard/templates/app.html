@@ -810,33 +810,33 @@
           <div class="settings-form">
             <div class="form-group">
               <label class="form-label">Email destinatario</label>
-              <input type="email" v-model="notifPrefs.email" class="filter-input" placeholder="security@example.com">
+              <input type="email" v-model="notifPrefs.user_email" class="filter-input" placeholder="security@example.com">
             </div>
             <div class="form-group">
               <label class="form-label">Notifica per finding Critical</label>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.notify_critical">
+                <input type="checkbox" v-model="notifPrefs.critical_alerts">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
               <label class="form-label">Notifica per finding High</label>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.notify_high">
+                <input type="checkbox" v-model="notifPrefs.high_alerts">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
-              <label class="form-label">Digest giornaliero</label>
+              <label class="form-label">Digest settimanale</label>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.daily_digest">
+                <input type="checkbox" v-model="notifPrefs.weekly_digest">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
               <label class="form-label">Notifica al completamento scansione</label>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.notify_scan_complete">
+                <input type="checkbox" v-model="notifPrefs.scan_summaries">
                 <span class="toggle-slider"></span>
               </label>
             </div>

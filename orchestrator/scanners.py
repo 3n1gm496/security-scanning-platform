@@ -268,11 +268,15 @@ def run_bandit(target_path: str, output_path: str) -> dict[str, Any]:
         # create empty output for consistency
         Path(output_path).write_text('{"results": []}', encoding="utf-8")
         return {"exit_code": 0, "stdout_path": output_path, "stderr": ""}
-    command = ["bandit", "-f", "json", "-r", target_path]
+    # Use -o to write directly to file: avoids progress bar / rich output
+    # polluting stdout which would break JSON parsing.
+    command = ["bandit", "-f", "json", "-o", output_path, "-r", target_path]
     code, stdout, stderr = run_command(command, timeout=3600)
     if code not in (0, 1):
         raise ScannerError(f"bandit execution failed: {stderr or stdout}")
-    Path(output_path).write_text(stdout or '{"results": []}', encoding="utf-8")
+    # Ensure output file exists even if bandit produced no findings
+    if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
+        Path(output_path).write_text('{"results": [], "errors": []}', encoding="utf-8")
     return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
 
 

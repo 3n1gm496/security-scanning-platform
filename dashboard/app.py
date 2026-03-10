@@ -263,7 +263,10 @@ async def security_middleware(request: Request, call_next):
     # for Jinja2 templates and Chart.js canvas rendering.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        # Vue 3 runtime-only (vue.global.prod.js) compiles in-DOM templates via eval();
+        # 'unsafe-eval' is required for the SPA to mount. To remove it, pre-compile
+        # templates with a build tool (Vite/webpack) and switch to vue.esm-bundler.js.
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
@@ -663,7 +666,7 @@ def export_findings_endpoint(
     severity: str | None = None,
     tool: str | None = None,
     target: str | None = None,
-    scan_id: int | None = None,
+    scan_id: str | None = None,
     include_analytics: bool = Query(False),
     auth: AuthContext = Depends(require_auth),
 ) -> Response:
@@ -677,9 +680,10 @@ def export_findings_endpoint(
     # Get scan info if scan_id provided
     scan_info = {}
     if scan_id:
-        scans = list_scans(DB_PATH, limit=1)
+        # Search across all scans (not just the most recent one) to find the matching scan
+        scans = list_scans(DB_PATH, limit=10000)
         for scan in scans:
-            if scan.get("id") == str(scan_id):
+            if scan.get("id") == scan_id:
                 scan_info = scan
                 break
 
@@ -954,16 +958,16 @@ def api_get_finding_state(finding_id: int, auth: AuthContext = Depends(require_a
 )
 def api_update_finding_status(
     finding_id: int,
-    status: str = Form(...),
+    status_value: str = Form(...),
     notes: str | None = Form(None),
     assigned_to: str | None = Form(None),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Update finding status."""
     try:
-        finding_status = FindingStatus(status)
+        finding_status = FindingStatus(status_value)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status}")
+        raise HTTPException(status_code=400, detail=f"Invalid status: {status_value}")
 
     result = update_finding_status(
         finding_id,
@@ -1218,7 +1222,7 @@ def paginate_findings(
     search: str = Query(""),
     severity: str = Query(""),
     tool: str = Query(""),
-    scan_id: int | None = Query(None),
+    scan_id: str | None = Query(None),
     status: str | None = Query(None),
     cursor: str | None = Query(None),
     per_page: int = Query(50, ge=1, le=1000),

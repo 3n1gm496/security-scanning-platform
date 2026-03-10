@@ -131,6 +131,8 @@ jobs:
     - name: Build dashboard image
       uses: docker/build-push-action@v5
       with:
-        context: ./dashboard
+        # Dashboard Dockerfile requires root context to copy orchestrator/ and config/
+        context: .
+        file: dashboard/Dockerfile
         push: false
         tags: security-scanner-dashboard:test

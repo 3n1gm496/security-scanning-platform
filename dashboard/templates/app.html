@@ -449,6 +449,13 @@
                 <option value="risk_accepted">Risk Accepted</option>
               </select>
             </div>
+            <div class="filter-group" v-if="findingsFilter.scan_id">
+              <label class="filter-label">Scan ID</label>
+              <div class="filter-scan-id">
+                <code class="scan-id-badge" :title="findingsFilter.scan_id">{{ findingsFilter.scan_id.substring(0, 8) }}…</code>
+                <button class="btn-icon-sm" @click="findingsFilter.scan_id = ''; loadFindings(true)" title="Rimuovi filtro scan">✕</button>
+              </div>
+            </div>
             <button class="btn-secondary btn-sm" @click="resetFindingsFilter">Reset</button>
           </div>
           <!-- Export bar -->

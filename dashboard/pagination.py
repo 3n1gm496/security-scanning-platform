@@ -149,7 +149,7 @@ class FindingsPaginator:
         search: str = "",
         severity_filter: list[str] | None = None,
         tool_filter: list[str] | None = None,
-        scan_id: int | None = None,
+        scan_id: str | None = None,
         status_filter: str | None = None,
         cursor: str | None = None,
         sort_by: str = "id",

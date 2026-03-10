@@ -86,7 +86,8 @@ createApp({
       findingsPage: 1,
       findingsCursor: null,
       findingsCursorStack: [],
-      findingsFilter: { search: '', severity: '', tool: '', target: '', status: '' },
+      findingsFilter: { search: '', severity: '', tool: '', target: '', status: '', scan_id: '' },
+      findingsSort: { by: 'id', order: 'ASC' },
       selectedFindings: [],
       bulkStatus: '',
 
@@ -324,33 +325,39 @@ createApp({
       const canvas = this.$refs.remediationChart;
       if (!canvas) return;
       if (this.charts.remediation) this.charts.remediation.destroy();
-      // Count findings by mgmt_status from recentScans or use placeholder
-      const statusCounts = { new: 0, acknowledged: 0, in_progress: 0, resolved: 0, false_positive: 0, risk_accepted: 0 };
-      // We'll load from the API if available, else show placeholder
-      apiFetch('/api/findings/by-status?status=new&limit=1').then(() => {}).catch(() => {});
       const labels = ['New', 'Acknowledged', 'In Progress', 'Resolved', 'False Positive', 'Risk Accepted'];
       const colors = ['#6b7280', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899'];
       this.charts.remediation = new Chart(canvas.getContext('2d'), {
-        type: 'doughnut',
+        type: 'bar',
         data: {
           labels,
           datasets: [{
-            data: [1, 1, 1, 1, 1, 1], // placeholder
+            label: 'Findings',
+            data: [0, 0, 0, 0, 0, 0], // aggiornato async
             backgroundColor: colors,
-            borderWidth: 2,
-            borderColor: '#fff',
+            borderRadius: 6,
+            borderSkipped: false,
           }],
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { padding: 12, font: { size: 11 } } } },
-          cutout: '60%',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} findings` } },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { precision: 0 } },
+          },
         },
       });
-      // Load real data
+      // Carica i dati reali dall'API
       const statusKeys = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
       Promise.all(statusKeys.map(s =>
-        apiFetch(`/api/findings/by-status?status=${s}&limit=1`).then(r => r.length || 0).catch(() => 0)
+        apiFetch(`/api/findings/paginated?status=${s}&page_size=1`)
+          .then(r => r.pagination ? r.pagination.total : 0)
+          .catch(() => 0)
       )).then(counts => {
         if (this.charts.remediation) {
           this.charts.remediation.data.datasets[0].data = counts;
@@ -364,25 +371,43 @@ createApp({
       if (!canvas) return;
       if (this.charts.severity) this.charts.severity.destroy();
       const data = this.severityBreakdown;
+      // Ordine fisso per leggibilità: dal più grave al meno grave
+      const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO', 'UNKNOWN'];
       const colorMap = {
         CRITICAL: '#dc2626', HIGH: '#f97316', MEDIUM: '#f59e0b',
         LOW: '#3b82f6', INFO: '#6b7280', UNKNOWN: '#9ca3af',
       };
+      const labels = order.filter(k => data[k] !== undefined && data[k] > 0);
+      const values = labels.map(k => data[k]);
+      const colors = labels.map(k => colorMap[k] || '#9ca3af');
       this.charts.severity = new Chart(canvas.getContext('2d'), {
-        type: 'doughnut',
+        type: 'bar',
         data: {
-          labels: Object.keys(data),
+          labels,
           datasets: [{
-            data: Object.values(data),
-            backgroundColor: Object.keys(data).map(k => colorMap[k] || '#9ca3af'),
-            borderWidth: 2,
-            borderColor: '#fff',
+            label: 'Findings',
+            data: values,
+            backgroundColor: colors,
+            borderRadius: 6,
+            borderSkipped: false,
           }],
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } } },
-          cutout: '65%',
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.parsed.x} findings`,
+              },
+            },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { precision: 0 } },
+            y: { grid: { display: false }, ticks: { font: { weight: '600' } } },
+          },
         },
       });
     },
@@ -509,8 +534,8 @@ createApp({
 
     viewScanFindings(scan) {
       this.selectedScan = null;
-      this.findingsFilter.target = '';
-      this.findingsFilter.search = scan.id;
+      // Reset all filters and set scan_id as dedicated filter
+      this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '', scan_id: scan.id };
       this.navigate('findings');
     },
 
@@ -534,6 +559,7 @@ createApp({
         // Always use cursor-based pagination endpoint (supports status filter via LEFT JOIN)
         if (this.findingsFilter.status) params.set('status', this.findingsFilter.status);
         if (this.findingsFilter.target) params.set('target', this.findingsFilter.target);
+        if (this.findingsFilter.scan_id) params.set('scan_id', this.findingsFilter.scan_id);
         const result = await apiFetch(`/api/findings/paginated?${params}`);
 
         this.findings = result.items || [];
@@ -562,7 +588,7 @@ createApp({
     },
 
     resetFindingsFilter() {
-      this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '' };
+      this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '', scan_id: '' };
       this.loadFindings(true);
     },
 
@@ -889,22 +915,24 @@ createApp({
       if (!this.newScanForm.name || !this.newScanForm.target) return;
       this.scanTriggering = true;
       try {
-        const payload = {
-          name: this.newScanForm.name,
-          target: this.newScanForm.target,
-          target_type: this.newScanForm.target_type,
-          async_mode: this.newScanForm.async_mode,
-        };
+        // Backend uses Form(...) parameters — must send as application/x-www-form-urlencoded
+        const formData = new URLSearchParams();
+        formData.append('name', this.newScanForm.name);
+        formData.append('target', this.newScanForm.target);
+        formData.append('target_type', this.newScanForm.target_type);
+        formData.append('async_mode', String(this.newScanForm.async_mode));
         await apiFetch('/api/scan/trigger', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formData.toString(),
         });
+        // Close modal and reset form on success
         this.showScanModal = false;
         this.newScanForm = { name: '', target: '', target_type: 'local', async_mode: true };
         this.showToast('Scansione avviata con successo');
         await this.loadScans(true);
       } catch (e) {
+        // Keep modal open on error so user can fix the input
         this.showToast('Errore avvio scansione: ' + e.message, 'error');
       } finally {
         this.scanTriggering = false;

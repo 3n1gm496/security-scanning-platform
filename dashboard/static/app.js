@@ -120,6 +120,35 @@ createApp({
       newKeyForm: { name: '', role: 'operator', expires_days: null },
       newKeyResult: '',
       newWebhookForm: { name: '', url: '', events: 'scan.completed', secret: '' },
+
+      // ── Notifications settings
+      notifPrefs: {
+        email: '',
+        notify_critical: true,
+        notify_high: false,
+        daily_digest: false,
+        notify_scan_complete: false,
+      },
+
+      // ── Compare page
+      compareIdA: '',
+      compareIdB: '',
+      compareScanList: [],
+      compareResult: null,
+      compareLoading: false,
+      selectedScans: [],
+
+      // ── New Scan modal
+      showScanModal: false,
+      scanTriggering: false,
+      newScanForm: { name: '', target: '', target_type: 'local', async_mode: true },
+
+      // ── Finding modal tabs
+      findingModalTab: 'info',
+      findingStatusNotes: '',
+      showAcceptRiskForm: false,
+      acceptRiskJustification: '',
+      acceptRiskExpiry: '',
     };
   },
 
@@ -130,6 +159,7 @@ createApp({
         scans: 'Scansioni',
         findings: 'Findings',
         analytics: 'Analytics',
+        compare: 'Confronta Scansioni',
         settings: 'Settings',
       };
       return titles[this.currentPage] || '';
@@ -140,6 +170,7 @@ createApp({
         scans: 'Storico delle esecuzioni di scansione',
         findings: 'Vulnerabilità rilevate e gestione del ciclo di vita',
         analytics: 'Risk scoring, compliance e trend',
+        compare: 'Analisi differenziale tra due scansioni',
         settings: 'Gestione API keys, webhooks e configurazione',
       };
       return subs[this.currentPage] || '';
@@ -174,6 +205,9 @@ createApp({
       if (page === 'settings') {
         this.settingsTab = 'apikeys';
         await this.loadApiKeys();
+      }
+      if (page === 'compare') {
+        await this.loadCompareScanList();
       }
     },
 
@@ -211,6 +245,46 @@ createApp({
       this.buildSeverityChart();
       this.buildToolChart();
       this.buildTrendChart();
+      this.buildRemediationChart();
+    },
+
+    buildRemediationChart() {
+      const canvas = this.$refs.remediationChart;
+      if (!canvas) return;
+      if (this.charts.remediation) this.charts.remediation.destroy();
+      // Count findings by mgmt_status from recentScans or use placeholder
+      const statusCounts = { new: 0, acknowledged: 0, in_progress: 0, resolved: 0, false_positive: 0, risk_accepted: 0 };
+      // We'll load from the API if available, else show placeholder
+      apiFetch('/api/findings/by-status?status=new&limit=1').then(() => {}).catch(() => {});
+      const labels = ['New', 'Acknowledged', 'In Progress', 'Resolved', 'False Positive', 'Risk Accepted'];
+      const colors = ['#6b7280', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899'];
+      this.charts.remediation = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: [1, 1, 1, 1, 1, 1], // placeholder
+            backgroundColor: colors,
+            borderWidth: 2,
+            borderColor: '#fff',
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { padding: 12, font: { size: 11 } } } },
+          cutout: '60%',
+        },
+      });
+      // Load real data
+      const statusKeys = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
+      Promise.all(statusKeys.map(s =>
+        apiFetch(`/api/findings/by-status?status=${s}&limit=1`).then(r => r.length || 0).catch(() => 0)
+      )).then(counts => {
+        if (this.charts.remediation) {
+          this.charts.remediation.data.datasets[0].data = counts;
+          this.charts.remediation.update();
+        }
+      });
     },
 
     buildSeverityChart() {
@@ -455,11 +529,16 @@ createApp({
 
     async openFindingDetail(finding) {
       this.selectedFinding = finding;
+      this.findingModalTab = 'info';
       this.newFindingStatus = '';
+      this.findingStatusNotes = '';
       this.assignTo = '';
       this.newComment = '';
       this.findingState = {};
       this.findingComments = [];
+      this.showAcceptRiskForm = false;
+      this.acceptRiskJustification = '';
+      this.acceptRiskExpiry = '';
       try {
         const [state, comments] = await Promise.all([
           apiFetch(`/api/findings/${finding.id}/state`),
@@ -467,6 +546,11 @@ createApp({
         ]);
         this.findingState = state;
         this.findingComments = comments;
+        // Try to load full finding detail with remediation guide
+        try {
+          const fullFinding = await apiFetch(`/api/findings/${finding.id}`);
+          this.selectedFinding = { ...finding, ...fullFinding };
+        } catch { /* use partial data */ }
       } catch (e) {
         // Non-critical: show modal anyway
       }
@@ -481,10 +565,45 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('status', this.newFindingStatus);
+        if (this.findingStatusNotes) fd.append('notes', this.findingStatusNotes);
         await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = this.newFindingStatus;
+        this.findingState.updated_at = new Date().toISOString();
         this.newFindingStatus = '';
+        this.findingStatusNotes = '';
         this.showToast('Stato aggiornato');
+        await this.loadFindings(true);
+      } catch (e) {
+        this.showToast('Errore: ' + e.message, 'error');
+      }
+    },
+
+    async markFalsePositive() {
+      if (!this.selectedFinding) return;
+      try {
+        const fd = new FormData();
+        fd.append('status', 'false_positive');
+        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        this.findingState.status = 'false_positive';
+        this.showToast('Finding segnato come false positive');
+        await this.loadFindings(true);
+      } catch (e) {
+        this.showToast('Errore: ' + e.message, 'error');
+      }
+    },
+
+    async acceptRisk() {
+      if (!this.selectedFinding || !this.acceptRiskJustification || !this.acceptRiskExpiry) return;
+      try {
+        const fd = new FormData();
+        fd.append('status', 'risk_accepted');
+        fd.append('notes', `Justification: ${this.acceptRiskJustification} | Expiry: ${this.acceptRiskExpiry}`);
+        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        this.findingState.status = 'risk_accepted';
+        this.showAcceptRiskForm = false;
+        this.acceptRiskJustification = '';
+        this.acceptRiskExpiry = '';
+        this.showToast('Rischio accettato');
         await this.loadFindings(true);
       } catch (e) {
         this.showToast('Errore: ' + e.message, 'error');
@@ -536,11 +655,38 @@ createApp({
         this.buildRiskChart();
         this.buildOwaspChart();
         this.buildAnalyticsTrendChart();
+        this.buildToolEffChart();
       } catch (e) {
         this.showToast('Errore caricamento analytics: ' + e.message, 'error');
       } finally {
         this.loading = false;
       }
+    },
+
+    buildToolEffChart() {
+      const canvas = this.$refs.toolEffChart;
+      if (!canvas || !this.analyticsData.toolEffectiveness) return;
+      if (this.charts.toolEff) this.charts.toolEff.destroy();
+      const tools = this.analyticsData.toolEffectiveness.slice(0, 8);
+      this.charts.toolEff = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: tools.map(t => t.tool),
+          datasets: [
+            { label: 'Critical', data: tools.map(t => t.critical_count || 0), backgroundColor: '#dc2626', borderRadius: 4 },
+            { label: 'High', data: tools.map(t => t.high_count || 0), backgroundColor: '#f97316', borderRadius: 4 },
+            { label: 'Medium', data: tools.map(t => t.medium_count || 0), backgroundColor: '#f59e0b', borderRadius: 4 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true, grid: { color: '#f3f4f6' } },
+          },
+        },
+      });
     },
 
     buildRiskChart() {
@@ -632,6 +778,95 @@ createApp({
       if (risk >= 50) return 'risk-high';
       if (risk >= 25) return 'risk-medium';
       return 'risk-low';
+    },
+
+    // ── Compare ───────────────────────────────────────────────────────────────
+
+    async loadCompareScanList() {
+      try {
+        const result = await apiFetch('/api/scans/paginated?per_page=50&sort_by=created_at&sort_order=DESC');
+        this.compareScanList = result.items || [];
+        // Pre-fill from selectedScans if coming from scans page
+        if (this.selectedScans.length === 2) {
+          this.compareIdA = this.selectedScans[0];
+          this.compareIdB = this.selectedScans[1];
+        }
+      } catch (e) {
+        this.showToast('Errore caricamento lista scansioni: ' + e.message, 'error');
+      }
+    },
+
+    goToCompare() {
+      if (this.selectedScans.length !== 2) return;
+      this.compareIdA = this.selectedScans[0];
+      this.compareIdB = this.selectedScans[1];
+      this.navigate('compare');
+    },
+
+    async runCompare() {
+      if (!this.compareIdA || !this.compareIdB || this.compareIdA === this.compareIdB) return;
+      this.compareLoading = true;
+      this.compareResult = null;
+      try {
+        const result = await apiFetch(`/api/scans/compare?scan_a=${this.compareIdA}&scan_b=${this.compareIdB}`);
+        this.compareResult = result;
+      } catch (e) {
+        this.showToast('Errore comparazione: ' + e.message, 'error');
+      } finally {
+        this.compareLoading = false;
+      }
+    },
+
+    // ── New Scan ──────────────────────────────────────────────────────────────
+
+    async triggerScan() {
+      if (!this.newScanForm.name || !this.newScanForm.target) return;
+      this.scanTriggering = true;
+      try {
+        const payload = {
+          name: this.newScanForm.name,
+          target: this.newScanForm.target,
+          target_type: this.newScanForm.target_type,
+          async_mode: this.newScanForm.async_mode,
+        };
+        await apiFetch('/api/scan/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        this.showScanModal = false;
+        this.newScanForm = { name: '', target: '', target_type: 'local', async_mode: true };
+        this.showToast('Scansione avviata con successo');
+        await this.loadScans(true);
+      } catch (e) {
+        this.showToast('Errore avvio scansione: ' + e.message, 'error');
+      } finally {
+        this.scanTriggering = false;
+      }
+    },
+
+    // ── Notification Preferences ──────────────────────────────────────────────
+
+    async loadNotificationPrefs() {
+      try {
+        const prefs = await apiFetch('/api/settings/notifications').catch(() => null);
+        if (prefs) this.notifPrefs = { ...this.notifPrefs, ...prefs };
+      } catch { /* use defaults */ }
+    },
+
+    async saveNotificationPrefs() {
+      try {
+        await apiFetch('/api/settings/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.notifPrefs),
+        });
+        this.showToast('Preferenze salvate');
+      } catch (e) {
+        // Endpoint may not exist yet — save locally
+        localStorage.setItem('notif_prefs', JSON.stringify(this.notifPrefs));
+        this.showToast('Preferenze salvate localmente');
+      }
     },
 
     // ── Settings ──────────────────────────────────────────────────────────────

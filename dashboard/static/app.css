@@ -1088,3 +1088,506 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
   .risk-row { grid-template-columns: 28px 1fr 60px; }
   .risk-bar-wrap { display: none; }
 }
+
+/* ── Alert Banner ─────────────────────────────────────────── */
+
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.alert-critical {
+  background: var(--color-critical-bg);
+  color: var(--color-critical);
+  border: 1px solid rgba(220,38,38,0.2);
+}
+
+.btn-alert {
+  margin-left: auto;
+  padding: 4px 12px;
+  background: var(--color-critical);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-alert:hover { background: #b91c1c; }
+
+/* ── Quick Actions ────────────────────────────────────────── */
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: all var(--transition);
+}
+
+.quick-action-btn:hover {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* ── Chart card full width ────────────────────────────────── */
+
+.chart-card-full {
+  grid-column: 1 / -1;
+}
+
+.chart-container-tall {
+  height: 220px;
+}
+
+/* ── Compare bar (in scans filters) ──────────────────────── */
+
+.compare-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--color-border-light);
+  margin-top: 8px;
+}
+
+.compare-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-primary);
+}
+
+/* ── Compare page ─────────────────────────────────────────── */
+
+.compare-selectors {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+
+.compare-selector-group {
+  flex: 1;
+  min-width: 220px;
+}
+
+.compare-vs {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  padding-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.compare-results {
+  margin-top: 0;
+}
+
+.compare-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.compare-summary-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  text-align: center;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.compare-summary-num {
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.compare-summary-label {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.compare-summary-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.compare-new .compare-summary-num { color: var(--color-critical); }
+.compare-resolved .compare-summary-num { color: var(--color-success); }
+.compare-unchanged .compare-summary-num { color: var(--color-text-muted); }
+
+.count-badge-danger {
+  background: var(--color-critical-bg);
+  color: var(--color-critical);
+}
+
+.count-badge-success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.empty-compare {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: var(--color-text-muted);
+  gap: 16px;
+  font-size: 15px;
+}
+
+/* ── Modal Tabs ───────────────────────────────────────────── */
+
+.modal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 24px;
+  background: var(--color-bg);
+}
+
+.modal-tabs .tab-btn {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modal-tabs .tab-btn:hover {
+  color: var(--color-primary);
+}
+
+.modal-tabs .tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ── Modal XL ─────────────────────────────────────────────── */
+
+.modal-xl {
+  max-width: 900px;
+  width: 95vw;
+}
+
+/* ── Risk Score Badge ─────────────────────────────────────── */
+
+.risk-score-badge {
+  padding: 4px 10px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Remediation Guide ────────────────────────────────────── */
+
+.remediation-header {
+  margin-bottom: 20px;
+}
+
+.remediation-meta {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.remediation-priority,
+.remediation-effort {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+}
+
+.remediation-steps {
+  margin-bottom: 20px;
+}
+
+.remediation-steps h4,
+.remediation-references h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+
+.steps-list {
+  list-style: none;
+  counter-reset: steps;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-item {
+  counter-increment: steps;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.step-item::before {
+  content: counter(steps);
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.references-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.references-list li {
+  font-size: 13px;
+}
+
+/* ── Quick Mgmt Actions ───────────────────────────────────── */
+
+.quick-mgmt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.accept-risk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--color-warning-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(217,119,6,0.2);
+}
+
+/* ── Comment User Avatar ──────────────────────────────────── */
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.comment-user-avatar {
+  width: 28px;
+  height: 28px;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Toggle Switch ────────────────────────────────────────── */
+
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  transition: background var(--transition);
+  position: relative;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  top: 3px;
+  left: 3px;
+  transition: transform var(--transition);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--color-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+
+/* ── Settings Form ────────────────────────────────────────── */
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 480px;
+  padding: 8px 0;
+}
+
+.settings-form .form-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-form .form-group .form-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+/* ── Sidebar SVG Icons ────────────────────────────────────── */
+
+.logo-icon-svg {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.nav-icon-svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--sidebar-text);
+  transition: color var(--transition);
+}
+
+.nav-item.active .nav-icon-svg,
+.nav-item:hover .nav-icon-svg {
+  color: var(--sidebar-text-active);
+}
+
+/* ── Mini bar CWE ─────────────────────────────────────────── */
+
+.mini-bar-cwe {
+  background: var(--color-info);
+}
+
+/* ── Btn Danger ───────────────────────────────────────────── */
+
+.btn-danger {
+  padding: 4px 10px;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid rgba(220,38,38,0.2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-danger:hover {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+/* ── Btn Block ────────────────────────────────────────────── */
+
+.btn-block {
+  width: 100%;
+  text-align: center;
+}
+
+/* ── Card actions ─────────────────────────────────────────── */
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Responsive additions ─────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .compare-summary-grid { grid-template-columns: 1fr; }
+  .compare-selectors { flex-direction: column; }
+  .compare-vs { padding-bottom: 0; }
+}
+
+@media (max-width: 768px) {
+  .quick-actions { grid-template-columns: 1fr; }
+  .compare-summary-grid { grid-template-columns: 1fr; }
+}

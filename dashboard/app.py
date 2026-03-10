@@ -1274,6 +1274,50 @@ def paginate_scans(
 
 
 # Charting endpoints
+@app.get("/api/findings/{finding_id}")
+def api_get_finding(
+    finding_id: int,
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Get a single finding by ID with enriched remediation data."""
+    with get_connection(DB_PATH) as conn:
+        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+    if not finding:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
+    finding_dict = dict(finding)
+    try:
+        remediation = RemediationEngine.generate_remediation(finding_dict)
+        finding_dict["remediation_guide"] = remediation
+    except Exception:
+        finding_dict["remediation_guide"] = {}
+    return finding_dict
+
+
+@app.get("/api/scans/{scan_id}")
+def api_get_scan(
+    scan_id: int,
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Get a single scan by ID with its findings summary."""
+    with get_connection(DB_PATH) as conn:
+        scan = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
+        if not scan:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+        scan_dict = dict(scan)
+        rows = conn.execute(
+            "SELECT severity, COUNT(*) as count FROM findings WHERE scan_id = ? GROUP BY severity",
+            (scan_id,),
+        ).fetchall()
+        scan_dict["severity_breakdown"] = {r["severity"]: r["count"] for r in rows}
+        rows = conn.execute(
+            "SELECT tool, COUNT(*) as count FROM findings WHERE scan_id = ? GROUP BY tool",
+            (scan_id,),
+        ).fetchall()
+        scan_dict["tool_breakdown"] = {r["tool"]: r["count"] for r in rows}
+    return scan_dict
+
+
+# Charting endpoints
 @app.get("/api/chart/severity-distribution")
 def chart_severity_distribution(
     days: int = Query(30, ge=1, le=365),

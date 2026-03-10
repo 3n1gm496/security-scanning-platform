@@ -27,9 +27,6 @@ services:
     build:
       context: ./orchestrator
       dockerfile: Dockerfile
-      # network: host è necessario in ambienti sandbox/CI senza iptables raw
-      # In produzione su Docker Desktop o Linux con iptables completo, rimuovere questa riga
-      network: host
     env_file:
       - .env
     environment:
@@ -53,9 +50,6 @@ services:
     build:
       context: .
       dockerfile: dashboard/Dockerfile
-      # network: host è necessario in ambienti sandbox/CI senza iptables raw
-      # In produzione su Docker Desktop o Linux con iptables completo, rimuovere questa riga
-      network: host
     container_name: security-dashboard
     env_file:
       - .env
@@ -70,9 +64,6 @@ services:
     ports:
       - "${DASHBOARD_PORT:-8080}:8080"
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
-    # network_mode: host è necessario in ambienti senza iptables raw (sandbox, alcuni CI)
-    # Decommentare la riga seguente se si ottiene l'errore "can't initialize iptables table `raw'"
-    network_mode: "host"
     depends_on:
       postgres:
         condition: service_healthy

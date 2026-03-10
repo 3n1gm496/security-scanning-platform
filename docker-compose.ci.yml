@@ -1,0 +1,15 @@
+# Override per ambienti CI/sandbox che non supportano iptables raw (es. GitHub Actions, GitLab CI).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d dashboard
+#
+# NON usare in ambienti locali (WSL2, Docker Desktop, Linux con iptables completo):
+# in quei casi usare solo: docker compose up -d dashboard
+services:
+  dashboard:
+    build:
+      network: host
+    network_mode: "host"
+    ports: []
+
+  orchestrator:
+    build:
+      network: host

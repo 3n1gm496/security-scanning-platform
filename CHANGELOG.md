@@ -9,6 +9,18 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e il p
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-03-11
+
+Release di correzioni mirate: compatibilità WSL2/Docker Desktop, bug UI/UX della dashboard.
+
+### Fixed
+
+- **`docker-compose.yml`**: rimosso `network_mode: host` e `network: host` dal build del servizio `dashboard` e `orchestrator`. Questi causavano l'errore "connessione negata" su WSL2 e Docker Desktop (Windows/Mac), dove `network: host` non è supportato. La porta viene ora esposta correttamente tramite port mapping standard (`${DASHBOARD_PORT:-8080}:8080`).
+- **`docker-compose.ci.yml`** (nuovo): file di override dedicato agli ambienti CI/sandbox che non supportano `iptables raw`. Da usare solo in CI: `docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d`.
+- **Dashboard — Grafico "Progresso Remediation" sempre vuoto**: il codice JS cercava `pagination.total` ma l'API `/api/findings/paginated` restituisce `pagination.count`. Il grafico ora mostra correttamente i conteggi per status.
+- **Dashboard — Confronto scansioni non mostrava risultati**: la funzione `runCompare()` non mappava correttamente la risposta dell'API `/api/scans/{id}/compare` (struttura `diff.new_count` vs `summary.new`). La normalizzazione è ora corretta.
+- **Dashboard — Campo email notifiche pre-popolato con nome utente**: il campo `user_email` in Settings → Notifiche mostrava `"admin"` (identificatore interno) invece di essere vuoto. Il JS ora ignora il valore se non contiene `@`.
+
 ## [1.5.0] — 2026-03-10
 
 Questa release si concentra sul **miglioramento radicale della qualità e dell'affidabilità dell'orchestratore** attraverso un aumento massiccio della test coverage, che passa dal 72% a oltre l'86%. Sono stati aggiunti 100 nuovi test, portando il totale a 359.

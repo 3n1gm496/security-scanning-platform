@@ -9,6 +9,31 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e il p
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-03-10
+
+Questa release risolve **11 bug** scoperti durante un audit maniacale completo della codebase (backend, frontend, orchestratore, Docker, CI). Il container è ora self-contained con tutti gli scanner installati.
+
+### Fixed
+
+- **B1 — `AttributeError` a runtime in `api_update_finding_status`**: il parametro Form `status` collideva con il modulo `fastapi.status` importato nello stesso scope. Rinominato in `status_value`.
+- **B2 — `scan_id` dichiarato `int` invece di `str` (UUID)**: il database usa UUID come TEXT; il tipo errato causava zero risultati per qualsiasi filtro per scan. Corretto in `app.py` (route export e paginate) e in `pagination.py`.
+- **B3 — Pulsante "Findings" nella lista scansioni non funzionava**: `viewScanFindings()` impostava `findingsFilter.search` invece di `findingsFilter.scan_id`; l'endpoint `/api/findings/paginated` non accettava il parametro `scan_id`. Entrambi corretti.
+- **B4 — `triggerScan()` inviava JSON invece di `FormData`**: il backend usa `Form(...)` per tutti i parametri; il frontend inviava `Content-Type: application/json` causando 422 Unprocessable Entity.
+- **B5 — Modal "Nuova scansione" non si chiudeva** dopo il trigger riuscito. Aggiunto `this.showScanModal = false` nel callback di successo.
+- **B6 — `findingsSort` non definito in `data()`**: `sortTable()` falliva silenziosamente con `TypeError`. Aggiunto `findingsSort: { column: 'id', order: 'ASC' }` in `data()`.
+- **B7 — Default `enabled=True` per scanner non presenti in `settings.yaml`**: scanner non installati venivano chiamati e fallivano. Cambiato default a `False` in `orchestrator/main.py`.
+- **B8 — `unzip` mancante nell'immagine Docker slim**: il layer di installazione di nuclei falliva con `unzip: not found`. Aggiunto `unzip` alle dipendenze apt.
+- **B9 — Container Docker non includeva i binari scanner**: tutte le scansioni risultavano `PARTIAL_FAILED`. Il Dockerfile ora installa gitleaks v8.30.0, trivy v0.69.3, syft v1.42.2, grype v0.109.1, nuclei v3.7.1 (versioni pinnate) e semgrep + checkov via pip.
+- **B10 — `settings.yaml` con tutti gli scanner disabilitati**: ripristinato con `enabled: true` per tutti gli scanner; `owasp_zap` rimane `false` per default con commento esplicativo sui prerequisiti.
+- **B11 — CI workflow usava `context: ./dashboard`**: il Dockerfile aggiornato copia `orchestrator/` dalla root del progetto; il context del build è stato aggiornato a `.` (root).
+
+### Added
+
+- Badge `scan_id` nella barra filtri della pagina Findings: mostra l'UUID troncato con pulsante ✕ per rimuovere il filtro; visibile solo quando il filtro scan è attivo.
+- CSS per `.filter-scan-id`, `.scan-id-badge`, `.btn-icon-sm`.
+
+---
+
 ## [1.2.0] — 2026-03-10
 
 Questa release completa la modernizzazione del frontend e degli endpoint API, allineando la paginazione, correggendo le preferenze di notifica e migliorando la compatibilità con Docker in ambienti sandbox.
@@ -166,7 +191,8 @@ Versione iniziale della piattaforma.
 
 ---
 
-[Unreleased]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/3n1gm496/security-scanning-platform/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/3n1gm496/security-scanning-platform/releases/tag/v1.0.0

@@ -119,16 +119,19 @@ class PolicyEngine:
                         if now > expiry:
                             continue  # Expired exemption
                     except Exception:
-                        pass
+                        continue  # Unparseable expiry — treat as expired (fail-safe)
 
                 # Match by fingerprint
                 if exemption.get("fingerprint") == finding.get("fingerprint"):
                     is_exempted = True
                     break
 
-                # Match by CWE + target pattern
+                # Match by CWE + target pattern — use word-boundary match to avoid
+                # false positives (e.g. "CWE-22" must not match "CWE-220").
                 if exemption.get("cwe") and exemption.get("target_pattern"):
-                    cwe_match = exemption["cwe"] in str(finding.get("cve", ""))
+                    cwe_str = str(finding.get("cve", ""))
+                    pattern = r"(?<!\w)" + re.escape(str(exemption["cwe"])) + r"(?!\w)"
+                    cwe_match = bool(re.search(pattern, cwe_str))
                     target_match = fnmatch.fnmatch(target_name, exemption["target_pattern"])
                     if cwe_match and target_match:
                         is_exempted = True

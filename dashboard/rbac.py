@@ -199,14 +199,11 @@ def list_api_keys() -> list[dict]:
 def revoke_api_key(key_prefix: str) -> bool:
     """Revoke (deactivate) an API key by prefix."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE api_keys SET is_active = 0 WHERE key_prefix = ?",
             (key_prefix,),
         )
-        affected = conn.execute(
-            "SELECT changes()",
-        ).fetchone()[0]
-    return affected > 0
+    return cursor.rowcount > 0
 
 
 def log_audit(

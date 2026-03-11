@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import httpx
 
 from db import get_connection
+from db_adapter import is_postgres
 
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
@@ -127,15 +128,13 @@ def create_webhook(name: str, url: str, events: list[WebhookEvent], secret: Opti
     events_str = ",".join([e.value for e in events])
     created_at = datetime.now(timezone.utc).isoformat()
 
+    sql = "INSERT INTO webhooks (name, url, secret, events, created_at) VALUES (?, ?, ?, ?, ?)"
+    if is_postgres():
+        sql += " RETURNING id"
+
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO webhooks (name, url, secret, events, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (name, url, secret, events_str, created_at),
-        )
-        webhook_id = cursor.lastrowid
+        cursor = conn.execute(sql, (name, url, secret, events_str, created_at))
+        webhook_id = cursor.fetchone()[0] if is_postgres() else cursor.lastrowid
 
     logger.info("Created webhook #%d: %s -> %s", webhook_id, name, url)
     return webhook_id
@@ -156,20 +155,18 @@ def list_webhooks() -> list[dict]:
 def delete_webhook(webhook_id: int) -> bool:
     """Delete a webhook."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute("DELETE FROM webhooks WHERE id = ?", (webhook_id,))
-        affected = conn.execute("SELECT changes()").fetchone()[0]
-    return affected > 0
+        cursor = conn.execute("DELETE FROM webhooks WHERE id = ?", (webhook_id,))
+    return cursor.rowcount > 0
 
 
 def toggle_webhook(webhook_id: int, is_active: bool) -> bool:
     """Enable or disable a webhook."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE webhooks SET is_active = ? WHERE id = ?",
             (1 if is_active else 0, webhook_id),
         )
-        affected = conn.execute("SELECT changes()").fetchone()[0]
-    return affected > 0
+    return cursor.rowcount > 0
 
 
 def _generate_signature(payload: str, secret: str) -> str:

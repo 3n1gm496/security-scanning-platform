@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Optional
 
 from db import get_connection
+from db_adapter import is_postgres
 
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 
@@ -220,15 +221,13 @@ def add_finding_comment(finding_id: int, user: str, comment: str) -> int:
     """Add comment to finding."""
     now = datetime.now(timezone.utc).isoformat()
 
+    sql = "INSERT INTO finding_comments (finding_id, user, comment, created_at) VALUES (?, ?, ?, ?)"
+    if is_postgres():
+        sql += " RETURNING id"
+
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO finding_comments (finding_id, user, comment, created_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (finding_id, user, comment, now),
-        )
-        return cursor.lastrowid
+        cursor = conn.execute(sql, (finding_id, user, comment, now))
+        return cursor.fetchone()[0] if is_postgres() else cursor.lastrowid
 
 
 def get_finding_comments(finding_id: int) -> list[dict]:

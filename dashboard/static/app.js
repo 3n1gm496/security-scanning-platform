@@ -965,7 +965,7 @@ createApp({
         formData.append('name', this.newScanForm.name);
         formData.append('target', this.newScanForm.target);
         formData.append('target_type', this.newScanForm.target_type);
-        formData.append('async_mode', 'false');
+        formData.append('async_mode', 'true');
         await apiFetch('/api/scan/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

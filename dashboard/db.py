@@ -14,6 +14,7 @@ LOGGER = logging.getLogger(__name__)
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
+
 # Re-export get_connection so existing callers (app.py etc.) continue to work
 __all__ = ["get_connection", "init_db"]
 

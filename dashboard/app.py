@@ -899,10 +899,17 @@ def _update_scan_failed(scan_id: str, error_message: str) -> None:
         pass  # Non-fatal
 
 
-def run_scan_async(target_type: str, target: str, name: str, root_dir: str) -> dict:
+def run_scan_async(
+    target_type: str,
+    target: str,
+    name: str,
+    root_dir: str,
+    scan_id: str | None = None,
+    started_at: str | None = None,
+) -> dict:
     """Execute orchestrator scan and save results to database."""
-    scan_id = str(_uuid.uuid4())
-    started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    scan_id = scan_id or str(_uuid.uuid4())
+    started_at = started_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     # Pre-insert a RUNNING placeholder so the scan appears in the list immediately.
     _insert_running_scan(scan_id, started_at, target_type, name, target)
@@ -1011,15 +1018,20 @@ def trigger_scan(
                 ),
             )
 
+    # Pre-assign scan ID and start time so we can return them immediately
+    # (including in async mode, before the worker thread begins).
+    scan_id = str(_uuid.uuid4())
+    started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
     if async_mode:
         # Submit to bounded thread pool to prevent unbounded thread growth.
         # If the pool is at capacity, submit() still queues the task internally
         # (ThreadPoolExecutor uses an unbounded internal queue by default).
-        _scan_executor.submit(run_scan_async, target_type, target, name, str(root_dir))
-        return {"status": "queued", "message": "Scan queued and running in background", "target_name": name}
+        _scan_executor.submit(run_scan_async, target_type, target, name, str(root_dir), scan_id, started_at)
+        return {"status": "queued", "scan_id": scan_id, "message": "Scan queued and running in background", "target_name": name}
     else:
         # Wait for scan to complete
-        return run_scan_async(target_type, target, name, str(root_dir))
+        return run_scan_async(target_type, target, name, str(root_dir), scan_id, started_at)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

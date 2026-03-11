@@ -7,19 +7,17 @@ Covers:
 - run_migrations idempotency and pending-migration logic (storage.py)
 - INSERT ON CONFLICT DO UPDATE semantics in save_scan_result (storage.py)
 """
+
 from __future__ import annotations
 
-import json
 import sqlite3
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from orchestrator.cache import build_cache_key
-from orchestrator.storage import _MIGRATIONS, _utc_now, init_db, run_migrations, save_scan_result
-from orchestrator.models import ScanResult, TargetSpec, ToolExecutionResult
-
+from orchestrator.models import ScanResult, TargetSpec
+from orchestrator.storage import _MIGRATIONS, init_db, run_migrations, save_scan_result
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -27,7 +25,6 @@ from orchestrator.models import ScanResult, TargetSpec, ToolExecutionResult
 
 
 def _make_result(scan_id: str = "test-scan-001", target_name: str = "repo") -> ScanResult:
-    target = TargetSpec(name=target_name, type="git", repo="https://example.com/repo.git")
     return ScanResult(
         scan_id=scan_id,
         started_at="2026-01-01T00:00:00+00:00",
@@ -172,9 +169,7 @@ def test_run_migrations_applies_pending(tmp_path):
     row = conn.execute("SELECT version FROM schema_migrations WHERE version = 99").fetchone()
     assert row is not None
     # table created by the migration SQL
-    tbl = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='_test_phase2_extra'"
-    ).fetchone()
+    tbl = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='_test_phase2_extra'").fetchone()
     assert tbl is not None
     conn.close()
 

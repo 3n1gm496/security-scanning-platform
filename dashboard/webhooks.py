@@ -32,10 +32,10 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("169.254.0.0/16"),  # link-local / AWS IMDS
-    ipaddress.ip_network("100.64.0.0/10"),   # shared address space (RFC 6598)
+    ipaddress.ip_network("100.64.0.0/10"),  # shared address space (RFC 6598)
     ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),         # unique local IPv6
-    ipaddress.ip_network("fe80::/10"),        # link-local IPv6
+    ipaddress.ip_network("fc00::/7"),  # unique local IPv6
+    ipaddress.ip_network("fe80::/10"),  # link-local IPv6
 ]
 
 
@@ -63,13 +63,13 @@ def validate_webhook_url(url: str) -> None:
         for net in _BLOCKED_NETWORKS:
             if addr in net:
                 raise ValueError(
-                    f"Webhook URL targets a private/reserved address ({addr}). "
-                    "Only public endpoints are allowed."
+                    f"Webhook URL targets a private/reserved address ({addr}). " "Only public endpoints are allowed."
                 )
     except ValueError as exc:
         # Re-raise if it is our own SSRF error, otherwise hostname is a domain name — allowed.
         if "private/reserved" in str(exc):
             raise
+
 
 logger = logging.getLogger(__name__)
 

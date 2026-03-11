@@ -6,7 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
-Piattaforma open source, Linux-based e CI-agnostic per security scanning centralizzato in ambienti enterprise eterogenei. Orchestrazione automatica di 10+ scanner OSS con dashboard unificata, normalizzazione dei risultati e **oltre 350 test di unità e integrazione**.
+Piattaforma open source, Linux-based e CI-agnostic per security scanning centralizzato in ambienti enterprise eterogenei. Orchestrazione automatica di 10+ scanner OSS con dashboard unificata, normalizzazione dei risultati e **418 test di unità e integrazione**.
 
 🔗 **Repository:** [github.com/3n1gm496/security-scanning-platform](https://github.com/3n1gm496/security-scanning-platform)
 
@@ -53,7 +53,7 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - **🔄 CI-Agnostic** — Integrabile con GitLab, Jenkins, Azure DevOps, GitHub Actions o cron/systemd
 - **🐳 Containerizzato** — Deploy rapido con Docker Compose su qualsiasi server Linux
 - **📊 Dashboard Centralizzata** — API REST + UI web per visualizzare scan, findings e trend, con paginazione cursor-based e filtri per stato
-- **✅ Test Coverage Elevata** — Oltre 350 test totali, con **coverage >86%** per il modulo orchestratore.
+- **✅ Test Coverage Elevata** — 418 test totali, con **coverage >86%** per il modulo orchestratore.
 - **🔍 10+ Scanner OSS** — Semgrep, Bandit, Nuclei, Trivy, Grype, Gitleaks, Checkov, ZAP, Syft e altri
 - **📝 Normalizzazione Intelligente** — Output unificato in formato standard per tutti gli scanner
 - **🎯 Policy-based Blocking** — Blocco automatico della pipeline su finding critici
@@ -67,6 +67,9 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 - **📧 Email Notifications** — Alert critici e preferenze di notifica granulari per utente (email, canale preferito, digest settimanali/giornalieri)
 - **📡 Prometheus Metrics** — Endpoint `/metrics` per osservabilità e monitoring
 - **🔁 GitLab Enterprise CI** — Pipeline `.gitlab-ci.yml` completa (lint → test → SAST → build → scan-self → deploy)
+- **🌙 Dark Mode** — Tema chiaro/scuro con persistenza in `localStorage`; aggiornamento automatico dei grafici al cambio tema
+- **♿ Accessibilità** — Attributi ARIA (`role`, `aria-label`, `aria-current`), supporto `prefers-reduced-motion`, navigazione da tastiera (Escape per chiudere i modali)
+- **📡 Monitoraggio Scansioni in Tempo Reale** — Polling automatico ogni 5s dopo il lancio di una scansione; banner di stato sulla dashboard; aggiornamento KPI al completamento
 
 ---
 
@@ -288,24 +291,20 @@ curl http://localhost:8080/api/scans/{scan_id}
 curl http://localhost:8080/api/scans/{scan_id}/findings
 ```
 
-#### Trigger Scans from Dashboard
+#### Trigger Scans
 
-Nuovo endpoint per triggerare scans direttamente dalla UI dashboard (richiede autenticazione e permesso `SCAN_WRITE`):
-
-**Trigger Scan Sincrono:**
+Endpoint per avviare scansioni tramite API o dalla UI dashboard (richiede autenticazione e permesso `SCAN_WRITE`). Il parametro `async_mode=true` (default dalla UI) fa ritornare immediatamente l'API con un ID scan, mentre la scansione prosegue in background.
 
 ```bash
+# Asincrono (consigliato) — ritorna subito, la scansione prosegue in background
 curl -X POST http://localhost:8080/api/scan/trigger \
      -H "Authorization: Bearer <your_api_key>" \
-     -d "target_type=local&target=/path/to/scan&name=my-local-scan"
-```
+     -d "target_type=local&target=/path/to/scan&name=my-local-scan&async_mode=true"
 
-**Trigger Scan Asincrono:**
-
-```bash
-curl -X POST http://localhost:8080/api/scan/trigger-async \
+# Sincrono — attende il completamento prima di rispondere (sconsigliato per scansioni lunghe)
+curl -X POST http://localhost:8080/api/scan/trigger \
      -H "Authorization: Bearer <your_api_key>" \
-     -d "target_type=git&target=https://github.com/pallets/flask.git&name=flask-repo"
+     -d "target_type=git&target=https://github.com/pallets/flask.git&name=flask-repo&async_mode=false"
 ```
 
 ---
@@ -363,7 +362,7 @@ Il progetto usa `pip-tools` per pinnare le dipendenze. Per aggiornare o aggiunge
 ### Eseguire i Test
 
 ```bash
-# Esegui tutti i 350+ test
+# Esegui tutti i 418 test
 ./scripts/ops.sh test
 
 # Esegui solo i test del dashboard

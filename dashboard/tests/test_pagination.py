@@ -34,14 +34,15 @@ def test_findings_paginator_basic():
             tool TEXT,
             cve TEXT,
             fingerprint TEXT,
-            timestamp TEXT
+            timestamp TEXT,
+            target_name TEXT
         )
     """)
 
     for i in range(25):
         conn.execute(
             """
-            INSERT INTO findings VALUES (?, 1, ?, ?, ?, ?, NULL, 'semgrep', NULL, ?, datetime('now'))
+            INSERT INTO findings VALUES (?, 1, ?, ?, ?, ?, NULL, 'semgrep', NULL, ?, datetime('now'), NULL)
         """,
             (i, f"Finding {i}", f"Desc {i}", ["CRITICAL", "HIGH", "MEDIUM", "LOW"][i % 4], f"file{i}.py", f"fp{i}"),
         )
@@ -109,7 +110,7 @@ def test_findings_paginator_with_status_filter():
         CREATE TABLE findings (
             id INTEGER PRIMARY KEY, scan_id INTEGER, title TEXT, description TEXT,
             severity TEXT, file TEXT, line INTEGER, tool TEXT, cve TEXT,
-            fingerprint TEXT, timestamp TEXT
+            fingerprint TEXT, timestamp TEXT, target_name TEXT
         )
     """)
 

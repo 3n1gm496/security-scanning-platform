@@ -41,7 +41,8 @@ def _findings_conn_with_data(n: int = 20) -> sqlite3.Connection:
             tool TEXT,
             cve TEXT,
             fingerprint TEXT,
-            timestamp TEXT
+            timestamp TEXT,
+            target_name TEXT
         )
         """)
     conn.execute("""
@@ -72,7 +73,7 @@ def _scans_conn_with_data(n: int = 15) -> sqlite3.Connection:
             created_at TEXT
         )
         """)
-    conn.execute("CREATE TABLE findings (id INTEGER, scan_id INTEGER)")
+    conn.execute("CREATE TABLE findings (id INTEGER, scan_id INTEGER, target_name TEXT)")
     for i in range(n):
         conn.execute(
             "INSERT INTO scans (target_name, target_type, status, created_at) VALUES (?, ?, ?, ?)",

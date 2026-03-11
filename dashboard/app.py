@@ -49,6 +49,7 @@ from rbac import (
     list_api_keys,
     revoke_api_key,
     create_default_admin_key,
+    log_audit,
 )
 from auth import require_auth, require_permission, AuthContext
 from webhooks import (
@@ -593,6 +594,14 @@ def create_new_api_key(
         name=name, role=role_enum, expires_days=expires_days, created_by=auth.api_key_prefix or auth.user_id
     )
 
+    log_audit(
+        action="api_key.create",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"key:{prefix}",
+        result="success",
+    )
+
     return {
         "key": full_key,
         "prefix": prefix,
@@ -609,6 +618,14 @@ def delete_api_key(key_prefix: str, auth: AuthContext = Depends(require_auth)) -
 
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+
+    log_audit(
+        action="api_key.revoke",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"key:{key_prefix}",
+        result="success",
+    )
 
     return {"status": "revoked", "key_prefix": key_prefix}
 
@@ -644,6 +661,14 @@ def create_new_webhook(
 
     webhook_id = create_webhook(name, url, event_list, secret)
 
+    log_audit(
+        action="webhook.create",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"webhook:{webhook_id}",
+        result="success",
+    )
+
     return {"id": webhook_id, "name": name, "url": url, "events": events}
 
 
@@ -654,6 +679,14 @@ def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require
 
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+
+    log_audit(
+        action="webhook.delete",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"webhook:{webhook_id}",
+        result="success",
+    )
 
     return {"status": "deleted", "id": webhook_id}
 

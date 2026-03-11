@@ -338,8 +338,9 @@ class ScansPaginator:
         where_sql = " AND ".join(where_clauses)
 
         query = f"""
-            SELECT id, target_name, target_type, status, created_at,
-                   (SELECT COUNT(*) FROM findings WHERE scan_id = scans.id) as findings_count
+            SELECT id, target_name, target_type, status, policy_status,
+                   created_at, finished_at, findings_count, critical_count,
+                   high_count, medium_count, low_count, error_message
             FROM scans
             WHERE {where_sql}
             ORDER BY {safe_sort_by} {safe_sort_order}

@@ -70,14 +70,21 @@ def _scans_conn_with_data(n: int = 15) -> sqlite3.Connection:
             target_name TEXT,
             target_type TEXT,
             status TEXT,
-            created_at TEXT
+            policy_status TEXT,
+            created_at TEXT,
+            finished_at TEXT,
+            findings_count INTEGER DEFAULT 0,
+            critical_count INTEGER DEFAULT 0,
+            high_count INTEGER DEFAULT 0,
+            medium_count INTEGER DEFAULT 0,
+            low_count INTEGER DEFAULT 0,
+            error_message TEXT
         )
         """)
-    conn.execute("CREATE TABLE findings (id INTEGER, scan_id INTEGER, target_name TEXT)")
     for i in range(n):
         conn.execute(
-            "INSERT INTO scans (target_name, target_type, status, created_at) VALUES (?, ?, ?, ?)",
-            (f"target-{i}", "git", "COMPLETED_CLEAN", f"2026-01-{i+1:02d}T00:00:00"),
+            "INSERT INTO scans (target_name, target_type, status, policy_status, created_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (f"target-{i}", "git", "COMPLETED_CLEAN", "PASSED", f"2026-01-{i+1:02d}T00:00:00", f"2026-01-{i+1:02d}T00:01:00"),
         )
     conn.commit()
     return conn

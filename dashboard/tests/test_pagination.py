@@ -69,16 +69,24 @@ def test_scans_paginator_basic():
             target_name TEXT,
             target_type TEXT,
             status TEXT,
-            created_at TEXT
+            policy_status TEXT,
+            created_at TEXT,
+            finished_at TEXT,
+            findings_count INTEGER DEFAULT 0,
+            critical_count INTEGER DEFAULT 0,
+            high_count INTEGER DEFAULT 0,
+            medium_count INTEGER DEFAULT 0,
+            low_count INTEGER DEFAULT 0,
+            error_message TEXT
         )
     """)
-
-    conn.execute("CREATE TABLE findings (id INTEGER, scan_id INTEGER)")
 
     for i in range(15):
         conn.execute(
             """
-            INSERT INTO scans VALUES (?, ?, 'repository', 'completed', datetime('now'))
+            INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at, finished_at,
+                               findings_count, critical_count, high_count, medium_count, low_count)
+            VALUES (?, ?, 'repository', 'completed', 'PASSED', datetime('now'), datetime('now'), 3, 0, 1, 2, 0)
         """,
             (i, f"target-{i}"),
         )

@@ -76,6 +76,20 @@ createApp({
       trend: init.trend || [],
       availableTargets: init.availableTargets || [],
       availableTools: init.availableTools || [],
+      availableUsers: [],
+
+      // ── Toggle colonne tabella scansioni
+      scanColumns: [
+        { key: 'id', label: 'ID', visible: false },
+        { key: 'target_name', label: 'Target', visible: true },
+        { key: 'target_type', label: 'Tipo', visible: true },
+        { key: 'status', label: 'Stato', visible: true },
+        { key: 'policy_status', label: 'Policy', visible: true },
+        { key: 'findings_count', label: 'Findings', visible: true },
+        { key: 'critical_count', label: 'Critical', visible: true },
+        { key: 'high_count', label: 'High', visible: true },
+        { key: 'created_at', label: 'Data', visible: true },
+      ],
 
       // ── Charts refs (managed via $refs)
       charts: {},
@@ -154,7 +168,7 @@ createApp({
       // ── New Scan modal
       showScanModal: false,
       scanTriggering: false,
-      newScanForm: { name: '', target: '', target_type: 'local', async_mode: true },
+      newScanForm: { name: '', target: '', target_type: 'local' },
 
       // ── Finding modal tabs
       findingModalTab: 'info',
@@ -263,6 +277,20 @@ createApp({
     };
     document.addEventListener('keydown', this._keyHandler);
 
+    // Carica la lista utenti per il datalist di assegnazione
+    this.loadAvailableUsers();
+
+    // Se il trend non è stato iniettato dal server, caricalo dall'API
+    if (!this.trend || this.trend.length === 0) {
+      try {
+        const trendResp = await apiFetch('/api/trends?days=14').catch(() => null);
+        if (trendResp && trendResp.trend) this.trend = trendResp.trend;
+        else if (Array.isArray(trendResp)) this.trend = trendResp;
+      } catch (e) {
+        console.debug('[mount] trend fetch failed:', e.message);
+      }
+    }
+
     await this.initDashboardCharts();
     if (initialPage !== 'dashboard') await this.navigate(initialPage);
     this.startAutoRefresh();
@@ -274,7 +302,14 @@ createApp({
   },
 
   methods: {
-    // ── Navigation ────────────────────────────────────────────────────────────
+    // ── Toggle colonne ───────────────────────────────────────────────────────────────────────────────────
+
+    colVisible(key) {
+      const col = this.scanColumns.find(c => c.key === key);
+      return col ? col.visible : true;
+    },
+
+    // ── Navigation ─────────────────────────────────────────────────────────────────────────────────────
 
     async navigate(page) {
       this.currentPage = page;
@@ -953,7 +988,7 @@ createApp({
         formData.append('name', this.newScanForm.name);
         formData.append('target', this.newScanForm.target);
         formData.append('target_type', this.newScanForm.target_type);
-        formData.append('async_mode', String(this.newScanForm.async_mode));
+        formData.append('async_mode', 'false');
         await apiFetch('/api/scan/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -961,7 +996,7 @@ createApp({
         });
         // Close modal and reset form on success
         this.showScanModal = false;
-        this.newScanForm = { name: '', target: '', target_type: 'local', async_mode: true };
+        this.newScanForm = { name: '', target: '', target_type: 'local' };
         this.showToast('Scansione avviata con successo');
         await this.loadScans(true);
       } catch (e) {
@@ -1089,7 +1124,40 @@ createApp({
       }
     },
 
+    // ── Users ─────────────────────────────────────────────────────────────────
+
+    async loadAvailableUsers() {
+      try {
+        const resp = await apiFetch('/api/users').catch(() => null);
+        if (resp && Array.isArray(resp.users)) {
+          this.availableUsers = resp.users.map(u => u.username || u);
+        }
+      } catch (e) {
+        console.debug('[loadAvailableUsers] failed:', e.message);
+      }
+    },
+
     // ── Export ────────────────────────────────────────────────────────────────
+
+    async exportScanFindings(scanId, format) {
+      try {
+        const params = new URLSearchParams({ format, scan_id: scanId, limit: 1000 });
+        const res = await fetch(`/api/export/findings?${params}`);
+        if (!res.ok) throw new Error('Export fallito');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `scan_${scanId.substring(0, 8)}_${Date.now()}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        this.showToast(`Export ${format.toUpperCase()} avviato`);
+      } catch (e) {
+        this.showToast('Errore export: ' + e.message, 'error');
+      }
+    },
 
     async exportFindings(format, includeAnalytics = false) {
       try {

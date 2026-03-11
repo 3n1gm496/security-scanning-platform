@@ -1414,6 +1414,14 @@ def get_notification_preferences(auth: AuthContext = Depends(require_auth)) -> d
     return {"preferences": prefs or {}}
 
 
+@app.get("/api/users", dependencies=[Depends(require_auth)])
+def list_users() -> dict:
+    """Return the list of active users (username only) for the assignment datalist."""
+    with get_connection(DB_PATH) as conn:
+        rows = conn.execute("SELECT username FROM users WHERE is_active = 1 ORDER BY username").fetchall()
+    return {"users": [{"username": r["username"]} for r in rows]}
+
+
 @app.get("/metrics")
 def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Response:
     """Expose Prometheus metrics in text format."""

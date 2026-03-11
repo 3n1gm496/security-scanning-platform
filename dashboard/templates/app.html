@@ -246,21 +246,30 @@
           <div class="card">
             <div class="card-header"><h2>Azioni rapide</h2></div>
             <div class="quick-actions">
-              <button class="quick-action-btn" @click="showScanModal = true">
+              <button class="quick-action-btn" @click="showScanModal = true" title="Avvia una nuova scansione (N)">
                 <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="11" y1="8" x2="11" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="11" x2="14" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 <span>Nuova scansione</span>
               </button>
-              <button class="quick-action-btn" @click="navigate('findings'); findingsFilter.severity = 'CRITICAL'; loadFindings(true)">
+              <button class="quick-action-btn" @click="navigate('findings'); findingsFilter.severity = 'CRITICAL'; loadFindings(true)" title="Filtra findings critici">
                 <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 <span>Critical findings</span>
+                <span v-if="kpis.critical_findings > 0" style="margin-left:6px;background:#fee2e2;color:#dc2626;border-radius:9999px;padding:1px 7px;font-size:11px;font-weight:700;">{{ kpis.critical_findings }}</span>
               </button>
-              <button class="quick-action-btn" @click="navigate('compare')">
+              <button class="quick-action-btn" @click="navigate('findings'); findingsFilter.status = 'new'; loadFindings(true)" title="Findings non ancora presi in carico">
+                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span>Da prendere in carico</span>
+              </button>
+              <button class="quick-action-btn" @click="navigate('analytics')" title="Vai alla sezione Analytics">
+                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Risk &amp; Analytics</span>
+              </button>
+              <button class="quick-action-btn" @click="exportFindings('csv')" title="Esporta tutti i findings in CSV">
+                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span>Esporta findings (CSV)</span>
+              </button>
+              <button class="quick-action-btn" @click="navigate('compare')" title="Confronta due scansioni">
                 <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span>Confronta scansioni</span>
-              </button>
-              <button class="quick-action-btn" @click="exportFindings('pdf', true)">
-                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                <span>Esporta PDF</span>
               </button>
             </div>
           </div>
@@ -349,6 +358,13 @@
           <div class="card-header">
             <h2>Lista scansioni <span class="count-badge">{{ scansTotal }}</span></h2>
           </div>
+          <!-- Toggle colonne visibili -->
+          <div class="col-toggle-bar" style="padding: 10px 20px 0;">
+            <span class="col-toggle-label">Colonne:</span>
+            <button v-for="col in scanColumns" :key="col.key"
+              class="col-toggle-btn" :class="{ active: col.visible }"
+              @click="col.visible = !col.visible">{{ col.label }}</button>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -356,15 +372,15 @@
                   <th class="th-check">
                     <input type="checkbox" disabled title="Seleziona per confrontare">
                   </th>
-                  <th class="th-sortable" @click="sortScans('id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
-                  <th class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
-                  <th>Tipo</th>
-                  <th>Stato</th>
-                  <th>Policy</th>
-                  <th class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
-                  <th>C</th>
-                  <th>H</th>
-                  <th class="th-sortable" @click="sortScans('created_at')">Data <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
+                  <th v-if="colVisible('id')" class="th-sortable" @click="sortScans('id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
+                  <th v-if="colVisible('target_name')" class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
+                  <th v-if="colVisible('target_type')">Tipo</th>
+                  <th v-if="colVisible('status')">Stato</th>
+                  <th v-if="colVisible('policy_status')">Policy</th>
+                  <th v-if="colVisible('findings_count')" class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
+                  <th v-if="colVisible('critical_count')">C</th>
+                  <th v-if="colVisible('high_count')">H</th>
+                  <th v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Data <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
                   <th>Azioni</th>
                 </tr>
               </thead>
@@ -379,15 +395,15 @@
                   <td class="th-check" @click.stop>
                     <input type="checkbox" :value="scan.id" v-model="selectedScans" :disabled="selectedScans.length >= 2 && !selectedScans.includes(scan.id)">
                   </td>
-                  <td @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
-                  <td @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
-                  <td @click="openScanDetail(scan)"><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
-                  <td @click="openScanDetail(scan)"><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
-                  <td @click="openScanDetail(scan)"><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status }}</span></td>
-                  <td @click="openScanDetail(scan)"><strong>{{ scan.findings_count }}</strong></td>
-                  <td @click="openScanDetail(scan)"><span v-if="scan.critical_count > 0" class="sev-pill sev-critical">{{ scan.critical_count }}</span><span v-else class="text-muted">—</span></td>
-                  <td @click="openScanDetail(scan)"><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
-                  <td @click="openScanDetail(scan)" class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
+                  <td v-if="colVisible('id')" @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
+                  <td v-if="colVisible('target_name')" @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
+                  <td v-if="colVisible('target_type')" @click="openScanDetail(scan)"><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
+                  <td v-if="colVisible('status')" @click="openScanDetail(scan)"><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
+                  <td v-if="colVisible('policy_status')" @click="openScanDetail(scan)"><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status ?? '—' }}</span></td>
+                  <td v-if="colVisible('findings_count')" @click="openScanDetail(scan)"><strong>{{ scan.findings_count }}</strong></td>
+                  <td v-if="colVisible('critical_count')" @click="openScanDetail(scan)"><span v-if="scan.critical_count > 0" class="sev-pill sev-critical">{{ scan.critical_count }}</span><span v-else class="text-muted">—</span></td>
+                  <td v-if="colVisible('high_count')" @click="openScanDetail(scan)"><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
+                  <td v-if="colVisible('created_at')" @click="openScanDetail(scan)" class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
                   <td @click.stop>
                     <button class="btn-icon-sm" @click="openScanDetail(scan)" title="Dettaglio">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -494,7 +510,7 @@
               <button class="btn-secondary btn-sm" @click="selectedFindings = []">Deseleziona</button>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="findings-table-wrap">
             <table>
               <thead>
                 <tr>
@@ -1022,7 +1038,10 @@
             <div class="detail-section">
               <h3>Assegnazione</h3>
               <div class="assign-row">
-                <input type="text" v-model="assignTo" placeholder="Assegna a (username)..." class="filter-input">
+                <input type="text" v-model="assignTo" placeholder="Assegna a (username)..." class="filter-input" list="users-datalist">
+                <datalist id="users-datalist">
+                  <option v-for="u in availableUsers" :key="u" :value="u"></option>
+                </datalist>
                 <button class="btn-secondary btn-sm" @click="assignFinding" :disabled="!assignTo">Assegna</button>
               </div>
             </div>
@@ -1100,7 +1119,15 @@
               </div>
               <div class="detail-section">
                 <h3>Azioni</h3>
-                <button class="btn-secondary btn-block" @click="viewScanFindings(selectedScan)">Vedi findings di questa scansione</button>
+                <button class="btn-secondary btn-block" style="margin-bottom:8px" @click="viewScanFindings(selectedScan)">Vedi findings di questa scansione</button>
+                <div class="export-bar" style="margin-top:8px;padding-top:8px">
+                  <span class="export-label">Esporta:</span>
+                  <button class="btn-export" @click="exportScanFindings(selectedScan.id, 'json')">JSON</button>
+                  <button class="btn-export" @click="exportScanFindings(selectedScan.id, 'csv')">CSV</button>
+                  <button class="btn-export" @click="exportScanFindings(selectedScan.id, 'sarif')">SARIF</button>
+                  <button class="btn-export" @click="exportScanFindings(selectedScan.id, 'html')">HTML</button>
+                  <button class="btn-export btn-export-primary" @click="exportScanFindings(selectedScan.id, 'pdf')">PDF</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1133,12 +1160,6 @@
           <div class="form-group">
             <label class="form-label">Target</label>
             <input type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/...' : newScanForm.target_type === 'image' ? 'nginx:latest' : '/data/workspaces/...'">
-          </div>
-          <div class="form-group">
-            <label class="form-label">
-              <input type="checkbox" v-model="newScanForm.async_mode" style="margin-right:6px">
-              Modalità asincrona (ritorna subito)
-            </label>
           </div>
           <div class="modal-actions">
             <button class="btn-secondary" @click="showScanModal = false">Annulla</button>

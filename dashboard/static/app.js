@@ -181,7 +181,6 @@ createApp({
       darkMode: false,
 
       // ── UI overlays
-      showShortcutsHelp: false,
       showFindingModal: false,
     };
   },
@@ -245,34 +244,13 @@ createApp({
       document.documentElement.setAttribute('data-theme', 'dark');
     }
 
-    // ── Keyboard shortcuts (GitHub-style G+key navigation)
-    this._gPressed = false;
-    this._gTimer = null;
+    // ── Minimal keyboard: Escape to close modals
     this._keyHandler = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === '?') { this.showShortcutsHelp = !this.showShortcutsHelp; return; }
       if (e.key === 'Escape') {
-        this.showShortcutsHelp = false;
         this.showFindingModal = false;
         this.showScanModal = false;
-        return;
-      }
-      if ((e.key === 'n' || e.key === 'N') && this.currentPage === 'scans') {
-        this.showScanModal = true; return;
-      }
-      if (e.key === 'r' || e.key === 'R') { this.refreshCurrentPage(); return; }
-      if (this._gPressed) {
-        this._gPressed = false;
-        clearTimeout(this._gTimer);
-        const navMap = { d: 'dashboard', s: 'scans', f: 'findings', a: 'analytics', x: 'settings', c: 'compare' };
-        const target = navMap[e.key.toLowerCase()];
-        if (target) this.navigate(target);
-        return;
-      }
-      if (e.key === 'g') {
-        this._gPressed = true;
-        this._gTimer = setTimeout(() => { this._gPressed = false; }, 1000);
+        this.selectedFinding = null;
+        this.selectedScan = null;
       }
     };
     document.addEventListener('keydown', this._keyHandler);
@@ -363,9 +341,8 @@ createApp({
 
     async initDashboardCharts() {
       await nextTick();
-      this.buildSeverityChart();
-      this.buildToolChart();
       this.buildTrendChart();
+      this.buildSeverityChart();
       this.buildRemediationChart();
     },
 
@@ -1195,6 +1172,17 @@ createApp({
       return map[status] || 'badge-neutral';
     },
 
+    statusLabel(status) {
+      const labels = {
+        COMPLETED_CLEAN: 'Pulita',
+        COMPLETED_WITH_FINDINGS: 'Con findings',
+        PARTIAL_FAILED: 'Parziale',
+        FAILED: 'Fallita',
+        RUNNING: 'In corso',
+      };
+      return labels[status] || status;
+    },
+
     policyBadgeClass(policy) {
       const normalized = (policy || '').toUpperCase();
       const map = {
@@ -1224,9 +1212,5 @@ createApp({
       }
     },
 
-    // ── Export SARIF ────────────────────────────────────────────────────────────
-    async exportSarif() {
-      await this.exportFindings('sarif');
-    },
   },
 }).mount('#app');

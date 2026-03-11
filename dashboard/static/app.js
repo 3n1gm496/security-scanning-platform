@@ -169,6 +169,8 @@ createApp({
       showScanModal: false,
       scanTriggering: false,
       newScanForm: { name: '', target: '', target_type: 'local' },
+      scanPollingInterval: null,
+      hasRunningScans: false,
 
       // ── Finding modal tabs
       findingModalTab: 'info',
@@ -269,17 +271,27 @@ createApp({
       }
     }
 
+    this.applyChartDefaults();
     await this.initDashboardCharts();
     if (initialPage !== 'dashboard') await this.navigate(initialPage);
     this.startAutoRefresh();
   },
   beforeUnmount() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
+    this.stopScanPolling();
     Object.values(this.charts).forEach(c => c && c.destroy());
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
   },
 
   methods: {
+    // ── Chart theme helpers ────────────────────────────────────────────────────
+
+    applyChartDefaults() {
+      const dark = this.darkMode;
+      Chart.defaults.color = dark ? '#9ca3af' : '#6b7280';
+      Chart.defaults.borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    },
+
     // ── Toggle colonne ───────────────────────────────────────────────────────────────────────────────────
 
     colVisible(key) {
@@ -309,7 +321,13 @@ createApp({
     },
 
     async refreshCurrentPage() {
-      await this.navigate(this.currentPage);
+      if (this._refreshing) return;
+      this._refreshing = true;
+      try {
+        await this.navigate(this.currentPage);
+      } finally {
+        this._refreshing = false;
+      }
     },
 
     // ── Toast ─────────────────────────────────────────────────────────────────
@@ -337,13 +355,47 @@ createApp({
       }, 30000);
     },
 
+    startScanPolling() {
+      if (this.scanPollingInterval) return;
+      this.hasRunningScans = true;
+      this.scanPollingInterval = setInterval(async () => {
+        try {
+          const result = await apiFetch('/api/scans/paginated?per_page=20&sort_by=created_at&sort_order=DESC');
+          const items = result.items || [];
+          const running = items.some(s => s.status === 'RUNNING');
+          this.recentScans = items.slice(0, 5);
+          if (this.currentPage === 'scans') this.scans = items;
+          if (!running) {
+            this.hasRunningScans = false;
+            this.stopScanPolling();
+            try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
+          }
+        } catch (e) {
+          console.debug('[scanPolling] poll failed:', e.message);
+        }
+      }, 5000);
+    },
+
+    stopScanPolling() {
+      if (this.scanPollingInterval) {
+        clearInterval(this.scanPollingInterval);
+        this.scanPollingInterval = null;
+      }
+    },
+
     // ── Dashboard Charts ──────────────────────────────────────────────────────
 
     async initDashboardCharts() {
-      await nextTick();
-      this.buildTrendChart();
-      this.buildSeverityChart();
-      this.buildRemediationChart();
+      if (this._chartsBuilding) return;
+      this._chartsBuilding = true;
+      try {
+        await nextTick();
+        this.buildTrendChart();
+        this.buildSeverityChart();
+        this.buildRemediationChart();
+      } finally {
+        this._chartsBuilding = false;
+      }
     },
 
     buildRemediationChart() {
@@ -976,6 +1028,7 @@ createApp({
         this.newScanForm = { name: '', target: '', target_type: 'local' };
         this.showToast('Scansione avviata con successo');
         await this.loadScans(true);
+        this.startScanPolling();
       } catch (e) {
         // Keep modal open on error so user can fix the input
         this.showToast('Errore avvio scansione: ' + e.message, 'error');
@@ -1210,6 +1263,10 @@ createApp({
         document.documentElement.removeAttribute('data-theme');
         localStorage.setItem('ssp-theme', 'light');
       }
+      this.applyChartDefaults();
+      // Rebuild visible charts so legend/tick colors update immediately
+      if (this.currentPage === 'dashboard') this.initDashboardCharts();
+      else if (this.currentPage === 'analytics') this.loadAnalytics();
     },
 
   },

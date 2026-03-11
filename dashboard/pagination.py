@@ -226,6 +226,7 @@ class FindingsPaginator:
             query = f"""
                 SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,
                        f.line, f.tool, f.cve, f.fingerprint, f.timestamp,
+                       f.target_name,
                        COALESCE(fs.status, 'open') AS triage_status
                 FROM findings f
                 LEFT JOIN finding_states fs ON fs.finding_id = f.id
@@ -237,7 +238,7 @@ class FindingsPaginator:
             # Standard query without JOIN
             query = f"""
                 SELECT id, scan_id, title, description, severity, file,
-                       line, tool, cve, fingerprint, timestamp
+                       line, tool, cve, fingerprint, timestamp, target_name
                 FROM findings
                 WHERE {where_sql}
                 ORDER BY {safe_sort_by} {safe_sort_order}

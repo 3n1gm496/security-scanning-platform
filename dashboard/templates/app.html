@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="it" dir="ltr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,7 +24,7 @@
     <!-- ================================================================
          SIDEBAR
     ================================================================ -->
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }" role="complementary" aria-label="Sidebar navigazione">
       <div class="sidebar-header">
         <div class="sidebar-logo" v-if="!sidebarCollapsed">
           <svg class="logo-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -47,8 +47,8 @@
         </button>
       </div>
 
-      <nav class="sidebar-nav">
-        <a class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click.prevent="navigate('dashboard')" href="#" :title="sidebarCollapsed ? 'Dashboard' : ''">
+      <nav class="sidebar-nav" role="navigation" aria-label="Menu principale">
+        <a class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click.prevent="navigate('dashboard')" href="#dashboard" :title="sidebarCollapsed ? 'Dashboard' : ''" :aria-current="currentPage === 'dashboard' ? 'page' : false">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Dashboard</span>
         </a>
@@ -92,9 +92,9 @@
     <!-- ================================================================
          MAIN CONTENT
     ================================================================ -->
-    <div class="main-content" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <div class="main-content" :class="{ 'sidebar-collapsed': sidebarCollapsed }" role="main">
       <!-- Top bar -->
-      <header class="topbar-slim">
+      <header class="topbar-slim" role="banner">
         <div class="topbar-left">
           <h1 class="page-heading">{{ pageTitle }}</h1>
           <span class="page-subtitle">{{ pageSubtitle }}</span>
@@ -112,12 +112,9 @@
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="margin-right:4px"><polyline points="23 4 23 10 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Aggiorna
           </button>
-          <button class="btn-icon" @click="toggleDarkMode" :title="darkMode ? 'Modalit\u00e0 chiara' : 'Modalit\u00e0 scura'" style="margin-left:6px">
+          <button class="btn-icon" @click="toggleDarkMode" :title="darkMode ? 'Modalità chiara' : 'Modalità scura'" aria-label="Cambia tema">
             <svg v-if="darkMode" viewBox="0 0 24 24" fill="none" width="16" height="16"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             <svg v-else viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <button class="btn-icon" @click="showShortcutsHelp = true" title="Scorciatoie da tastiera (?)" style="margin-left:4px">
-            <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
       </header>
@@ -205,7 +202,17 @@
           </div>
         </div>
 
-        <!-- Charts row -->
+        <!-- Trend chart (full width — most important for situational awareness) -->
+        <div class="card chart-card">
+          <div class="card-header">
+            <h2>Trend Scansioni &amp; Findings (14 giorni)</h2>
+          </div>
+          <div class="chart-container chart-container-tall">
+            <canvas ref="trendChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Detail charts row -->
         <div class="chart-grid">
           <div class="card chart-card">
             <div class="card-header">
@@ -217,68 +224,23 @@
           </div>
           <div class="card chart-card">
             <div class="card-header">
-              <h2>Findings per Tool</h2>
-            </div>
-            <div class="chart-container">
-              <canvas ref="toolChart"></canvas>
-            </div>
-          </div>
-          <div class="card chart-card">
-            <div class="card-header">
               <h2>Progresso Remediation</h2>
             </div>
             <div class="chart-container">
               <canvas ref="remediationChart"></canvas>
             </div>
           </div>
-          <div class="card chart-card chart-card-full">
-            <div class="card-header">
-              <h2>Trend Scansioni &amp; Findings (14 giorni)</h2>
-            </div>
-            <div class="chart-container chart-container-tall">
-              <canvas ref="trendChart"></canvas>
-            </div>
-          </div>
         </div>
 
-        <!-- Quick Actions + Recent Scans -->
-        <div class="two-cols-grid">
-          <div class="card">
-            <div class="card-header"><h2>Azioni rapide</h2></div>
-            <div class="quick-actions">
-              <button class="quick-action-btn" @click="showScanModal = true" title="Avvia una nuova scansione (N)">
-                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="11" y1="8" x2="11" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="11" x2="14" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span>Nuova scansione</span>
-              </button>
-              <button class="quick-action-btn" @click="navigate('findings'); findingsFilter.severity = 'CRITICAL'; loadFindings(true)" title="Filtra findings critici">
-                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span>Critical findings</span>
-                <span v-if="kpis.critical_findings > 0" style="margin-left:6px;background:#fee2e2;color:#dc2626;border-radius:9999px;padding:1px 7px;font-size:11px;font-weight:700;">{{ kpis.critical_findings }}</span>
-              </button>
-              <button class="quick-action-btn" @click="navigate('findings'); findingsFilter.status = 'new'; loadFindings(true)" title="Findings non ancora presi in carico">
-                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span>Da prendere in carico</span>
-              </button>
-              <button class="quick-action-btn" @click="navigate('analytics')" title="Vai alla sezione Analytics">
-                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                <span>Risk &amp; Analytics</span>
-              </button>
-              <button class="quick-action-btn" @click="exportFindings('csv')" title="Esporta tutti i findings in CSV">
-                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span>Esporta findings (CSV)</span>
-              </button>
-              <button class="quick-action-btn" @click="navigate('compare')" title="Confronta due scansioni">
-                <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                <span>Confronta scansioni</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <h2>Scansioni recenti con findings</h2>
+        <!-- Recent Scans -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Scansioni recenti con findings</h2>
+            <div class="card-actions">
+              <button class="btn-primary btn-sm" @click="showScanModal = true">+ Nuova scansione</button>
               <button class="btn-secondary btn-sm" @click="navigate('scans')">Vedi tutte</button>
             </div>
+          </div>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -295,7 +257,7 @@
                   </tr>
                   <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" class="row-clickable">
                     <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
-                    <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
+                    <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
                     <td><strong>{{ scan.findings_count }}</strong></td>
                     <td class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
                   </tr>
@@ -303,7 +265,6 @@
               </table>
             </div>
           </div>
-        </div>
       </div>
 
       <!-- ================================================================
@@ -324,10 +285,10 @@
               <label class="filter-label">Stato</label>
               <select v-model="scansFilter.status" @change="loadScans(true)" class="filter-select">
                 <option value="">Tutti</option>
-                <option value="COMPLETED_CLEAN">COMPLETED_CLEAN</option>
-                <option value="COMPLETED_WITH_FINDINGS">COMPLETED_WITH_FINDINGS</option>
-                <option value="PARTIAL_FAILED">PARTIAL_FAILED</option>
-                <option value="FAILED">FAILED</option>
+                <option value="COMPLETED_CLEAN">Pulita (no findings)</option>
+                <option value="COMPLETED_WITH_FINDINGS">Con findings</option>
+                <option value="PARTIAL_FAILED">Parziale</option>
+                <option value="FAILED">Fallita</option>
               </select>
             </div>
             <div class="filter-group">
@@ -389,7 +350,10 @@
                   <td colspan="11" class="loading-row"><div class="spinner-sm"></div> Caricamento...</td>
                 </tr>
                 <tr v-else-if="scans.length === 0">
-                  <td colspan="11" class="empty-state">Nessuna scansione trovata</td>
+                  <td colspan="11" class="empty-state">
+                    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" width="40" height="40"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.5"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    Nessuna scansione trovata. Prova a modificare i filtri o avvia una nuova scansione.
+                  </td>
                 </tr>
                 <tr v-for="scan in scans" :key="scan.id" class="row-clickable" :class="{ 'row-selected': selectedScans.includes(scan.id) }">
                   <td class="th-check" @click.stop>
@@ -398,7 +362,7 @@
                   <td v-if="colVisible('id')" @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
                   <td v-if="colVisible('target_name')" @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
                   <td v-if="colVisible('target_type')" @click="openScanDetail(scan)"><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
-                  <td v-if="colVisible('status')" @click="openScanDetail(scan)"><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
+                  <td v-if="colVisible('status')" @click="openScanDetail(scan)"><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
                   <td v-if="colVisible('policy_status')" @click="openScanDetail(scan)"><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status ?? '—' }}</span></td>
                   <td v-if="colVisible('findings_count')" @click="openScanDetail(scan)"><strong>{{ scan.findings_count }}</strong></td>
                   <td v-if="colVisible('critical_count')" @click="openScanDetail(scan)"><span v-if="scan.critical_count > 0" class="sev-pill sev-critical">{{ scan.critical_count }}</span><span v-else class="text-muted">—</span></td>
@@ -464,13 +428,13 @@
             <div class="filter-group">
               <label class="filter-label">Stato</label>
               <select v-model="findingsFilter.status" @change="loadFindings(true)" class="filter-select">
-                <option value="">Tutti</option>
-                <option value="new">New</option>
-                <option value="acknowledged">Acknowledged</option>
-                <option value="in_progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="false_positive">False Positive</option>
-                <option value="risk_accepted">Risk Accepted</option>
+                <option value="">Tutti gli stati</option>
+                <option value="new">Nuovo</option>
+                <option value="acknowledged">Preso in carico</option>
+                <option value="in_progress">In lavorazione</option>
+                <option value="resolved">Risolto</option>
+                <option value="false_positive">Falso positivo</option>
+                <option value="risk_accepted">Rischio accettato</option>
               </select>
             </div>
             <div class="filter-group" v-if="findingsFilter.scan_id">
@@ -532,7 +496,10 @@
                   <td colspan="9" class="loading-row"><div class="spinner-sm"></div> Caricamento...</td>
                 </tr>
                 <tr v-else-if="findings.length === 0">
-                  <td colspan="9" class="empty-state">Nessun finding trovato</td>
+                  <td colspan="9" class="empty-state">
+                    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" width="40" height="40"><path d="M12 2L3 7V12C3 16.55 6.84 20.74 12 22C17.16 20.74 21 16.55 21 12V7L12 2Z" stroke="currentColor" stroke-width="1.5"/><path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Nessun finding trovato. Prova a modificare i filtri.
+                  </td>
                 </tr>
                 <tr v-for="finding in findings" :key="finding.id" class="row-clickable" :class="{ 'row-selected': selectedFindings.includes(finding.id) }">
                   <td class="th-check" @click.stop>
@@ -762,8 +729,9 @@
         </div>
 
         <div v-else-if="!compareLoading" class="empty-compare">
-          <svg viewBox="0 0 24 24" fill="none" width="48" height="48" style="opacity:0.3"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <p>Seleziona due scansioni per confrontarle</p>
+          <svg viewBox="0 0 24 24" fill="none" width="56" height="56" style="opacity:0.2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <p><strong>Confronta due scansioni</strong></p>
+          <p style="font-size:13px;max-width:360px;text-align:center">Seleziona una scansione A (baseline) e una B (confronto) per identificare nuovi findings e quelli risolti tra le due esecuzioni.</p>
         </div>
       </div>
 
@@ -775,7 +743,6 @@
           <button class="tab-btn" :class="{ active: settingsTab === 'apikeys' }" @click="settingsTab = 'apikeys'; loadApiKeys()">API Keys</button>
           <button class="tab-btn" :class="{ active: settingsTab === 'webhooks' }" @click="settingsTab = 'webhooks'; loadWebhooks()">Webhooks</button>
           <button class="tab-btn" :class="{ active: settingsTab === 'notifications' }" @click="settingsTab = 'notifications'; loadNotificationPrefs()">Notifiche</button>
-          <button class="tab-btn" :class="{ active: settingsTab === 'export' }" @click="settingsTab = 'export'">Export</button>
         </div>
 
         <!-- API Keys tab -->
@@ -784,6 +751,7 @@
             <h2>API Keys</h2>
             <button class="btn-primary btn-sm" @click="showCreateKeyModal = true; newKeyResult = ''">+ Nuova chiave</button>
           </div>
+          <p style="font-size:13px;color:var(--color-text-secondary);padding:12px 20px 0">Gestisci le chiavi API per l'accesso programmatico alla piattaforma. Ogni chiave ha un ruolo e permessi specifici.</p>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Nome</th><th>Prefisso</th><th>Ruolo</th><th>Creata da</th><th>Creata il</th><th>Scadenza</th><th>Azioni</th></tr></thead>
@@ -811,6 +779,7 @@
             <h2>Webhooks</h2>
             <button class="btn-primary btn-sm" @click="showCreateWebhookModal = true">+ Nuovo webhook</button>
           </div>
+          <p style="font-size:13px;color:var(--color-text-secondary);padding:12px 20px 0">Ricevi notifiche in tempo reale su eventi come completamento scansioni o findings critici.</p>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Nome</th><th>URL</th><th>Eventi</th><th>Attivo</th><th>Azioni</th></tr></thead>
@@ -837,8 +806,9 @@
 
         <!-- Notifications tab -->
         <div v-if="settingsTab === 'notifications'" class="card">
-          <div class="card-header"><h2>Preferenze notifiche email</h2></div>
+          <div class="card-header"><h2>Preferenze notifiche</h2></div>
           <div class="settings-form">
+            <p style="font-size:13px;color:var(--color-text-secondary);margin:-8px 0 4px">Configura quando e come ricevere notifiche via email sugli eventi di sicurezza.</p>
             <div class="form-group">
               <label class="form-label">Email destinatario</label>
               <input type="email" v-model="notifPrefs.user_email" class="filter-input" placeholder="security@example.com">
@@ -877,37 +847,6 @@
           </div>
         </div>
 
-        <!-- Export tab -->
-        <div v-if="settingsTab === 'export'" class="card">
-          <div class="card-header"><h2>Esporta dati</h2></div>
-          <div class="export-options-grid">
-            <div class="export-option" @click="exportFindings('json')">
-              <div class="export-icon">{ }</div>
-              <div class="export-name">JSON</div>
-              <div class="export-desc">Dati strutturati per integrazione</div>
-            </div>
-            <div class="export-option" @click="exportFindings('csv')">
-              <div class="export-icon">&#x1F4C4;</div>
-              <div class="export-name">CSV</div>
-              <div class="export-desc">Foglio di calcolo per analisi</div>
-            </div>
-            <div class="export-option" @click="exportFindings('sarif')">
-              <div class="export-icon">&#x1F50D;</div>
-              <div class="export-name">SARIF</div>
-              <div class="export-desc">Standard per tool di sicurezza</div>
-            </div>
-            <div class="export-option" @click="exportFindings('html')">
-              <div class="export-icon">&#x1F310;</div>
-              <div class="export-name">HTML</div>
-              <div class="export-desc">Report leggibile nel browser</div>
-            </div>
-            <div class="export-option export-option-primary" @click="exportFindings('pdf', true)">
-              <div class="export-icon">&#x1F4D5;</div>
-              <div class="export-name">PDF + Analytics</div>
-              <div class="export-desc">Report completo con grafici</div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -1090,7 +1029,7 @@
       <div class="modal modal-lg">
         <div class="modal-header">
           <div class="modal-title-group">
-            <span class="badge" :class="statusBadgeClass(selectedScan.status)">{{ selectedScan.status }}</span>
+            <span class="badge" :class="statusBadgeClass(selectedScan.status)">{{ statusLabel(selectedScan.status) }}</span>
             <h2 class="modal-title">{{ selectedScan.target_name }}</h2>
           </div>
           <button class="modal-close" @click="selectedScan = null">&#x2715;</button>
@@ -1145,21 +1084,25 @@
           <button class="modal-close" @click="showScanModal = false">&#x2715;</button>
         </div>
         <div class="modal-body">
+          <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px">Configura e avvia una nuova scansione di sicurezza su un target.</p>
           <div class="form-group">
             <label class="form-label">Nome scansione</label>
-            <input type="text" v-model="newScanForm.name" class="filter-input" placeholder="es. my-app-v2.0">
+            <input type="text" v-model="newScanForm.name" class="filter-input" placeholder="es. my-app-v2.0" autocomplete="off">
           </div>
           <div class="form-group">
             <label class="form-label">Tipo target</label>
             <select v-model="newScanForm.target_type" class="filter-select">
-              <option value="local">Local</option>
-              <option value="git">Git</option>
+              <option value="local">Directory locale</option>
+              <option value="git">Repository Git</option>
               <option value="image">Docker Image</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">Target</label>
-            <input type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/...' : newScanForm.target_type === 'image' ? 'nginx:latest' : '/data/workspaces/...'">
+            <input type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/org/repo' : newScanForm.target_type === 'image' ? 'nginx:latest' : '/data/workspaces/my-project'" autocomplete="off">
+            <span style="font-size:11px;color:var(--color-text-muted)" v-if="newScanForm.target_type === 'git'">URL del repository Git da analizzare</span>
+            <span style="font-size:11px;color:var(--color-text-muted)" v-else-if="newScanForm.target_type === 'image'">Nome e tag dell'immagine Docker</span>
+            <span style="font-size:11px;color:var(--color-text-muted)" v-else>Percorso assoluto della directory da scansionare</span>
           </div>
           <div class="modal-actions">
             <button class="btn-secondary" @click="showScanModal = false">Annulla</button>
@@ -1247,41 +1190,6 @@
         </div>
       </div>
      </div>
-
-    <!-- ================================================================
-         KEYBOARD SHORTCUTS MODAL
-    ================================================================ -->
-    <div class="modal-overlay" v-if="showShortcutsHelp" @click.self="showShortcutsHelp = false">
-      <div class="modal-box" style="max-width:520px">
-        <div class="modal-header">
-          <h3>Scorciatoie da tastiera</h3>
-          <button class="modal-close" @click="showShortcutsHelp = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Premi <kbd>?</kbd> in qualsiasi momento per mostrare questa guida.</p>
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead>
-              <tr style="border-bottom:1px solid var(--border)">
-                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Scorciatoia</th>
-                <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">Azione</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>d</kbd></td><td style="padding:6px 8px">Vai a Dashboard</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>s</kbd></td><td style="padding:6px 8px">Vai a Scansioni</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>f</kbd></td><td style="padding:6px 8px">Vai a Findings</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>a</kbd></td><td style="padding:6px 8px">Vai ad Analytics</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>c</kbd></td><td style="padding:6px 8px">Vai a Confronta</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>g</kbd> poi <kbd>x</kbd></td><td style="padding:6px 8px">Vai a Settings</td></tr>
-              <tr style="border-top:1px solid var(--border)"><td style="padding:6px 8px"><kbd>n</kbd></td><td style="padding:6px 8px">Nuova scansione (nella pagina Scansioni)</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>r</kbd></td><td style="padding:6px 8px">Aggiorna pagina corrente</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>Esc</kbd></td><td style="padding:6px 8px">Chiudi modal / overlay</td></tr>
-              <tr><td style="padding:6px 8px"><kbd>?</kbd></td><td style="padding:6px 8px">Mostra/nascondi questa guida</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
 
   </div><!-- #app -->
   {% endraw %}

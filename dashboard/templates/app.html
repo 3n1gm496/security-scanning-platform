@@ -379,15 +379,15 @@
                   <td class="th-check" @click.stop>
                     <input type="checkbox" :value="scan.id" v-model="selectedScans" :disabled="selectedScans.length >= 2 && !selectedScans.includes(scan.id)">
                   </td>
-                  <td @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
-                  <td @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
-                  <td @click="openScanDetail(scan)"><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
-                  <td @click="openScanDetail(scan)"><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
-                  <td @click="openScanDetail(scan)"><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status }}</span></td>
-                  <td @click="openScanDetail(scan)"><strong>{{ scan.findings_count }}</strong></td>
-                  <td @click="openScanDetail(scan)"><span v-if="scan.critical_count > 0" class="sev-pill sev-critical">{{ scan.critical_count }}</span><span v-else class="text-muted">—</span></td>
-                  <td @click="openScanDetail(scan)"><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
-                  <td @click="openScanDetail(scan)" class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
+                  <td v-if="colVisible('id')" @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
+                  <td v-if="colVisible('target_name')" @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
+                  <td v-if="colVisible('target_type')" @click="openScanDetail(scan)"><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
+                  <td v-if="colVisible('status')" @click="openScanDetail(scan)"><span class="badge" :class="statusBadgeClass(scan.status)">{{ scan.status }}</span></td>
+                  <td v-if="colVisible('policy_status')" @click="openScanDetail(scan)"><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status ? scan.policy_status.toUpperCase() : '—' }}</span></td>
+                  <td v-if="colVisible('findings_count')" @click="openScanDetail(scan)"><strong>{{ scan.findings_count }}</strong></td>
+                  <td v-if="colVisible('critical_count')" @click="openScanDetail(scan)"><span v-if="scan.critical_count > 0" class="sev-pill sev-critical">{{ scan.critical_count }}</span><span v-else class="text-muted">—</span></td>
+                  <td v-if="colVisible('high_count')" @click="openScanDetail(scan)"><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
+                  <td v-if="colVisible('created_at')" @click="openScanDetail(scan)" class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
                   <td @click.stop>
                     <button class="btn-icon-sm" @click="openScanDetail(scan)" title="Dettaglio">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -1083,7 +1083,7 @@
                 <h3>Informazioni Scansione</h3>
                 <div class="detail-row"><span class="detail-key">Scan ID</span><span class="detail-val"><code>{{ selectedScan.id }}</code></span></div>
                 <div class="detail-row"><span class="detail-key">Tipo</span><span class="detail-val">{{ selectedScan.target_type }}</span></div>
-                <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status }}</span></span></div>
+                <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status ? selectedScan.policy_status.toUpperCase() : '—' }}</span></span></div>
                 <div class="detail-row"><span class="detail-key">Findings totali</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
                 <div class="detail-row"><span class="detail-key">Critical</span><span class="detail-val"><span class="sev-pill sev-critical" v-if="selectedScan.critical_count > 0">{{ selectedScan.critical_count }}</span><span v-else>0</span></span></div>
                 <div class="detail-row"><span class="detail-key">High</span><span class="detail-val"><span class="sev-pill sev-high" v-if="selectedScan.high_count > 0">{{ selectedScan.high_count }}</span><span v-else>0</span></span></div>

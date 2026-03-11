@@ -168,7 +168,7 @@ if default_key:
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
 
-_RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics", "/metrics"}
+_RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics", "/api/metrics/json", "/metrics"}
 
 # In-process sliding-window rate limiter.
 # _rate_buckets maps (scope, client_id) -> deque of monotonic timestamps.
@@ -568,11 +568,22 @@ def create_new_api_key(
     expires_days: int | None = Form(None),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
-    """Create a new API key (admin/operator only)."""
+    """Create a new API key (admin only — privilege ceiling enforced)."""
     try:
         role_enum = Role(role)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}")
+
+    # Role-ceiling: a caller may only create keys for roles ≤ their own.
+    # Role hierarchy: ADMIN > OPERATOR > VIEWER
+    _ROLE_RANK: dict[Role, int] = {Role.VIEWER: 0, Role.OPERATOR: 1, Role.ADMIN: 2}
+    caller_rank = _ROLE_RANK.get(auth.role, 0)
+    target_rank = _ROLE_RANK.get(role_enum, 0)
+    if target_rank > caller_rank:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Cannot create a key with role '{role_enum.value}': exceeds your role ({auth.role.value})",
+        )
 
     full_key, prefix = create_api_key(
         name=name, role=role_enum, expires_days=expires_days, created_by=auth.api_key_prefix or auth.user_id

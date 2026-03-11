@@ -5,6 +5,7 @@ Webhook system for sending notifications on scan events.
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -20,6 +22,54 @@ from db import get_connection
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 WEBHOOK_RETRY_COUNT = int(os.getenv("WEBHOOK_RETRY_COUNT", "3"))
+
+# ---------------------------------------------------------------------------
+# SSRF protection — blocked IP ranges
+# ---------------------------------------------------------------------------
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local / AWS IMDS
+    ipaddress.ip_network("100.64.0.0/10"),   # shared address space (RFC 6598)
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),         # unique local IPv6
+    ipaddress.ip_network("fe80::/10"),        # link-local IPv6
+]
+
+
+def validate_webhook_url(url: str) -> None:
+    """Validate a webhook URL to prevent SSRF attacks.
+
+    Raises ``ValueError`` with a descriptive message if the URL is unsafe.
+    Checks:
+    - Scheme must be http or https.
+    - If the hostname resolves to a literal IP, it must not be in a private/
+      reserved range.  (DNS-rebinding is not mitigated here — add a
+      per-request DNS pre-resolution step for high-security environments.)
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError(f"Webhook URL must use http or https scheme, got: '{parsed.scheme}'")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Webhook URL must include a hostname")
+
+    # If the hostname is a literal IP address, check it against blocked ranges.
+    try:
+        addr = ipaddress.ip_address(hostname)
+        for net in _BLOCKED_NETWORKS:
+            if addr in net:
+                raise ValueError(
+                    f"Webhook URL targets a private/reserved address ({addr}). "
+                    "Only public endpoints are allowed."
+                )
+    except ValueError as exc:
+        # Re-raise if it is our own SSRF error, otherwise hostname is a domain name — allowed.
+        if "private/reserved" in str(exc):
+            raise
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +121,9 @@ def create_webhook(name: str, url: str, events: list[WebhookEvent], secret: Opti
     """
     Create a new webhook.
     Returns webhook ID.
+    Raises ``ValueError`` if the URL fails SSRF validation.
     """
+    validate_webhook_url(url)
     events_str = ",".join([e.value for e in events])
     created_at = datetime.now(timezone.utc).isoformat()
 

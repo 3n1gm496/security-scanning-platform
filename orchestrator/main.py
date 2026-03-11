@@ -96,6 +96,9 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["policy"].setdefault("block_on_severities", ["CRITICAL"])
     settings["policy"].setdefault("block_on_secret_categories", True)
     settings["execution"].setdefault("max_concurrent_targets", int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2")))
+    # git_clone_depth: 0 = full history (recommended for secret scanning via gitleaks).
+    # Set to a positive integer for shallow clones in bandwidth-constrained environments.
+    settings["execution"].setdefault("git_clone_depth", int(os.getenv("ORCH_GIT_CLONE_DEPTH", "0")))
     settings["cache"].setdefault(
         "enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     )
@@ -142,8 +145,9 @@ def prepare_target(target: TargetSpec, settings: dict[str, Any], scan_id: str) -
 
     if target.type == "git":
         destination = workspace_root / scan_id / "repo"
+        clone_depth = int(settings.get("execution", {}).get("git_clone_depth", 0))
         try:
-            clone_repo(target.repo or "", str(destination), target.ref)
+            clone_repo(target.repo or "", str(destination), target.ref, depth=clone_depth)
         except Exception:
             # Clean up partial workspace to avoid disk leaks
             scan_workspace = workspace_root / scan_id

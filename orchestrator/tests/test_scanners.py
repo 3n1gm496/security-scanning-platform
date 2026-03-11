@@ -91,6 +91,7 @@ def test_zap_not_found(tmp_path, monkeypatch):
 def test_clone_repo_env_and_command(monkeypatch, tmp_path):
     # ensure clone_repo builds the expected git command and sets the
     # GIT_TERMINAL_PROMPT environment variable to disable interactivity.
+    # Default depth=0 means full clone: --depth must NOT appear.
     seen = {}
 
     def fake_run_command(cmd, cwd=None, timeout=None, env=None):
@@ -102,11 +103,44 @@ def test_clone_repo_env_and_command(monkeypatch, tmp_path):
 
     dest = tmp_path / "repo"
     clone_repo("https://github.com/foo/bar.git", str(dest), ref="main")
-    assert seen["cmd"][0:3] == ["git", "clone", "--depth"]
+    # Full clone (depth=0): --depth must be absent
+    assert "--depth" not in seen["cmd"], "depth=0 must not add --depth to git clone"
     assert "--branch" in seen["cmd"] and "main" in seen["cmd"]
     assert seen["cmd"][-2:] == ["https://github.com/foo/bar.git", str(dest)]
     # verify environment variable
     assert seen["env"].get("GIT_TERMINAL_PROMPT") == "0"
+
+
+def test_clone_repo_shallow_depth(monkeypatch, tmp_path):
+    """When depth > 0, --depth N must be passed to git clone."""
+    seen = {}
+
+    def fake_run_command(cmd, cwd=None, timeout=None, env=None):
+        seen["cmd"] = cmd
+        return (0, "", "")
+
+    monkeypatch.setattr("orchestrator.scanners.run_command", fake_run_command)
+
+    dest = tmp_path / "repo"
+    clone_repo("https://github.com/foo/bar.git", str(dest), depth=50)
+    assert "--depth" in seen["cmd"]
+    depth_idx = seen["cmd"].index("--depth")
+    assert seen["cmd"][depth_idx + 1] == "50"
+
+
+def test_clone_repo_full_history_no_depth_flag(monkeypatch, tmp_path):
+    """Explicit depth=0 must produce a full clone (no --depth flag)."""
+    seen = {}
+
+    def fake_run_command(cmd, cwd=None, timeout=None, env=None):
+        seen["cmd"] = cmd
+        return (0, "", "")
+
+    monkeypatch.setattr("orchestrator.scanners.run_command", fake_run_command)
+
+    dest = tmp_path / "repo"
+    clone_repo("https://github.com/foo/bar.git", str(dest), depth=0)
+    assert "--depth" not in seen["cmd"]
 
 
 def test_clone_repo_failure(monkeypatch, tmp_path):

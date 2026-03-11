@@ -63,7 +63,7 @@ def ensure_json_file(path: str | Path, default_payload: dict | list) -> None:
         json.dump(default_payload, handle, indent=2)
 
 
-def clone_repo(repo_url: str, destination: str, ref: str | None = None) -> str:
+def clone_repo(repo_url: str, destination: str, ref: str | None = None, depth: int = 0) -> str:
     """Clone a Git repository into the workspace.
 
     The container may have no credentials configured, and we don't want the
@@ -74,9 +74,21 @@ def clone_repo(repo_url: str, destination: str, ref: str | None = None) -> str:
     We also pass ``--quiet`` and disable any credential helpers via
     ``-c credential.helper=`` to reduce the amount of output that can leak
     into logs when the clone fails for authentication reasons.
+
+    Args:
+        repo_url: Remote repository URL.
+        destination: Local path to clone into.
+        ref: Optional branch/tag/ref to check out.
+        depth: Clone depth. ``0`` (default) performs a full clone, which is
+               required for accurate git-history secret scanning (gitleaks).
+               Positive values produce a shallow clone — faster but blind to
+               secrets or vulnerabilities introduced in older commits.
+               Set via ``execution.git_clone_depth`` in settings.yaml.
     """
     Path(destination).parent.mkdir(parents=True, exist_ok=True)
-    command = ["git", "clone", "--depth", "1", "--quiet", "-c", "credential.helper="]
+    command = ["git", "clone", "--quiet", "-c", "credential.helper="]
+    if depth and depth > 0:
+        command.extend(["--depth", str(depth)])
     if ref:
         command.extend(["--branch", ref])
     command.extend([repo_url, destination])

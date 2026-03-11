@@ -265,15 +265,30 @@ def test_calculate_risk_score_unknown():
 
 
 def test_map_to_owasp_sql_injection():
-    """Test OWASP mapping for SQL injection."""
-    assert map_to_owasp("SQL Injection") == "A03:2021 - Injection"
-    assert map_to_owasp("sql injection vulnerability") == "A03:2021 - Injection"
+    """Test OWASP mapping using orchestrator abbreviations."""
+    # A03 - Injection
+    assert map_to_owasp("sqli") == "A03:2021 - Injection"
+    assert map_to_owasp("SQLI") == "A03:2021 - Injection"  # case-insensitive
+    assert map_to_owasp("xss") == "A03:2021 - Injection"
+    # Old long-form names are no longer mapped (orchestrator uses abbreviations)
+    assert map_to_owasp("SQL Injection") is None
 
 
 def test_map_to_owasp_authentication():
-    """Test OWASP mapping for authentication issues."""
-    assert map_to_owasp("Broken Authentication") == "A07:2021 - Identification and Authentication Failures"
-    assert map_to_owasp("authentication bypass") == "A07:2021 - Identification and Authentication Failures"
+    """Test OWASP mapping for access control, crypto and other categories."""
+    # A01 - Broken Access Control
+    assert map_to_owasp("csrf") == "A01:2021 - Broken Access Control"
+    assert map_to_owasp("idor") == "A01:2021 - Broken Access Control"
+    assert map_to_owasp("path-traversal") == "A01:2021 - Broken Access Control"
+    # A02 - Cryptographic Failures
+    assert map_to_owasp("secret") == "A02:2021 - Cryptographic Failures"
+    assert map_to_owasp("crypto") == "A02:2021 - Cryptographic Failures"
+    # A06 - Vulnerable Components
+    assert map_to_owasp("cve") == "A06:2021 - Vulnerable and Outdated Components"
+    # A10 - SSRF
+    assert map_to_owasp("ssrf") == "A10:2021 - Server-Side Request Forgery"
+    # A07 no longer mapped (no orchestrator abbreviation)
+    assert map_to_owasp("Broken Authentication") is None
 
 
 def test_map_to_owasp_unmapped():

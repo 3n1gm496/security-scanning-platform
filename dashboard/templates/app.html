@@ -1102,7 +1102,7 @@
                 <h3>Informazioni Scansione</h3>
                 <div class="detail-row"><span class="detail-key">Scan ID</span><span class="detail-val"><code>{{ selectedScan.id }}</code></span></div>
                 <div class="detail-row"><span class="detail-key">Tipo</span><span class="detail-val">{{ selectedScan.target_type }}</span></div>
-                <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status }}</span></span></div>
+                <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status ? selectedScan.policy_status.toUpperCase() : '—' }}</span></span></div>
                 <div class="detail-row"><span class="detail-key">Findings totali</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
                 <div class="detail-row"><span class="detail-key">Critical</span><span class="detail-val"><span class="sev-pill sev-critical" v-if="selectedScan.critical_count > 0">{{ selectedScan.critical_count }}</span><span v-else>0</span></span></div>
                 <div class="detail-row"><span class="detail-key">High</span><span class="detail-val"><span class="sev-pill sev-high" v-if="selectedScan.high_count > 0">{{ selectedScan.high_count }}</span><span v-else>0</span></span></div>

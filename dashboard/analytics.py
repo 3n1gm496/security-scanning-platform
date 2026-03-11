@@ -11,28 +11,32 @@ from typing import Any
 from db import get_connection
 
 # OWASP Top 10 2021 mapping
-OWASP_TOP_10_MAPPING = {
-    "SQL Injection": "A03:2021 - Injection",
-    "XSS": "A03:2021 - Injection",
-    "Cross-Site Scripting": "A03:2021 - Injection",
-    "Command Injection": "A03:2021 - Injection",
-    "Authentication": "A07:2021 - Identification and Authentication Failures",
-    "Broken Authentication": "A07:2021 - Identification and Authentication Failures",
-    "Session Management": "A07:2021 - Identification and Authentication Failures",
-    "Sensitive Data Exposure": "A02:2021 - Cryptographic Failures",
-    "Cryptographic": "A02:2021 - Cryptographic Failures",
-    "XXE": "A05:2021 - Security Misconfiguration",
-    "XML External Entity": "A05:2021 - Security Misconfiguration",
-    "Access Control": "A01:2021 - Broken Access Control",
-    "Authorization": "A01:2021 - Broken Access Control",
-    "CSRF": "A01:2021 - Broken Access Control",
-    "Insecure Deserialization": "A08:2021 - Software and Data Integrity Failures",
-    "Security Misconfiguration": "A05:2021 - Security Misconfiguration",
-    "Vulnerable Components": "A06:2021 - Vulnerable and Outdated Components",
-    "Logging": "A09:2021 - Security Logging and Monitoring Failures",
-    "Monitoring": "A09:2021 - Security Logging and Monitoring Failures",
-    "SSRF": "A10:2021 - Server-Side Request Forgery",
-    "Hardcoded": "A05:2021 - Security Misconfiguration",
+# Keys are exact category values used by the orchestrator scanners.
+# Only categories with a direct, unambiguous OWASP mapping are included.
+OWASP_TOP_10_MAPPING: dict[str, str] = {
+    # A01 — Broken Access Control
+    "csrf": "A01:2021 - Broken Access Control",
+    "idor": "A01:2021 - Broken Access Control",
+    "path-traversal": "A01:2021 - Broken Access Control",
+    "iam": "A01:2021 - Broken Access Control",
+    # A02 — Cryptographic Failures
+    "crypto": "A02:2021 - Cryptographic Failures",
+    "encryption": "A02:2021 - Cryptographic Failures",
+    "secret": "A02:2021 - Cryptographic Failures",
+    # A03 — Injection
+    "sqli": "A03:2021 - Injection",
+    "xss": "A03:2021 - Injection",
+    "subprocess": "A03:2021 - Injection",
+    # A05 — Security Misconfiguration
+    "misconfig": "A05:2021 - Security Misconfiguration",
+    # A06 — Vulnerable and Outdated Components
+    "cve": "A06:2021 - Vulnerable and Outdated Components",
+    # A08 — Software and Data Integrity Failures
+    "deserialization": "A08:2021 - Software and Data Integrity Failures",
+    # A09 — Security Logging and Monitoring Failures
+    "logging": "A09:2021 - Security Logging and Monitoring Failures",
+    # A10 — Server-Side Request Forgery
+    "ssrf": "A10:2021 - Server-Side Request Forgery",
 }
 
 # Common CWE mappings
@@ -95,15 +99,15 @@ def calculate_risk_score(finding: dict[str, Any]) -> float:
 
 
 def map_to_owasp(category: str) -> str | None:
-    """Map finding category to OWASP Top 10 2021."""
+    """Map finding category to OWASP Top 10 2021.
+
+    Uses exact match on the category abbreviation used by the orchestrator
+    scanners (e.g. 'sqli', 'xss', 'csrf').  Only categories with a direct,
+    unambiguous OWASP mapping are returned; everything else returns None.
+    """
     if not category:
         return None
-
-    category_lower = category.lower()
-    for keyword, owasp_cat in OWASP_TOP_10_MAPPING.items():
-        if keyword.lower() in category_lower:
-            return owasp_cat
-    return None
+    return OWASP_TOP_10_MAPPING.get(category.lower())
 
 
 def map_to_cwe(category: str) -> str | None:

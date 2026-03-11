@@ -1196,8 +1196,16 @@ createApp({
     },
 
     policyBadgeClass(policy) {
-      const map = { PASS: 'badge-success', BLOCK: 'badge-danger', UNKNOWN: 'badge-neutral' };
-      return map[policy] || 'badge-neutral';
+      const normalized = (policy || '').toUpperCase();
+      const map = {
+        PASS: 'badge-success',
+        BLOCK: 'badge-danger',
+        FAIL: 'badge-danger',
+        WARN: 'badge-warning',
+        WARNING: 'badge-warning',
+        UNKNOWN: 'badge-neutral',
+      };
+      return map[normalized] || 'badge-neutral';
     },
 
     copyToClipboard(text) {

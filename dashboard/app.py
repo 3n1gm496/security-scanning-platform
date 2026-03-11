@@ -856,7 +856,7 @@ def run_scan_async(target_type: str, target: str, name: str, root_dir: str) -> d
             f"{root_dir}/config/settings.yaml",
         ]
 
-        result = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True, env=env, timeout=300)
+        result = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True, env=env, timeout=1800)
 
         # Parse JSON output
         try:
@@ -870,7 +870,7 @@ def run_scan_async(target_type: str, target: str, name: str, root_dir: str) -> d
                 "returncode": result.returncode,
             }
     except subprocess.TimeoutExpired:
-        return {"status": "error", "message": "Scan timed out after 5 minutes"}
+        return {"status": "error", "message": "Scan timed out after 30 minutes"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

@@ -355,17 +355,24 @@ createApp({
       }, 30000);
     },
 
-    startScanPolling() {
-      if (this.scanPollingInterval) return;
+    startScanPolling(triggerTime) {
       this.hasRunningScans = true;
+      // Always update so concurrent triggers extend the window
+      this._pollTriggerTime = triggerTime || new Date().toISOString();
+      this._pollDeadline = Date.now() + 37 * 60 * 1000; // 37 min (> 30 min subprocess timeout)
+      if (this.scanPollingInterval) return;
       this.scanPollingInterval = setInterval(async () => {
         try {
           const result = await apiFetch('/api/scans/paginated?per_page=20&sort_by=created_at&sort_order=DESC');
           const items = result.items || [];
-          const running = items.some(s => s.status === 'RUNNING');
           this.recentScans = items.slice(0, 5);
           if (this.currentPage === 'scans') this.scans = items;
-          if (!running) {
+          // Stop when a completed scan that started after our trigger appears,
+          // or when the deadline is exceeded (scan timed out / failed silently).
+          const scanCompleted = items.some(s =>
+            s.status !== 'RUNNING' && s.created_at >= this._pollTriggerTime
+          );
+          if (scanCompleted || Date.now() > this._pollDeadline) {
             this.hasRunningScans = false;
             this.stopScanPolling();
             try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
@@ -1018,6 +1025,7 @@ createApp({
         formData.append('target', this.newScanForm.target);
         formData.append('target_type', this.newScanForm.target_type);
         formData.append('async_mode', 'true');
+        const triggerTime = new Date().toISOString();
         await apiFetch('/api/scan/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1028,7 +1036,7 @@ createApp({
         this.newScanForm = { name: '', target: '', target_type: 'local' };
         this.showToast('Scansione avviata con successo');
         await this.loadScans(true);
-        this.startScanPolling();
+        this.startScanPolling(triggerTime);
       } catch (e) {
         // Keep modal open on error so user can fix the input
         this.showToast('Errore avvio scansione: ' + e.message, 'error');

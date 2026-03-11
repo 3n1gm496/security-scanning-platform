@@ -1262,6 +1262,7 @@ def paginate_findings(
 def paginate_scans(
     target: str = Query(""),
     status: str = Query(""),
+    policy: str = Query(""),
     cursor: str | None = Query(None),
     per_page: int = Query(20, ge=1, le=200),
     sort_by: str = Query("created_at"),
@@ -1273,6 +1274,7 @@ def paginate_scans(
     Query Parameters:
     - target: Filter by target name (partial match)
     - status: Filter by status (exact match: completed, failed, running)
+    - policy: Filter by policy_status (exact match: PASS, BLOCK, UNKNOWN)
     - cursor: Pagination cursor from previous response
     - per_page: Items per page (1-200, default 20)
     - sort_by: Column to sort by (default: created_at)
@@ -1284,6 +1286,7 @@ def paginate_scans(
             conn,
             target_filter=target,
             status_filter=status,
+            policy_filter=policy,
             cursor=cursor,
             sort_by=sort_by,
             sort_order=sort_order,

@@ -541,7 +541,12 @@ createApp({
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom' } },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { boxWidth: 12, font: { size: 11 }, padding: 16 },
+            },
+          },
           scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } },
         },
       });
@@ -564,6 +569,7 @@ createApp({
         });
         if (this.scansFilter.target) params.set('target', this.scansFilter.target);
         if (this.scansFilter.status) params.set('status', this.scansFilter.status);
+        if (this.scansFilter.policy) params.set('policy', this.scansFilter.policy);
         if (this.scansCursor) params.set('cursor', this.scansCursor);
         const result = await apiFetch(`/api/scans/paginated?${params}`);
         this.scans = result.items || [];

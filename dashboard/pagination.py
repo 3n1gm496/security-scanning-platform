@@ -292,6 +292,7 @@ class ScansPaginator:
         conn: Any,
         target_filter: str = "",
         status_filter: str = "",
+        policy_filter: str = "",
         cursor: str | None = None,
         sort_by: str = "created_at",
         sort_order: str = "DESC",
@@ -302,6 +303,7 @@ class ScansPaginator:
             conn: Database connection
             target_filter: Filter by target name (partial match)
             status_filter: Filter by status (exact match)
+            policy_filter: Filter by policy_status (exact match)
             cursor: Pagination cursor
             sort_by: Column to sort by
             sort_order: ASC or DESC
@@ -311,7 +313,6 @@ class ScansPaginator:
         """
         allowed_sort_columns = {"id", "target_name", "target_type", "status", "created_at", "finished_at"}
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "created_at"
-        # created_at is a valid column in the scans table
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 
         where_clauses = ["1=1"]
@@ -325,6 +326,10 @@ class ScansPaginator:
             where_clauses.append("status = ?")
             params.append(status_filter)
 
+        if policy_filter:
+            where_clauses.append("policy_status = ?")
+            params.append(policy_filter.upper())
+
         if cursor:
             cursor_val = self._decode_cursor(cursor)
             op = ">" if safe_sort_order == "ASC" else "<"
@@ -334,8 +339,9 @@ class ScansPaginator:
         where_sql = " AND ".join(where_clauses)
 
         query = f"""
-            SELECT id, target_name, target_type, status, created_at,
-                   (SELECT COUNT(*) FROM findings WHERE scan_id = scans.id) as findings_count
+            SELECT id, target_name, target_type, status, policy_status,
+                   created_at, finished_at,
+                   findings_count, critical_count, high_count, medium_count
             FROM scans
             WHERE {where_sql}
             ORDER BY {safe_sort_by} {safe_sort_order}

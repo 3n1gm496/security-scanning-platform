@@ -254,7 +254,7 @@ class FindingsPaginator:
 
         next_cursor = None
         if has_next and items:
-            next_cursor = self._encode_cursor(str(items[-1]["id"]))
+            next_cursor = self._encode_cursor(str(items[-1][safe_sort_by]))
 
         return {
             "items": items,
@@ -351,7 +351,7 @@ class ScansPaginator:
 
         next_cursor = None
         if has_next and items:
-            next_cursor = self._encode_cursor(str(items[-1]["id"]))
+            next_cursor = self._encode_cursor(str(items[-1][safe_sort_by]))
 
         return {
             "items": items,

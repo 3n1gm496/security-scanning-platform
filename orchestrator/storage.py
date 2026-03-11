@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from orchestrator.db_adapter import adapt_schema, get_connection
 from orchestrator.models import Finding, ScanResult
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 SCHEMA_SQL = """
@@ -61,7 +66,46 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_findings_tool ON findings(tool);
 CREATE INDEX IF NOT EXISTS idx_findings_target_name ON findings(target_name);
 CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    description TEXT    NOT NULL,
+    applied_at  TEXT    NOT NULL
+);
 """
+
+# ---------------------------------------------------------------------------
+# Versioned migrations applied on top of SCHEMA_SQL (baseline = v0).
+# Each entry: (version: int, description: str, sql: str)
+# sql may be an empty string for marker-only entries.
+# ---------------------------------------------------------------------------
+_MIGRATIONS: list[tuple[int, str, str]] = [
+    # v1 – baseline marker: all tables above were created by SCHEMA_SQL.
+    # Future column additions / index changes go here as new entries.
+    (1, "baseline marker", ""),
+]
+
+
+def run_migrations(db_path: str) -> None:
+    """Apply any schema migrations not yet recorded in schema_migrations."""
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations").fetchone()
+        current_version: int = int(row["v"]) if row else 0
+
+    pending = [(v, d, s) for v, d, s in _MIGRATIONS if v > current_version]
+    if not pending:
+        return
+
+    for version, description, sql in pending:
+        with get_connection(db_path) as conn:
+            if sql.strip():
+                adapted = adapt_schema(sql)
+                conn.executescript(adapted)
+            conn.execute(
+                "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
+                (version, description, _utc_now()),
+            )
+        LOGGER.info("Applied schema migration v%s: %s", version, description)
 
 
 def connect(db_path: str):
@@ -74,6 +118,7 @@ def init_db(db_path: str) -> None:
     with get_connection(db_path) as conn:
         conn.executescript(adapted)
         conn.commit()
+    run_migrations(db_path)
     LOGGER.info("Database initialised at %s", db_path)
 
 
@@ -90,12 +135,28 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
     with get_connection(db_path) as conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO scans (
+            INSERT INTO scans (
                 id, created_at, finished_at, target_type, target_name, target_value,
                 status, policy_status, findings_count, critical_count, high_count,
                 medium_count, low_count, info_count, unknown_count, raw_report_dir,
                 normalized_report_path, artifacts_json, tools_json, error_message
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                finished_at             = excluded.finished_at,
+                status                  = excluded.status,
+                policy_status           = excluded.policy_status,
+                findings_count          = excluded.findings_count,
+                critical_count          = excluded.critical_count,
+                high_count              = excluded.high_count,
+                medium_count            = excluded.medium_count,
+                low_count               = excluded.low_count,
+                info_count              = excluded.info_count,
+                unknown_count           = excluded.unknown_count,
+                raw_report_dir          = excluded.raw_report_dir,
+                normalized_report_path  = excluded.normalized_report_path,
+                artifacts_json          = excluded.artifacts_json,
+                tools_json              = excluded.tools_json,
+                error_message           = excluded.error_message
             """,
             (
                 result.scan_id,

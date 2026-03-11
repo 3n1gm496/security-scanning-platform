@@ -63,6 +63,18 @@ def ensure_json_file(path: str | Path, default_payload: dict | list) -> None:
         json.dump(default_payload, handle, indent=2)
 
 
+def get_git_commit_sha(repo_path: str) -> str | None:
+    """Return the HEAD commit SHA of a cloned repository, or None if unavailable."""
+    try:
+        rc, stdout, _ = run_command(["git", "-C", repo_path, "rev-parse", "HEAD"])
+        if rc == 0:
+            sha = stdout.strip()
+            return sha if sha else None
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def clone_repo(repo_url: str, destination: str, ref: str | None = None, depth: int = 0) -> str:
     """Clone a Git repository into the workspace.
 

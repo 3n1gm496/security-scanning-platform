@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.11', '3.12']
 
     steps:
     - uses: actions/checkout@v4
@@ -25,15 +25,19 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-orchestrator-${{ hashFiles('orchestrator/requirements.txt') }}
+        key: ${{ runner.os }}-pip-orchestrator-${{ matrix.python-version }}-${{ hashFiles('orchestrator/requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-orchestrator-
+          ${{ runner.os }}-pip-orchestrator-${{ matrix.python-version }}-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r orchestrator/requirements.txt
-        pip install pytest pytest-cov pytest-asyncio black flake8 isort bandit
+        pip install pytest pytest-cov pytest-asyncio black flake8 isort bandit pip-audit
+
+    - name: Dependency vulnerability audit
+      run: |
+        pip-audit -r orchestrator/requirements.txt --skip-editable
 
     - name: Lint orchestrator
       run: |
@@ -57,13 +61,13 @@ jobs:
       with:
         file: ./coverage.xml
         flags: orchestrator
-        name: codecov-orchestrator
+        name: codecov-orchestrator-${{ matrix.python-version }}
 
   test-dashboard:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.11', '3.12']
 
     steps:
     - uses: actions/checkout@v4
@@ -77,15 +81,19 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-dashboard-${{ hashFiles('dashboard/requirements.txt') }}
+        key: ${{ runner.os }}-pip-dashboard-${{ matrix.python-version }}-${{ hashFiles('dashboard/requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-dashboard-
+          ${{ runner.os }}-pip-dashboard-${{ matrix.python-version }}-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r dashboard/requirements.txt
-        pip install pytest pytest-cov pytest-asyncio httpx black flake8 isort bandit
+        pip install pytest pytest-cov pytest-asyncio httpx black flake8 isort bandit pip-audit
+
+    - name: Dependency vulnerability audit
+      run: |
+        pip-audit -r dashboard/requirements.txt --skip-editable
 
     - name: Lint dashboard
       run: |
@@ -109,7 +117,7 @@ jobs:
       with:
         file: ./coverage.xml
         flags: dashboard
-        name: codecov-dashboard
+        name: codecov-dashboard-${{ matrix.python-version }}
 
   docker-build:
     runs-on: ubuntu-latest

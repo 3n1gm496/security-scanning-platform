@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from db_adapter import get_connection
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 # Re-export get_connection so existing callers (app.py etc.) continue to work
 __all__ = ["get_connection", "init_db"]
@@ -324,10 +332,45 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_findings_tool ON findings(tool);
 CREATE INDEX IF NOT EXISTS idx_findings_target_name ON findings(target_name);
 CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    description TEXT    NOT NULL,
+    applied_at  TEXT    NOT NULL
+);
 """
+
+# ---------------------------------------------------------------------------
+# Versioned migrations (shared version numbering with orchestrator/storage.py)
+# ---------------------------------------------------------------------------
+_MIGRATIONS: list[tuple[int, str, str]] = [
+    (1, "baseline marker", ""),
+]
+
+
+def _run_migrations(db_path: str) -> None:
+    """Apply any schema migrations not yet recorded in schema_migrations."""
+    with _conn(db_path) as conn:
+        row = conn.execute("SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations").fetchone()
+        current_version: int = int(row["v"]) if row else 0
+
+    pending = [(v, d, s) for v, d, s in _MIGRATIONS if v > current_version]
+    if not pending:
+        return
+
+    for version, description, sql in pending:
+        with _conn(db_path) as conn:
+            if sql.strip():
+                conn.executescript(sql)
+            conn.execute(
+                "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
+                (version, description, _utc_now()),
+            )
+        LOGGER.info("Applied schema migration v%s: %s", version, description)
 
 
 def init_db(db_path: str):
     """Inizializza lo schema del database se non esiste."""
     with _conn(db_path) as conn:
         conn.executescript(SCHEMA_SQL)
+    _run_migrations(db_path)

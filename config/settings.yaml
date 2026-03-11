@@ -67,6 +67,10 @@ policy:
 
 execution:
   max_concurrent_targets: 2
+  # git_clone_depth: 0 = full history (default, required for accurate secret scanning).
+  # Set to a positive integer (e.g. 50) in bandwidth-constrained environments.
+  # WARNING: shallow clones cause gitleaks to miss secrets in older commits.
+  git_clone_depth: 0
 
 cache:
   enabled: true

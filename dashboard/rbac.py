@@ -51,7 +51,8 @@ ROLE_PERMISSIONS = {
         Permission.SCAN_WRITE,
         Permission.FINDING_READ,
         Permission.FINDING_WRITE,
-        Permission.API_KEY_MANAGE,
+        # API_KEY_MANAGE intentionally excluded: operators must not be able to
+        # create keys with elevated roles (privilege escalation via key creation).
     ],
     Role.VIEWER: [
         Permission.SCAN_READ,

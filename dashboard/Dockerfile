@@ -3,6 +3,12 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# ── Non-root user ──────────────────────────────────────────────────────────────
+# Run the dashboard as an unprivileged user. UID/GID 1000 matches the default
+# host user on most Linux systems, avoiding permission issues on mounted volumes.
+RUN groupadd -g 1000 dashuser && \
+    useradd -u 1000 -g dashuser -m -s /bin/bash dashuser
+
 # ── System dependencies ────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -67,7 +73,11 @@ COPY orchestrator/ /orchestrator/
 COPY config/ /config/
 
 # ── Data directories ───────────────────────────────────────────────────────────
-RUN mkdir -p /data/workspaces /data/reports /data/cache
+RUN mkdir -p /data/workspaces /data/reports /data/cache \
+    && chown -R dashuser:dashuser /app /orchestrator /config /data
+
+# Drop to non-root for runtime
+USER dashuser
 
 EXPOSE 8080
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

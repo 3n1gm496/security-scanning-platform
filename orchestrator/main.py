@@ -32,6 +32,7 @@ from orchestrator.retention import apply_retention
 from orchestrator.scanners import (
     ScannerError,
     clone_repo,
+    get_git_commit_sha,
     load_json,
     run_checkov,
     run_gitleaks,
@@ -96,6 +97,9 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["policy"].setdefault("block_on_severities", ["CRITICAL"])
     settings["policy"].setdefault("block_on_secret_categories", True)
     settings["execution"].setdefault("max_concurrent_targets", int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2")))
+    # git_clone_depth: 0 = full history (recommended for secret scanning via gitleaks).
+    # Set to a positive integer for shallow clones in bandwidth-constrained environments.
+    settings["execution"].setdefault("git_clone_depth", int(os.getenv("ORCH_GIT_CLONE_DEPTH", "0")))
     settings["cache"].setdefault(
         "enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     )
@@ -136,14 +140,20 @@ def resolve_targets(args: argparse.Namespace) -> list[TargetSpec]:
     return targets
 
 
-def prepare_target(target: TargetSpec, settings: dict[str, Any], scan_id: str) -> tuple[str, str]:
+def prepare_target(target: TargetSpec, settings: dict[str, Any], scan_id: str) -> tuple[str, str, str | None]:
+    """Prepare the scan workspace and return (target_input, target_value, git_sha).
+
+    git_sha is the HEAD commit SHA for git targets (used to bust the cache when
+    new commits are pushed within the TTL window). It is None for all other target types.
+    """
     workspace_root = Path(settings["paths"]["workspace_dir"])
     workspace_root.mkdir(parents=True, exist_ok=True)
 
     if target.type == "git":
         destination = workspace_root / scan_id / "repo"
+        clone_depth = int(settings.get("execution", {}).get("git_clone_depth", 0))
         try:
-            clone_repo(target.repo or "", str(destination), target.ref)
+            clone_repo(target.repo or "", str(destination), target.ref, depth=clone_depth)
         except Exception:
             # Clean up partial workspace to avoid disk leaks
             scan_workspace = workspace_root / scan_id
@@ -151,13 +161,16 @@ def prepare_target(target: TargetSpec, settings: dict[str, Any], scan_id: str) -
                 shutil.rmtree(scan_workspace, ignore_errors=True)
                 LOGGER.warning("Cleaned up partial workspace for scan_id=%s after clone failure", scan_id)
             raise
-        return str(destination), target.repo or ""
+        git_sha = get_git_commit_sha(str(destination))
+        LOGGER.debug("Git target %s resolved to commit sha=%s", target.repo, git_sha)
+        return str(destination), target.repo or "", git_sha
     if target.type == "local":
         if not target.path or not Path(target.path).exists():
             raise FileNotFoundError(f"Local path does not exist: {target.path}")
-        return target.path, target.path
+        git_sha = get_git_commit_sha(target.path)
+        return target.path, target.path, git_sha
     if target.type == "image":
-        return target.image or "", target.image or ""
+        return target.image or "", target.image or "", None
     raise ValueError(f"Unsupported target type: {target.type}")
 
 
@@ -203,7 +216,10 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
     status = "COMPLETED_CLEAN"
     error_message = None
 
-    target_input, target_value = prepare_target(target, settings, scan_id)
+    target_input, target_value, git_sha = prepare_target(target, settings, scan_id)
+    # git_sha is injected into every tool's cache_context so that a new commit
+    # pushed within the TTL window produces a cache miss instead of stale results.
+    _git_ctx: dict[str, Any] = {"git_sha": git_sha} if git_sha else {}
     cache_settings = settings.get("cache", {})
     cache_enabled = bool(cache_settings.get("enabled", False))
     cache_ttl = int(cache_settings.get("ttl_seconds", 900))
@@ -289,7 +305,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     tool_name="syft",
                     target_type=target.type,
                     target_value=target_value,
-                    context={"mode": "sbom"},
+                    context={"mode": "sbom", **_git_ctx},
                 )
                 cache_hit = load_cached_output(cache_dir, cache_key, output_path, cache_ttl)
 
@@ -345,7 +361,10 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 lambda raw_payload, output_path, **_: normalize_semgrep(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),
-                cache_context={"configs": settings["scanners"]["semgrep"].get("configs", ["p/default"])},
+                cache_context={
+                    "configs": settings["scanners"]["semgrep"].get("configs", ["p/default"]),
+                    **_git_ctx,
+                },
             )
         if settings["scanners"]["bandit"].get("enabled", False):
             execute_tool(
@@ -354,7 +373,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 lambda raw_payload, output_path, **_: normalize_bandit(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),
-                cache_context={"mode": "bandit"},
+                cache_context={"mode": "bandit", **_git_ctx},
             )
         if settings["scanners"]["nuclei"].get("enabled", False):
             execute_tool(
@@ -373,6 +392,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                     "templates": settings["scanners"]["nuclei"].get("templates"),
                     "severity": settings["scanners"]["nuclei"].get("severity"),
                     "tags": settings["scanners"]["nuclei"].get("tags"),
+                    **_git_ctx,
                 },
             )
         if settings["scanners"]["trivy"].get("enabled", False):
@@ -390,6 +410,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 cache_context={
                     "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
                     "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                    **_git_ctx,
                 },
             )
         if settings["scanners"]["gitleaks"].get("enabled", False):
@@ -400,7 +421,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 lambda raw_payload, output_path, **_: normalize_gitleaks(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),
-                cache_context={"use_git_history": use_git},
+                cache_context={"use_git_history": use_git, **_git_ctx},
             )
         if settings["scanners"]["checkov"].get("enabled", False):
             execute_tool(
@@ -409,7 +430,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 lambda raw_payload, output_path, **_: normalize_checkov(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),
-                cache_context={"mode": "checkov"},
+                cache_context={"mode": "checkov", **_git_ctx},
             )
         if settings["scanners"]["grype"].get("enabled", False):
             execute_tool(
@@ -418,7 +439,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 lambda raw_payload, output_path, **_: normalize_grype(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),
-                cache_context={"mode": "grype"},
+                cache_context={"mode": "grype", **_git_ctx},
             )
         if settings["scanners"]["owasp_zap"].get("enabled", False) and target.type != "image":
             execute_tool(
@@ -427,7 +448,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 lambda raw_payload, output_path, **_: normalize_zap(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),
-                cache_context={"mode": "zap"},
+                cache_context={"mode": "zap", **_git_ctx},
             )
         if settings["scanners"]["syft"].get("enabled", False):
             execute_syft()
@@ -469,6 +490,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
                 cache_context={
                     "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
                     "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                    # No git_sha for image targets — image digest is already in target_value
                 },
             )
         if settings["scanners"]["grype"].get("enabled", False):

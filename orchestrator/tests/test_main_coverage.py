@@ -159,16 +159,18 @@ targets:
 
 
 class TestPrepareTarget:
-    """Verify prepare_target returns correct (input, value) tuples."""
+    """Verify prepare_target returns correct (input, value, git_sha) tuples."""
 
     def test_local_target_returns_path(self, tmp_path):
         settings = _minimal_settings(tmp_path)
         target_dir = tmp_path / "src"
         target_dir.mkdir()
         target = TargetSpec.from_dict({"name": "t", "type": "local", "path": str(target_dir), "enabled": True})
-        inp, val = prepare_target(target, settings, "scan-1")
+        inp, val, git_sha = prepare_target(target, settings, "scan-1")
         assert inp == str(target_dir)
         assert val == str(target_dir)
+        # No .git directory → sha should be None (or a string if git happens to work)
+        assert git_sha is None or isinstance(git_sha, str)
 
     def test_local_target_missing_path_raises(self, tmp_path):
         settings = _minimal_settings(tmp_path)
@@ -186,9 +188,10 @@ class TestPrepareTarget:
     def test_image_target_returns_image_ref(self, tmp_path):
         settings = _minimal_settings(tmp_path)
         target = TargetSpec.from_dict({"name": "t", "type": "image", "image": "nginx:latest", "enabled": True})
-        inp, val = prepare_target(target, settings, "scan-1")
+        inp, val, git_sha = prepare_target(target, settings, "scan-1")
         assert inp == "nginx:latest"
         assert val == "nginx:latest"
+        assert git_sha is None
 
     def test_unsupported_type_raises(self, tmp_path):
         settings = _minimal_settings(tmp_path)

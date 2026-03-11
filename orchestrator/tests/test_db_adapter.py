@@ -312,3 +312,37 @@ def test_get_connection_in_memory():
     conn.execute("CREATE TABLE t (id INTEGER)")
     conn.commit()
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# WAL mode tests (issue #1)
+# ---------------------------------------------------------------------------
+
+
+def test_sqlite_connect_enables_wal_mode(tmp_path):
+    """_sqlite_connect must set journal_mode=WAL for file-based databases."""
+    db_path = str(tmp_path / "wal_test.db")
+    conn = _sqlite_connect(db_path)
+    row = conn.execute("PRAGMA journal_mode").fetchone()
+    journal_mode = row[0] if row else None
+    conn.close()
+    assert journal_mode == "wal", f"Expected WAL mode, got: {journal_mode}"
+
+
+def test_sqlite_connect_in_memory_does_not_raise_wal():
+    """_sqlite_connect with :memory: should not raise even though WAL is silently ignored."""
+    conn = _sqlite_connect(":memory:")
+    # In-memory databases may ignore WAL silently — ensure no exception is raised
+    assert conn is not None
+    conn.close()
+
+
+def test_sqlite_connect_sets_synchronous_normal(tmp_path):
+    """_sqlite_connect must set synchronous=NORMAL when using WAL mode."""
+    db_path = str(tmp_path / "sync_test.db")
+    conn = _sqlite_connect(db_path)
+    row = conn.execute("PRAGMA synchronous").fetchone()
+    # SQLite returns integer: 0=OFF, 1=NORMAL, 2=FULL, 3=EXTRA
+    synchronous = row[0] if row else None
+    conn.close()
+    assert synchronous == 1, f"Expected NORMAL (1) synchronous, got: {synchronous}"

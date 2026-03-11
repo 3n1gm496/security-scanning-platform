@@ -168,3 +168,39 @@ def test_api_key_last_used_update(db_setup):
 
     # last_used_at dovrebbe essere presente
     assert last_used2 is not None
+
+
+# ---------------------------------------------------------------------------
+# Privilege escalation tests (issue #3)
+# ---------------------------------------------------------------------------
+
+
+class TestOperatorRolePermissions:
+    """OPERATOR must NOT have API_KEY_MANAGE — prevents privilege escalation."""
+
+    def test_operator_cannot_manage_api_keys(self):
+        """OPERATOR role must not include API_KEY_MANAGE permission."""
+        assert not has_permission(Role.OPERATOR, Permission.API_KEY_MANAGE)
+
+    def test_admin_can_manage_api_keys(self):
+        """ADMIN role must retain API_KEY_MANAGE permission."""
+        assert has_permission(Role.ADMIN, Permission.API_KEY_MANAGE)
+
+    def test_viewer_cannot_manage_api_keys(self):
+        """VIEWER role must not include API_KEY_MANAGE permission."""
+        assert not has_permission(Role.VIEWER, Permission.API_KEY_MANAGE)
+
+    def test_operator_has_expected_permissions(self):
+        """OPERATOR should retain scan and finding permissions."""
+        assert has_permission(Role.OPERATOR, Permission.SCAN_READ)
+        assert has_permission(Role.OPERATOR, Permission.SCAN_WRITE)
+        assert has_permission(Role.OPERATOR, Permission.FINDING_READ)
+        assert has_permission(Role.OPERATOR, Permission.FINDING_WRITE)
+
+    def test_operator_cannot_delete_scans(self):
+        """OPERATOR must not be able to delete scans (ADMIN-only)."""
+        assert not has_permission(Role.OPERATOR, Permission.SCAN_DELETE)
+
+    def test_operator_cannot_manage_users(self):
+        """OPERATOR must not be able to manage users."""
+        assert not has_permission(Role.OPERATOR, Permission.USER_MANAGE)

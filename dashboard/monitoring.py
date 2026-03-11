@@ -2,17 +2,90 @@
 Health check and monitoring endpoints for Security Scanning Platform Dashboard.
 """
 
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Response, status
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+    REGISTRY,
+)
 from pydantic import BaseModel
 
 router = APIRouter(tags=["monitoring"])
 
 # Application start time
 START_TIME = time.time()
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+# Guard against duplicate-registration errors when modules are reloaded in
+# tests. prometheus_client raises ValueError if a metric name is registered
+# twice in the same process.
+
+
+def _get_or_create_counter(name: str, documentation: str, labelnames=()) -> Counter:
+    try:
+        return Counter(name, documentation, labelnames)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+def _get_or_create_histogram(name: str, documentation: str, buckets=None) -> Histogram:
+    kwargs = {"buckets": buckets} if buckets else {}
+    try:
+        return Histogram(name, documentation, **kwargs)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+def _get_or_create_gauge(name: str, documentation: str, labelnames=()) -> Gauge:
+    try:
+        return Gauge(name, documentation, labelnames)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+SSP_SCANS_TOTAL: Counter = _get_or_create_counter(
+    "ssp_scans_total",
+    "Total number of scans completed, partitioned by status and policy result",
+    ["status", "policy_status"],
+)
+
+SSP_SCAN_DURATION_SECONDS: Histogram = _get_or_create_histogram(
+    "ssp_scan_duration_seconds",
+    "Scan duration in seconds",
+    buckets=[10, 30, 60, 120, 300, 600, 1800, 3600],
+)
+
+SSP_FINDINGS_TOTAL: Gauge = _get_or_create_gauge(
+    "ssp_findings_total",
+    "Current total number of findings in the database, partitioned by severity",
+    ["severity"],
+)
+
+SSP_API_REQUESTS_TOTAL: Counter = _get_or_create_counter(
+    "ssp_api_requests_total",
+    "Total HTTP requests to the dashboard API",
+    ["method", "path", "status_code"],
+)
+
+SSP_ACTIVE_SCAN_WORKERS: Gauge = _get_or_create_gauge(
+    "ssp_active_scan_workers",
+    "Number of currently running background scan workers",
+)
+
+
+# ---------------------------------------------------------------------------
+# Pydantic response models
+# ---------------------------------------------------------------------------
 
 
 class HealthResponse(BaseModel):
@@ -32,6 +105,29 @@ class ReadinessResponse(BaseModel):
     checks: Dict[str, Dict[str, Any]]
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _app_version() -> str:
+    """Return the application version from env or package metadata."""
+    v = os.getenv("APP_VERSION", "")
+    if v:
+        return v
+    try:
+        import importlib.metadata
+
+        return importlib.metadata.version("security-scanning-platform")
+    except Exception:
+        return "dev"
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
 @router.get("/health", response_model=HealthResponse, status_code=status.HTTP_200_OK)
 async def health_check() -> HealthResponse:
     """
@@ -44,7 +140,7 @@ async def health_check() -> HealthResponse:
         status="healthy",
         timestamp=datetime.now(timezone.utc).isoformat(),
         uptime_seconds=round(uptime, 2),
-        version="1.0.0",
+        version=_app_version(),
         component="dashboard",
     )
 
@@ -55,12 +151,11 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     Readiness check endpoint.
     Verifies that all dependencies are available.
     """
-    checks = {}
+    checks: dict[str, dict[str, Any]] = {}
     all_ready = True
 
     # Check database connectivity
     try:
-        import os
         from pathlib import Path
 
         db_path = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -100,18 +195,55 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     )
 
 
-@router.get("/metrics")
-async def metrics() -> Dict[str, Any]:
+@router.get("/metrics/json")
+async def metrics_json() -> Dict[str, Any]:
     """
-    Basic metrics endpoint.
-    Returns application metrics in JSON format.
+    Basic metrics in JSON format (for dashboards that prefer JSON over Prometheus text).
+    For Prometheus scraping use GET /api/metrics instead.
     """
     uptime = time.time() - START_TIME
 
     return {
         "app_uptime_seconds": round(uptime, 2),
-        "app_version": "1.0.0",
+        "app_version": _app_version(),
         "app_name": "security-scanner-dashboard",
         "component": "dashboard",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get(
+    "/metrics",
+    response_class=Response,
+    summary="Prometheus metrics",
+    description=(
+        "Prometheus-compatible metrics endpoint. Configure your Prometheus server to scrape this path.\n\n"
+        "Metrics exported:\n"
+        "- `ssp_scans_total{status,policy_status}` — scan completion counter\n"
+        "- `ssp_scan_duration_seconds` — scan duration histogram\n"
+        "- `ssp_findings_total{severity}` — current findings gauge (refreshed on scrape)\n"
+        "- `ssp_api_requests_total{method,path,status_code}` — HTTP request counter\n"
+        "- `ssp_active_scan_workers` — active background scan worker gauge\n"
+        "- Standard `process_*` and `python_*` metrics"
+    ),
+)
+async def prometheus_metrics() -> Response:
+    """Expose Prometheus metrics for scraping."""
+    # Refresh the findings gauge from the DB on each scrape.
+    # This is a cheap aggregation query (indexed by severity).
+    try:
+        db_path = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+        from db import get_connection
+
+        with get_connection(db_path) as conn:
+            rows = conn.execute("SELECT severity, COUNT(*) AS cnt FROM findings GROUP BY severity").fetchall()
+        for row in rows:
+            SSP_FINDINGS_TOTAL.labels(severity=row["severity"]).set(row["cnt"])
+    except Exception:
+        # Non-fatal: a failed DB query must not break the metrics scrape.
+        pass
+
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )

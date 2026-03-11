@@ -23,6 +23,7 @@ from webhooks import (
     delete_webhook,
     toggle_webhook,
     trigger_webhook,
+    validate_webhook_url,
     _generate_signature,
 )
 
@@ -218,3 +219,72 @@ async def test_trigger_webhook_with_signature(db_setup):
         headers = call_args.kwargs["headers"]
         assert "X-Webhook-Signature" in headers
         assert headers["X-Webhook-Signature"].startswith("sha256=")
+
+
+# ---------------------------------------------------------------------------
+# SSRF protection tests (issue #6)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateWebhookUrl:
+    """Tests for validate_webhook_url SSRF protection."""
+
+    def test_valid_public_https_url_passes(self):
+        """Public HTTPS URLs should be accepted."""
+        validate_webhook_url("https://hooks.example.com/notify")
+
+    def test_valid_public_http_url_passes(self):
+        """Public HTTP URLs should also be accepted."""
+        validate_webhook_url("http://webhook.example.org/events")
+
+    def test_invalid_scheme_rejected(self):
+        """Non-HTTP/HTTPS schemes must be rejected."""
+        with pytest.raises(ValueError, match="http or https"):
+            validate_webhook_url("ftp://example.com/data")
+
+    def test_file_scheme_rejected(self):
+        with pytest.raises(ValueError, match="http or https"):
+            validate_webhook_url("file:///etc/passwd")
+
+    def test_loopback_ipv4_rejected(self):
+        """Loopback address (127.x.x.x) must be rejected to prevent localhost SSRF."""
+        with pytest.raises(ValueError, match="private/reserved"):
+            validate_webhook_url("http://127.0.0.1/admin")
+
+    def test_aws_imds_rejected(self):
+        """AWS Instance Metadata Service (169.254.169.254) must be blocked."""
+        with pytest.raises(ValueError, match="private/reserved"):
+            validate_webhook_url("http://169.254.169.254/latest/meta-data/")
+
+    def test_rfc1918_10_block_rejected(self):
+        """10.0.0.0/8 (RFC 1918) must be rejected."""
+        with pytest.raises(ValueError, match="private/reserved"):
+            validate_webhook_url("http://10.10.10.10/hook")
+
+    def test_rfc1918_172_block_rejected(self):
+        """172.16.0.0/12 (RFC 1918) must be rejected."""
+        with pytest.raises(ValueError, match="private/reserved"):
+            validate_webhook_url("https://172.20.0.1/secret")
+
+    def test_rfc1918_192_168_rejected(self):
+        """192.168.0.0/16 (RFC 1918) must be rejected."""
+        with pytest.raises(ValueError, match="private/reserved"):
+            validate_webhook_url("http://192.168.1.100/api")
+
+    def test_ipv6_loopback_rejected(self):
+        """IPv6 loopback (::1) must be rejected."""
+        with pytest.raises(ValueError, match="private/reserved"):
+            validate_webhook_url("http://[::1]/internal")
+
+    def test_domain_name_allowed(self):
+        """Domain names are allowed (DNS-rebinding not mitigated at this layer)."""
+        validate_webhook_url("https://my-company.slack.com/services/hook")
+
+    def test_create_webhook_ssrf_url_rejected(self, db_setup):
+        """create_webhook must reject SSRF URLs at storage time."""
+        with pytest.raises(ValueError, match="private/reserved"):
+            create_webhook(
+                name="SSRF Test",
+                url="http://10.0.0.1/internal",
+                events=[WebhookEvent.SCAN_COMPLETED],
+            )

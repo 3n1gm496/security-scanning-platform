@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 import time
+import uuid as _uuid
 import bcrypt
 import csv
 import io
@@ -13,6 +15,8 @@ from pathlib import Path
 from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+
+LOGGER = logging.getLogger(__name__)
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -830,8 +834,47 @@ def get_remediation_guidance(finding_id: int, auth: AuthContext = Depends(requir
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+def _insert_running_scan(scan_id: str, started_at: str, target_type: str, name: str, target: str) -> None:
+    """Pre-insert a RUNNING placeholder row so the scan shows up immediately in the list."""
+    try:
+        with get_connection(DB_PATH) as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO scans (
+                    id, created_at, finished_at, target_type, target_name, target_value,
+                    status, policy_status, findings_count, critical_count, high_count,
+                    medium_count, low_count, info_count, unknown_count,
+                    raw_report_dir, normalized_report_path, artifacts_json, tools_json
+                ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', 'PENDING', 0, 0, 0, 0, 0, 0, 0, '', '', '{}', '[]')
+                """,
+                (scan_id, started_at, started_at, target_type, name, target),
+            )
+    except Exception:
+        pass  # Non-fatal: the actual scan still runs
+
+
+def _update_scan_failed(scan_id: str, error_message: str) -> None:
+    """Update a RUNNING scan to FAILED when the subprocess exits abnormally."""
+    try:
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        with get_connection(DB_PATH) as conn:
+            conn.execute(
+                "UPDATE scans SET status='FAILED', finished_at=?, error_message=? WHERE id=? AND status='RUNNING'",
+                (now, error_message, scan_id),
+            )
+    except Exception:
+        pass  # Non-fatal
+
+
 def run_scan_async(target_type: str, target: str, name: str, root_dir: str) -> dict:
     """Execute orchestrator scan and save results to database."""
+    scan_id = str(_uuid.uuid4())
+    started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+    # Pre-insert a RUNNING placeholder so the scan appears in the list immediately.
+    _insert_running_scan(scan_id, started_at, target_type, name, target)
+    LOGGER.info("Scan starting: id=%s name=%r target=%r type=%s", scan_id, name, target, target_type)
+
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = f"{root_dir}:{env.get('PYTHONPATH', '')}"
@@ -841,37 +884,48 @@ def run_scan_async(target_type: str, target: str, name: str, root_dir: str) -> d
         env["ORCH_CACHE_DIR"] = f"{root_dir}/data/cache"
         env["DASHBOARD_DB_PATH"] = f"{root_dir}/data/security_scans.db"
 
+        # Propagate log level so orchestrator uses the same verbosity.
+        log_level = os.getenv("LOG_LEVEL", "INFO")
+
         # Build orchestrator command
         cmd = [
             "python3",
             "-m",
             "orchestrator.main",
-            "--target-type",
-            target_type,
-            "--target",
-            target,
-            "--target-name",
-            name,
-            "--settings",
-            f"{root_dir}/config/settings.yaml",
+            "--target-type", target_type,
+            "--target", target,
+            "--target-name", name,
+            "--settings", f"{root_dir}/config/settings.yaml",
+            "--scan-id", scan_id,
+            "--log-level", log_level,
         ]
 
-        result = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True, env=env, timeout=1800)
+        # stdout=PIPE captures the JSON result; stderr=None lets orchestrator logs
+        # flow to the dashboard process stderr, making them visible in Docker logs
+        # (docker compose logs -f dashboard) in real time.
+        result = subprocess.run(
+            cmd, cwd=root_dir, stdout=subprocess.PIPE, stderr=None,
+            text=True, env=env, timeout=1800,
+        )
 
         # Parse JSON output
         try:
             output_json = json.loads(result.stdout)
+            LOGGER.info("Scan completed: id=%s returncode=%d", scan_id, result.returncode)
             return {"status": "completed", "output": output_json, "returncode": result.returncode}
         except json.JSONDecodeError:
-            return {
-                "status": "error",
-                "message": "Failed to parse orchestrator output",
-                "stderr": result.stderr,
-                "returncode": result.returncode,
-            }
+            msg = "Failed to parse orchestrator output"
+            LOGGER.error("Scan %s: %s (returncode=%d)", scan_id, msg, result.returncode)
+            _update_scan_failed(scan_id, msg)
+            return {"status": "error", "message": msg, "returncode": result.returncode}
     except subprocess.TimeoutExpired:
-        return {"status": "error", "message": "Scan timed out after 30 minutes"}
+        msg = "Scan timed out after 30 minutes"
+        LOGGER.error("Scan %s timed out: name=%r", scan_id, name)
+        _update_scan_failed(scan_id, msg)
+        return {"status": "error", "message": msg}
     except Exception as e:
+        LOGGER.exception("Scan %s unexpected error: %s", scan_id, e)
+        _update_scan_failed(scan_id, str(e))
         return {"status": "error", "message": str(e)}
 
 

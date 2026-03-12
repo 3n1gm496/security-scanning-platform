@@ -24,7 +24,6 @@ os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 from app import app  # noqa: E402
 import db as _db  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Fixture: isolated DB with a scan and 12 findings
 # ---------------------------------------------------------------------------
@@ -48,7 +47,13 @@ def db_with_findings(isolated_db):
                 "https://github.com/org/stab",
                 "COMPLETED_WITH_FINDINGS",
                 "FAILED",
-                12, 3, 4, 3, 2, 0, 0,
+                12,
+                3,
+                4,
+                3,
+                2,
+                0,
+                0,
             ),
         )
         severities = ["CRITICAL"] * 3 + ["HIGH"] * 4 + ["MEDIUM"] * 3 + ["LOW"] * 2

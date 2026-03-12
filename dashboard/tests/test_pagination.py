@@ -58,11 +58,10 @@ def test_findings_paginator_basic():
     conn.close()
 
 
-def test_scans_paginator_basic():
-    """Test scans pagination."""
+def _make_scans_db(n: int = 15):
+    """Helper: create an in-memory scans DB with the full schema."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-
     conn.execute("""
         CREATE TABLE scans (
             id INTEGER PRIMARY KEY,
@@ -90,14 +89,61 @@ def test_scans_paginator_basic():
         """,
             (i, f"target-{i}"),
         )
-
     conn.commit()
+    return conn
 
+
+def test_scans_paginator_basic():
+    """Test scans pagination returns correct page size and has_next."""
+    conn = _make_scans_db(15)
     paginator = ScansPaginator(per_page=5)
     result = paginator.paginate(conn)
-
     assert len(result["items"]) == 5
     assert result["pagination"]["has_next"] is True
+    # Verify new fields are present
+    item = result["items"][0]
+    assert "policy_status" in item
+    assert "critical_count" in item
+    assert "high_count" in item
+    conn.close()
+
+
+def test_scans_paginator_policy_filter():
+    """Test scans pagination with policy_status filter."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE scans (
+            id INTEGER PRIMARY KEY,
+            target_name TEXT,
+            target_type TEXT,
+            status TEXT,
+            policy_status TEXT NOT NULL DEFAULT 'UNKNOWN',
+            created_at TEXT,
+            finished_at TEXT,
+            findings_count INTEGER NOT NULL DEFAULT 0,
+            critical_count INTEGER NOT NULL DEFAULT 0,
+            high_count INTEGER NOT NULL DEFAULT 0,
+            medium_count INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    for i in range(5):
+        conn.execute(
+            "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, 'repository', 'COMPLETED_CLEAN', 'PASS', datetime('now'))",
+            (i, f"pass-{i}"),
+        )
+    for i in range(5, 8):
+        conn.execute(
+            "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, 'repository', 'COMPLETED_WITH_FINDINGS', 'BLOCK', datetime('now'))",
+            (i, f"block-{i}"),
+        )
+    conn.commit()
+    paginator = ScansPaginator(per_page=20)
+    pass_result = paginator.paginate(conn, policy_filter="PASS")
+    assert len(pass_result["items"]) == 5
+    assert all(item["policy_status"] == "PASS" for item in pass_result["items"])
+    block_result = paginator.paginate(conn, policy_filter="BLOCK")
+    assert len(block_result["items"]) == 3
     conn.close()
 
 

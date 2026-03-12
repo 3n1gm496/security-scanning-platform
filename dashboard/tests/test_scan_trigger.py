@@ -132,7 +132,7 @@ def test_trigger_scan_local_valid_path_accepted(client, admin_headers, tmp_path)
     target_dir.mkdir()
 
     with patch.dict(os.environ, {"WORKSPACE_DIR": str(workspace)}):
-        with patch("app.run_scan_async", return_value={"status": "completed", "output": {}, "returncode": 0}):
+        with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
             resp = client.post(
                 "/api/scan/trigger",
                 data={
@@ -149,7 +149,7 @@ def test_trigger_scan_local_valid_path_accepted(client, admin_headers, tmp_path)
 
 def test_trigger_scan_git_url_not_path_validated(client, admin_headers):
     """git and image targets must NOT be subject to path validation."""
-    with patch("app.run_scan_async", return_value={"status": "completed", "output": {}, "returncode": 0}):
+    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
         resp = client.post(
             "/api/scan/trigger",
             data={

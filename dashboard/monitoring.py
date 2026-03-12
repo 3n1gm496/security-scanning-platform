@@ -160,11 +160,10 @@ async def readiness_check(response: Response) -> ReadinessResponse:
 
         db_path = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
         if Path(db_path).exists():
-            checks["database"] = {"status": "ok", "path": db_path, "exists": True}
+            checks["database"] = {"status": "ok", "exists": True}
         else:
             checks["database"] = {
                 "status": "warning",
-                "path": db_path,
                 "exists": False,
                 "message": "Database will be created on first scan",
             }

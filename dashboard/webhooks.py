@@ -7,12 +7,13 @@ import hashlib
 import hmac
 import ipaddress
 import json
-import logging
 import os
 import time
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
+
+from logging_config import get_logger
 from urllib.parse import urlparse
 
 import httpx
@@ -72,7 +73,7 @@ def validate_webhook_url(url: str) -> None:
             raise
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class WebhookEvent(str, Enum):
@@ -136,7 +137,7 @@ def create_webhook(name: str, url: str, events: list[WebhookEvent], secret: Opti
         cursor = conn.execute(sql, (name, url, secret, events_str, created_at))
         webhook_id = cursor.fetchone()[0] if is_postgres() else cursor.lastrowid
 
-    logger.info("Created webhook #%d: %s -> %s", webhook_id, name, url)
+    logger.info("webhook.created", webhook_id=webhook_id, name=name, url=url)
     return webhook_id
 
 
@@ -220,10 +221,10 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
                     )
                     _update_webhook_stats(webhook["id"], success=True)
                     logger.info(
-                        "Webhook #%d delivered successfully (attempt %d/%d)",
-                        webhook["id"],
-                        attempt + 1,
-                        WEBHOOK_RETRY_COUNT,
+                        "webhook.delivered",
+                        webhook_id=webhook["id"],
+                        attempt=attempt + 1,
+                        max_attempts=WEBHOOK_RETRY_COUNT,
                     )
                     return True, None
                 else:
@@ -232,11 +233,11 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
             except Exception as e:
                 error_msg = str(e)
                 logger.warning(
-                    "Webhook #%d delivery failed (attempt %d/%d): %s",
-                    webhook["id"],
-                    attempt + 1,
-                    WEBHOOK_RETRY_COUNT,
-                    error_msg,
+                    "webhook.delivery_failed",
+                    webhook_id=webhook["id"],
+                    attempt=attempt + 1,
+                    max_attempts=WEBHOOK_RETRY_COUNT,
+                    error=error_msg,
                 )
 
             if attempt < WEBHOOK_RETRY_COUNT - 1:

@@ -202,8 +202,8 @@ def evaluate_policy(
     return "PASS"
 
 
-def run_single_scan(target: TargetSpec, settings: dict[str, Any]) -> ScanResult:
-    scan_id = str(uuid.uuid4())
+def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str | None = None) -> ScanResult:
+    scan_id = scan_id or str(uuid.uuid4())
     started_at = utc_now_iso()
     db_path = settings["paths"]["db_path"]
     reports_root = Path(settings["paths"]["reports_dir"]) / scan_id
@@ -538,6 +538,7 @@ def run_targets_concurrently(
     targets: list[TargetSpec],
     settings: dict[str, Any],
     fail_on_policy_block: bool,
+    scan_id_override: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     max_workers = max(1, int(settings.get("execution", {}).get("max_concurrent_targets", 1)))
     results: list[dict[str, Any]] = []
@@ -546,8 +547,10 @@ def run_targets_concurrently(
     def _scan_target(target: TargetSpec) -> dict[str, Any]:
         LOGGER.info("Starting scan for target=%s type=%s", target.name, target.type)
         target_settings = copy.deepcopy(settings)
+        # Use the pre-assigned scan_id only for single-target runs (dashboard flow).
+        sid = scan_id_override if len(targets) == 1 else None
         try:
-            result = run_single_scan(target, target_settings)
+            result = run_single_scan(target, target_settings, scan_id=sid)
             return {
                 "payload": result.to_dict(),
                 "policy_status": result.policy_status,
@@ -555,11 +558,11 @@ def run_targets_concurrently(
                 "target": target.name,
                 "error": None,
             }
-        except (ScannerError, FileNotFoundError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Scan failed for target=%s", target.name)
             return {
                 "payload": {
-                    "scan_id": str(uuid.uuid4()),
+                    "scan_id": sid or str(uuid.uuid4()),
                     "target_name": target.name,
                     "target_type": target.type,
                     "target_value": target.resolved_target,
@@ -605,6 +608,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--retention-dry-run", action="store_true", help="Preview retention cleanup without deleting files"
     )
+    parser.add_argument(
+        "--scan-id", help="Pre-assigned scan UUID (used by the dashboard to correlate the RUNNING placeholder row)"
+    )
     return parser
 
 
@@ -639,6 +645,7 @@ def main() -> int:
         targets=targets,
         settings=settings,
         fail_on_policy_block=args.fail_on_policy_block,
+        scan_id_override=args.scan_id,
     )
 
     payload = {"results": results, "generated_at": utc_now_iso()}

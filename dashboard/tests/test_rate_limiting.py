@@ -26,7 +26,8 @@ os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 from fastapi.testclient import TestClient
 
 import app as _app
-from app import app, _is_rate_limited, _rate_buckets, _rate_lock, _evict_stale_buckets
+from app import app
+from rate_limit import is_rate_limited as _is_rate_limited, _rate_buckets, _rate_lock, _evict_stale_buckets
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -105,12 +106,8 @@ def test_rate_limiter_clients_are_independent():
 
 def test_api_rate_limit_returns_429(client):
     """Exceeding the API rate limit must return 429 with Retry-After header."""
-    # Patch the limit to 3 for this test
+    # Patch the limit bound in app's namespace (the middleware reads from there)
     with patch.object(_app, "RATE_LIMIT_REQUESTS", 3):
-        for i in range(3):
-            resp = client.get("/api/health")
-            # health is excluded from rate limiting — use a real API endpoint
-        # Use a non-excluded endpoint
         for i in range(3):
             client.get("/api/scans")
         resp = client.get("/api/scans")
@@ -171,7 +168,8 @@ def test_evict_stale_buckets_removes_old_entries():
 
     _evict_stale_buckets.__wrapped__ = None  # ensure no timer side-effects
     # Call the cleanup logic directly (without rescheduling)
-    cutoff = time.monotonic() - max(_app.RATE_LIMIT_WINDOW_SECONDS, _app.LOGIN_RATE_LIMIT_WINDOW_SECONDS)
+    import rate_limit as _rl
+    cutoff = time.monotonic() - max(_rl.RATE_LIMIT_WINDOW_SECONDS, _rl.LOGIN_RATE_LIMIT_WINDOW_SECONDS)
     with _rate_lock:
         stale = [k for k, dq in _rate_buckets.items() if not dq or dq[-1] < cutoff]
         for k in stale:

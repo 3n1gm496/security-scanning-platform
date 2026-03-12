@@ -72,10 +72,14 @@ class PaginationCursor:
         where_clauses = ["1=1"]
         params: list[Any] = []
 
-        # Apply filters
+        # Apply filters — only allow whitelisted column names to prevent SQL injection
+        _allowed_filter_columns = {
+            "id", "scan_id", "severity", "tool", "created_at", "target_name",
+            "target_type", "status", "category", "fingerprint",
+        }
         if filters:
             for col, val in filters.items():
-                if val is not None:
+                if val is not None and col in _allowed_filter_columns:
                     where_clauses.append(f"{col} = ?")
                     params.append(val)
 
@@ -340,8 +344,8 @@ class ScansPaginator:
 
         query = f"""
             SELECT id, target_name, target_type, status, policy_status,
-                   created_at, finished_at,
-                   findings_count, critical_count, high_count, medium_count
+                   created_at, finished_at, findings_count, critical_count,
+                   high_count, medium_count, low_count, error_message
             FROM scans
             WHERE {where_sql}
             ORDER BY {safe_sort_by} {safe_sort_order}

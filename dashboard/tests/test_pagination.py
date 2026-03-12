@@ -68,21 +68,25 @@ def _make_scans_db(n: int = 15):
             target_name TEXT,
             target_type TEXT,
             status TEXT,
-            policy_status TEXT NOT NULL DEFAULT 'UNKNOWN',
+            policy_status TEXT,
             created_at TEXT,
             finished_at TEXT,
-            findings_count INTEGER NOT NULL DEFAULT 0,
-            critical_count INTEGER NOT NULL DEFAULT 0,
-            high_count INTEGER NOT NULL DEFAULT 0,
-            medium_count INTEGER NOT NULL DEFAULT 0
+            findings_count INTEGER DEFAULT 0,
+            critical_count INTEGER DEFAULT 0,
+            high_count INTEGER DEFAULT 0,
+            medium_count INTEGER DEFAULT 0,
+            low_count INTEGER DEFAULT 0,
+            error_message TEXT
         )
     """)
-    for i in range(n):
+
+    for i in range(15):
         conn.execute(
             """
-            INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at)
-            VALUES (?, ?, 'repository', 'COMPLETED_CLEAN', 'PASS', datetime('now'))
-            """,
+            INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at, finished_at,
+                               findings_count, critical_count, high_count, medium_count, low_count)
+            VALUES (?, ?, 'repository', 'completed', 'PASSED', datetime('now'), datetime('now'), 3, 0, 1, 2, 0)
+        """,
             (i, f"target-{i}"),
         )
     conn.commit()

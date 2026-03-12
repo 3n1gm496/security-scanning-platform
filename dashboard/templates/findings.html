@@ -1,24 +1,25 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Findings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Findings &mdash; Security Scanning Platform</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="topbar">
     <div>
       <h1>Findings</h1>
-      <p>Vista centralizzata con filtri per severity, tool e target</p>
+      <p>Filter by severity, tool, and target</p>
     </div>
     <nav>
       <a href="/">Overview</a>
-      <a href="/scans">Scansioni</a>
+      <a href="/scans">Scans</a>
       <a href="/findings" class="active">Findings</a>
     </nav>
     {% if user %}
     <div class="user-info">
-      <span>{{ user }}</span> | <a href="/logout">Logout</a>
+      <span>{{ user }}</span> | <a href="/logout">Sign out</a>
     </div>
     {% endif %}
   </header>
@@ -28,7 +29,7 @@
       <form method="get" class="filters">
         <label>Severity
           <select name="severity">
-            <option value="">Tutte</option>
+            <option value="">All</option>
             {% for item in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"] %}
               <option value="{{ item }}" {% if item == selected_severity %}selected{% endif %}>{{ item }}</option>
             {% endfor %}
@@ -37,7 +38,7 @@
 
         <label>Tool
           <select name="tool">
-            <option value="">Tutti</option>
+            <option value="">All</option>
             {% for item in tools %}
               <option value="{{ item }}" {% if item == selected_tool %}selected{% endif %}>{{ item }}</option>
             {% endfor %}
@@ -46,42 +47,57 @@
 
         <label>Target
           <select name="target">
-            <option value="">Tutti</option>
+            <option value="">All</option>
             {% for item in targets %}
               <option value="{{ item }}" {% if item == selected_target %}selected{% endif %}>{{ item }}</option>
             {% endfor %}
           </select>
         </label>
 
-        <label>Categoria
+        <label>Category
           <select name="category">
-            <option value="">Tutte</option>
+            <option value="">All</option>
             {% for item in ["sast", "sca", "secret", "container", "iac"] %}
               <option value="{{ item }}" {% if item == selected_category %}selected{% endif %}>{{ item }}</option>
             {% endfor %}
           </select>
         </label>
 
-        <button type="submit">Filtra</button>
+        <!-- preserve current page size when re-filtering -->
+        <input type="hidden" name="per_page" value="{{ per_page }}">
+
+        <button type="submit">Filter</button>
+        <a href="/findings" class="btn-secondary" style="padding:6px 12px;text-decoration:none;">Reset</a>
       </form>
     </section>
 
     <section class="card">
-      <div class="page-title"><h2>Lista findings</h2></div>
+      <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <h2>Findings
+          <span style="font-size:0.85rem;font-weight:400;color:var(--text-secondary,#6b7280);margin-left:8px;">
+            {{ total }} result{% if total != 1 %}s{% endif %}
+          </span>
+        </h2>
+        <span style="font-size:0.85rem;color:var(--text-secondary,#6b7280);">
+          Page {{ page }} of {{ total_pages }}
+        </span>
+      </div>
+
+      {% if findings %}
       <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Severity</th>
             <th>Tool</th>
-            <th>Categoria</th>
+            <th>Category</th>
             <th>Target</th>
-            <th>Titolo</th>
+            <th>Title</th>
             <th>Remediation</th>
             <th>File</th>
             <th>Line</th>
             <th>Package</th>
-            <th>Versione</th>
+            <th>Version</th>
             <th>CVE / ID</th>
             <th>Scan ID</th>
           </tr>
@@ -106,6 +122,31 @@
         </tbody>
       </table>
       </div>
+
+      <!-- Pagination controls -->
+      <div style="display:flex;align-items:center;gap:12px;padding:16px 0 0;justify-content:flex-end;">
+        {% set qs_base %}severity={{ selected_severity or '' }}&tool={{ selected_tool or '' }}&target={{ selected_target or '' }}&category={{ selected_category or '' }}&per_page={{ per_page }}{% endset %}
+        {% if page > 1 %}
+          <a href="/findings?{{ qs_base }}&page={{ page - 1 }}" class="btn-secondary" style="padding:6px 14px;text-decoration:none;">&#8592; Prev</a>
+        {% else %}
+          <span class="btn-secondary" style="padding:6px 14px;opacity:0.4;cursor:default;">&#8592; Prev</span>
+        {% endif %}
+
+        <span style="font-size:0.85rem;color:var(--text-secondary,#6b7280);">{{ page }} / {{ total_pages }}</span>
+
+        {% if page < total_pages %}
+          <a href="/findings?{{ qs_base }}&page={{ page + 1 }}" class="btn-secondary" style="padding:6px 14px;text-decoration:none;">Next &#8594;</a>
+        {% else %}
+          <span class="btn-secondary" style="padding:6px 14px;opacity:0.4;cursor:default;">Next &#8594;</span>
+        {% endif %}
+      </div>
+
+      {% else %}
+      <div class="empty-state">
+        <p>No findings match the current filters.</p>
+        <a href="/findings">Clear filters</a>
+      </div>
+      {% endif %}
     </section>
   </main>
 </body>

@@ -58,8 +58,8 @@ def isolated_db():
     # Reset the in-process rate limiter after each test to prevent
     # state leaking between tests (e.g. 429 Too Many Requests).
     try:
-        import app as _app
+        import rate_limit as _rl
 
-        _app._rate_buckets.clear()
+        _rl._rate_buckets.clear()
     except Exception:
         pass

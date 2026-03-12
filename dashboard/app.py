@@ -3,16 +3,21 @@ from __future__ import annotations
 import os
 import secrets
 import time
+import uuid as _uuid
 import bcrypt
 import csv
 import io
 import subprocess
 import json
-from collections import defaultdict, deque
+from collections import defaultdict
 from pathlib import Path
-from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+
+from logging_config import configure_logging, get_logger
+
+configure_logging()
+LOGGER = get_logger(__name__)
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -23,6 +28,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from db import (
     cache_hit_stats,
     cache_hit_trend,
+    count_findings,
     distinct_targets,
     distinct_tools,
     fetch_kpis,
@@ -37,6 +43,15 @@ from db import (
     get_connection,
 )
 from monitoring import router as monitoring_router
+from rate_limit import (
+    is_rate_limited,
+    start_cleanup_timer,
+    RATE_LIMIT_REQUESTS,
+    RATE_LIMIT_WINDOW_SECONDS,
+    LOGIN_RATE_LIMIT_REQUESTS,
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+)
+from scan_runner import run_scan, insert_running_scan, update_scan_failed
 from rbac import (
     Role,
     Permission,
@@ -45,6 +60,7 @@ from rbac import (
     list_api_keys,
     revoke_api_key,
     create_default_admin_key,
+    log_audit,
 )
 from auth import require_auth, require_permission, AuthContext
 from webhooks import (
@@ -96,7 +112,6 @@ USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")
 #   python -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
 # A value starting with '$2b$' or '$2a$' is treated as a bcrypt hash.
 PASSWORD_RAW = os.getenv("DASHBOARD_PASSWORD", "change-me")
-# chiave segreta per sessione (usa .env o variabile ambiente sicura)
 SESSION_SECRET = os.getenv("DASHBOARD_SESSION_SECRET", "please-change-this")
 
 
@@ -121,11 +136,6 @@ def _verify_password(plain: str, stored: str) -> bool:
     return secrets.compare_digest(plain, stored)
 
 
-RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_RATE_LIMIT_REQUESTS", "180"))
-RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_RATE_LIMIT_WINDOW_SECONDS", "60"))
-# Stricter limits for the login endpoint to prevent brute-force attacks
-LOGIN_RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_REQUESTS", "10"))
-LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_WINDOW_SECONDS", "60"))
 # Maximum number of concurrent background scans. Prevents unbounded thread growth
 # when async_mode=True is used repeatedly. Configurable via env var.
 MAX_SCAN_WORKERS = int(os.getenv("DASHBOARD_MAX_SCAN_WORKERS", "4"))
@@ -150,9 +160,19 @@ try:
 
     init_db(DB_PATH)
 except Exception as _init_err:
-    import logging as _logging
+    LOGGER.warning("db.init_warning", error=str(_init_err))
 
-    _logging.getLogger(__name__).warning("DB schema init warning: %s", _init_err)
+# Warn on insecure defaults — these must be overridden in production.
+if not _is_bcrypt_hash(PASSWORD_RAW) and PASSWORD_RAW in ("change-me", ""):
+    LOGGER.warning(
+        "security.weak_password",
+        detail="DASHBOARD_PASSWORD is set to an insecure default. Set a bcrypt hash via the env var.",
+    )
+if SESSION_SECRET in ("please-change-this", ""):
+    LOGGER.warning(
+        "security.weak_session_secret",
+        detail="DASHBOARD_SESSION_SECRET is set to an insecure default. Set a strong random secret.",
+    )
 
 # Initialize RBAC tables
 init_rbac_tables()
@@ -170,31 +190,8 @@ app.include_router(monitoring_router, prefix="/api")
 
 _RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics", "/api/metrics/json", "/metrics"}
 
-# In-process sliding-window rate limiter.
-# _rate_buckets maps (scope, client_id) -> deque of monotonic timestamps.
-# A periodic cleanup timer evicts stale entries to prevent unbounded memory growth.
-_rate_buckets: dict[tuple[str, str], deque] = {}
-_rate_lock = Lock()
-_CLEANUP_INTERVAL_SECONDS = 300  # run cleanup every 5 minutes
-
-
-def _evict_stale_buckets() -> None:
-    """Remove bucket entries whose last timestamp is older than the longest window."""
-    cutoff = time.monotonic() - max(RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_WINDOW_SECONDS)
-    with _rate_lock:
-        stale = [k for k, dq in _rate_buckets.items() if not dq or dq[-1] < cutoff]
-        for k in stale:
-            del _rate_buckets[k]
-    # Reschedule
-    t = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
-    t.daemon = True
-    t.start()
-
-
-# Start the first cleanup cycle
-_cleanup_timer = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
-_cleanup_timer.daemon = True
-_cleanup_timer.start()
+# Start the background rate-bucket eviction timer (defined in rate_limit.py)
+start_cleanup_timer()
 
 notification_engine = EmailNotificationEngine()
 
@@ -212,22 +209,6 @@ def _client_key(request: Request) -> str:
     return "unknown"
 
 
-def _is_rate_limited(scope: str, client_id: str, limit: int, window: int, now: float) -> bool:
-    """Sliding-window rate limiter. Returns True if the request should be blocked."""
-    key = (scope, client_id)
-    with _rate_lock:
-        if key not in _rate_buckets:
-            _rate_buckets[key] = deque()
-        bucket = _rate_buckets[key]
-        threshold = now - window
-        while bucket and bucket[0] < threshold:
-            bucket.popleft()
-        if len(bucket) >= limit:
-            return True
-        bucket.append(now)
-    return False
-
-
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     now = time.monotonic()
@@ -236,7 +217,7 @@ async def security_middleware(request: Request, call_next):
 
     # Brute-force protection on the login endpoint
     if path == "/login" and request.method == "POST":
-        if _is_rate_limited("login", client_id, LOGIN_RATE_LIMIT_REQUESTS, LOGIN_RATE_LIMIT_WINDOW_SECONDS, now):
+        if is_rate_limited("login", client_id, LOGIN_RATE_LIMIT_REQUESTS, LOGIN_RATE_LIMIT_WINDOW_SECONDS, now):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many login attempts. Please wait before retrying."},
@@ -245,7 +226,7 @@ async def security_middleware(request: Request, call_next):
 
     # General API rate limiting
     if path.startswith("/api") and path not in _RATE_LIMIT_EXCLUDED_PATHS:
-        if _is_rate_limited("api", client_id, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, now):
+        if is_rate_limited("api", client_id, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, now):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Retry later."},
@@ -383,6 +364,10 @@ def scans_page(
     )
 
 
+_FINDINGS_PAGE_SIZE = 50
+_FINDINGS_MAX_PAGE_SIZE = 200
+
+
 @app.get("/findings", response_class=HTMLResponse)
 def findings_page(
     request: Request,
@@ -391,17 +376,21 @@ def findings_page(
     target: str | None = None,
     scan_id: str | None = None,
     category: str | None = None,
+    page: int = 1,
+    per_page: int = _FINDINGS_PAGE_SIZE,
     user: str = Depends(get_current_user),
 ) -> HTMLResponse:
-    findings = list_findings(
-        DB_PATH,
-        500,
-        severity=severity,
-        tool=tool,
-        target=target,
-        scan_id=scan_id,
-        category=category,
-    )
+    page = max(1, page)
+    per_page = max(1, min(per_page, _FINDINGS_MAX_PAGE_SIZE))
+    offset = (page - 1) * per_page
+
+    filter_kwargs = dict(severity=severity, tool=tool, target=target, scan_id=scan_id, category=category)
+    total = count_findings(DB_PATH, **filter_kwargs)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    offset = (page - 1) * per_page
+
+    findings = list_findings(DB_PATH, per_page, offset=offset, **filter_kwargs)
 
     for finding in findings:
         raw_remediation = (finding.get("remediation") or "").strip()
@@ -409,7 +398,11 @@ def findings_page(
             finding["remediation_display"] = raw_remediation
             continue
 
-        remediation_guide = RemediationEngine.generate_remediation(finding)
+        try:
+            remediation_guide = RemediationEngine.generate_remediation(finding)
+        except Exception as _rem_err:
+            LOGGER.warning("remediation.guide_failed", finding_id=finding.get("id"), error=str(_rem_err))
+            remediation_guide = {}
         steps = remediation_guide.get("steps") or []
         if steps:
             finding["remediation_display"] = steps[0]
@@ -429,6 +422,10 @@ def findings_page(
             "selected_target": target,
             "selected_scan_id": scan_id,
             "selected_category": category,
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages,
         },
     )
 
@@ -498,7 +495,7 @@ def api_scans(
 
 @app.get("/api/findings")
 def api_findings(
-    limit: int = 500,
+    limit: int = Query(500, ge=1, le=5000),
     severity: str | None = None,
     tool: str | None = None,
     target: str | None = None,
@@ -589,6 +586,14 @@ def create_new_api_key(
         name=name, role=role_enum, expires_days=expires_days, created_by=auth.api_key_prefix or auth.user_id
     )
 
+    log_audit(
+        action="api_key.create",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"key:{prefix}",
+        result="success",
+    )
+
     return {
         "key": full_key,
         "prefix": prefix,
@@ -605,6 +610,14 @@ def delete_api_key(key_prefix: str, auth: AuthContext = Depends(require_auth)) -
 
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+
+    log_audit(
+        action="api_key.revoke",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"key:{key_prefix}",
+        result="success",
+    )
 
     return {"status": "revoked", "key_prefix": key_prefix}
 
@@ -640,6 +653,14 @@ def create_new_webhook(
 
     webhook_id = create_webhook(name, url, event_list, secret)
 
+    log_audit(
+        action="webhook.create",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"webhook:{webhook_id}",
+        result="success",
+    )
+
     return {"id": webhook_id, "name": name, "url": url, "events": events}
 
 
@@ -650,6 +671,14 @@ def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require
 
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+
+    log_audit(
+        action="webhook.delete",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"webhook:{webhook_id}",
+        result="success",
+    )
 
     return {"status": "deleted", "id": webhook_id}
 
@@ -830,49 +859,7 @@ def get_remediation_guidance(finding_id: int, auth: AuthContext = Depends(requir
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def run_scan_async(target_type: str, target: str, name: str, root_dir: str) -> dict:
-    """Execute orchestrator scan and save results to database."""
-    try:
-        env = os.environ.copy()
-        env["PYTHONPATH"] = f"{root_dir}:{env.get('PYTHONPATH', '')}"
-        env["ORCH_DB_PATH"] = f"{root_dir}/data/security_scans.db"
-        env["REPORTS_DIR"] = f"{root_dir}/data/reports"
-        env["WORKSPACE_DIR"] = f"{root_dir}/data/workspaces"
-        env["ORCH_CACHE_DIR"] = f"{root_dir}/data/cache"
-        env["DASHBOARD_DB_PATH"] = f"{root_dir}/data/security_scans.db"
-
-        # Build orchestrator command
-        cmd = [
-            "python3",
-            "-m",
-            "orchestrator.main",
-            "--target-type",
-            target_type,
-            "--target",
-            target,
-            "--target-name",
-            name,
-            "--settings",
-            f"{root_dir}/config/settings.yaml",
-        ]
-
-        result = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True, env=env, timeout=1800)
-
-        # Parse JSON output
-        try:
-            output_json = json.loads(result.stdout)
-            return {"status": "completed", "output": output_json, "returncode": result.returncode}
-        except json.JSONDecodeError:
-            return {
-                "status": "error",
-                "message": "Failed to parse orchestrator output",
-                "stderr": result.stderr,
-                "returncode": result.returncode,
-            }
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "message": "Scan timed out after 30 minutes"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+# run_scan, insert_running_scan, update_scan_failed are imported from scan_runner
 
 
 @app.post("/api/scan/trigger", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
@@ -924,15 +911,21 @@ def trigger_scan(
                 ),
             )
 
+    # Pre-assign scan ID and start time so we can return them immediately
+    # (including in async mode, before the worker thread begins).
+    import uuid as _uuid_mod
+    scan_id = str(_uuid_mod.uuid4())
+    started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
     if async_mode:
         # Submit to bounded thread pool to prevent unbounded thread growth.
         # If the pool is at capacity, submit() still queues the task internally
         # (ThreadPoolExecutor uses an unbounded internal queue by default).
-        _scan_executor.submit(run_scan_async, target_type, target, name, str(root_dir))
-        return {"status": "queued", "message": "Scan queued and running in background", "target_name": name}
+        _scan_executor.submit(run_scan, target_type, target, name, str(root_dir), scan_id, started_at)
+        return {"status": "queued", "scan_id": scan_id, "message": "Scan queued and running in background", "target_name": name}
     else:
         # Wait for scan to complete
-        return run_scan_async(target_type, target, name, str(root_dir))
+        return run_scan(target_type, target, name, str(root_dir), scan_id, started_at)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1065,7 +1058,7 @@ def api_bulk_update_status(
 
 
 @app.get("/api/badge/{target_name}.svg")
-def generate_badge(target_name: str) -> Response:
+def generate_badge(target_name: str, auth: AuthContext = Depends(require_auth)) -> Response:
     """Generate SVG badge for scan status."""
     # Get latest scan for target
     with get_connection(DB_PATH) as conn:
@@ -1308,7 +1301,8 @@ def api_get_finding(
     try:
         remediation = RemediationEngine.generate_remediation(finding_dict)
         finding_dict["remediation_guide"] = remediation
-    except Exception:
+    except Exception as _rem_err:
+        LOGGER.warning("remediation.guide_failed", finding_id=finding_id, error=str(_rem_err))
         finding_dict["remediation_guide"] = {}
     return finding_dict
 
@@ -1426,6 +1420,31 @@ def get_notification_preferences(auth: AuthContext = Depends(require_auth)) -> d
     with get_connection(DB_PATH) as conn:
         prefs = NotificationPreferencesManager.get_preferences(conn, user_identifier)
     return {"preferences": prefs or {}}
+
+
+@app.get("/api/audit", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
+def get_audit_log(
+    limit: int = Query(100, ge=1, le=1000),
+    action: str | None = Query(None),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Return recent audit log entries (admin only).
+
+    Query parameters:
+    - limit: Number of entries to return (1-1000, default 100)
+    - action: Filter by action type (e.g. api_key.create, webhook.delete)
+    """
+    query = "SELECT * FROM audit_log"
+    params: list = []
+    if action:
+        query += " WHERE action = ?"
+        params.append(action)
+    query += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+
+    with get_connection(DB_PATH) as conn:
+        rows = conn.execute(query, params).fetchall()
+    return {"items": [dict(r) for r in rows], "count": len(rows)}
 
 
 @app.get("/api/users", dependencies=[Depends(require_auth)])

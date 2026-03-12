@@ -232,8 +232,5 @@ def create_default_admin_key():
 
     if count == 0:
         full_key, prefix = create_api_key(name="Default Admin Key", role=Role.ADMIN, created_by="system")
-        print(f"[INFO] Created default admin API key: {full_key}")
-        print(f"[INFO] Key prefix: {prefix}")
-        print("[WARN] Please revoke this key after creating your own!")
         return full_key
     return None

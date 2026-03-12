@@ -87,7 +87,7 @@ def test_trigger_scan_async_uses_executor(client, admin_headers):
     assert resp.status_code == 200
     assert resp.json()["status"] == "queued"
     assert len(submitted) == 1
-    assert submitted[0][0].__name__ == "run_scan_async"
+    assert submitted[0][0].__name__ == "run_scan"
 
 
 # ---------------------------------------------------------------------------

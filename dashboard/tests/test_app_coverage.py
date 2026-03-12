@@ -198,21 +198,21 @@ def _insert_finding(db_path: str, scan_id: str, **kwargs) -> int:
 class TestBadgeEndpoint:
     """Tests for /api/badge/{target_name}.svg"""
 
-    def test_badge_no_scan_returns_unknown(self, client, isolated_db):
+    def test_badge_no_scan_returns_unknown(self, client, isolated_db, admin_headers):
         _init_tables(isolated_db)  # ensure scans table exists
-        resp = client.get("/api/badge/nonexistent-target.svg")
+        resp = client.get("/api/badge/nonexistent-target.svg", headers=admin_headers)
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("image/svg+xml")
         assert "unknown" in resp.text
 
-    def test_badge_clean_scan_returns_passing(self, client, isolated_db):
+    def test_badge_clean_scan_returns_passing(self, client, isolated_db, admin_headers):
         db_path = isolated_db
         _insert_scan(db_path, target_name="clean-target", status="COMPLETED_CLEAN")
-        resp = client.get("/api/badge/clean-target.svg")
+        resp = client.get("/api/badge/clean-target.svg", headers=admin_headers)
         assert resp.status_code == 200
         assert "passing" in resp.text
 
-    def test_badge_with_critical_findings_returns_red(self, client, isolated_db):
+    def test_badge_with_critical_findings_returns_red(self, client, isolated_db, admin_headers):
         db_path = isolated_db
         _insert_scan(
             db_path,
@@ -221,12 +221,12 @@ class TestBadgeEndpoint:
             policy_status="BLOCK",
             critical_count=3,
         )
-        resp = client.get("/api/badge/vuln-target.svg")
+        resp = client.get("/api/badge/vuln-target.svg", headers=admin_headers)
         assert resp.status_code == 200
         assert "3 critical" in resp.text
         assert "#e05d44" in resp.text  # red colour
 
-    def test_badge_with_high_findings_returns_orange(self, client, isolated_db):
+    def test_badge_with_high_findings_returns_orange(self, client, isolated_db, admin_headers):
         db_path = isolated_db
         _insert_scan(
             db_path,
@@ -234,7 +234,7 @@ class TestBadgeEndpoint:
             status="COMPLETED_WITH_FINDINGS",
             high_count=2,
         )
-        resp = client.get("/api/badge/high-target.svg")
+        resp = client.get("/api/badge/high-target.svg", headers=admin_headers)
         assert resp.status_code == 200
         assert "2 high" in resp.text
         assert "#fe7d37" in resp.text  # orange colour

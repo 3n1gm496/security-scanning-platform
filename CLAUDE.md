@@ -1,187 +1,77 @@
-# Engineering Session Instructions
+Ho tutto il quadro. Ecco il prompt riscritto, calibrato su quello che Claude ha già fatto e orientato a un redesign enterprise-grade da SOC.
+Plain Text
+Sei un senior product designer e frontend engineer specializzato in security tooling enterprise (Datadog, Elastic SIEM, Splunk, Wiz, Snyk). Devi fare un redesign visivo completo di questa dashboard di security scanning.
 
-You are acting as a senior staff software engineer, staff product designer/UI engineer, QA lead, and security engineer.
-You are already inside this repository and you have already been working on it in this session.
-Do NOT restart blindly from zero.
-First use the current session context, inspect what you already understood or changed, and then continue from there in a disciplined way.
+## Contesto: cosa è già stato fatto
+Claude ha già risolto tutti i bug funzionali (scroll, paginazione, grafici dual-axis, sidebar, ordinamento). Il codice funziona correttamente. Ora il problema è esclusivamente estetico: la UI è funzionale ma piatta, generica, non trasmette autorevolezza né professionalità per un contesto SOC/AppSec enterprise.
 
-## SESSION STARTUP PROTOCOL — run every time before doing anything else
+## Stack tecnico (non modificare la struttura)
+- Backend: FastAPI, endpoint REST su /api/* — NON toccare
+- Frontend: Vue 3 (CDN runtime-only, no build step), Chart.js 4
+- Template: Jinja2 (app.html ~1230 righe), SPA single-page
+- CSS attuale: custom scritto a mano (~1700 righe), design system con variabili CSS, 8px grid
+- Nessun build step: tutto deve funzionare con file statici serviti da FastAPI
 
-```bash
-git fetch origin main
-git reset --soft origin/main   # align branch to latest main, keep local changes staged
-# OR if branch is clean: git reset --hard origin/main
-```
+## Scelta del framework: usa Tailwind CSS CDN + Inter font
 
-This eliminates recurring merge conflicts. The branch must always be at most 1 clean
-commit ahead of main. Never let rebase replay 20+ commits — reset-soft + single commit instead.
-
-Also always run before committing:
-```bash
-black dashboard/
-python -m pytest -x -q
-```
-
-## CURRENT STATE (as of 2026-03-12) — do not redo this work
-
-All phases have been executed and committed to `claude/security-platform-review-MqdAz`.
-Do not re-audit or re-implement the items listed below.
-
-### Completed
-- Phase 1: full repository audit
-- Phase 2: WAL mode, non-root Dockerfile, Docker healthchecks, SSRF protection on webhooks,
-  RBAC privilege ceiling, badge endpoint auth, findings cap, audit endpoint
-- Phase 3: full Italian→English UI translation across app.html, app.js, findings.html,
-  scans.html, login.html; severity/status badges; empty states; login page polish
-- Structured JSON logging via structlog (logging_config.py)
-- app.py decomposed: rate_limit.py and scan_runner.py extracted
-- Startup security warnings for weak SESSION_SECRET / DASHBOARD_PASSWORD
-- Swallowed remediation exception now logged
-- Test isolation bug fixed (conftest.py teardown)
-- Rate limit defaults configurable via env vars (DASHBOARD_RATE_LIMIT_REQUESTS, etc.)
-- Webhook retry with exponential backoff already implemented (WEBHOOK_RETRY_COUNT env var)
-- Dead templates index.html and index-vue.html removed
-- findings.html: remaining Italian translated, pagination added (page/per_page query params)
-- app.html: lang="en", Chart.js onerror fallback added
-- app.js: Chart.js availability guard, remaining Italian toast fixed
-
-### Full bug-elimination pass (2026-03-12) — do not redo
-- P0 fixed: `api_bulk_update_status` parameter `status: str` shadowed the imported
-  `starlette.status` module → `AttributeError` on invalid input. Renamed to `status_value`.
-- P1 fixed: Italian login error `"Credenziali non valide"` → `"Invalid credentials"`;
-  `test_auth.py` updated to match.
-- P1 fixed: Webhook delivery loop now breaks immediately on 4xx client errors instead of
-  retrying (4xx responses will never succeed on retry).
-- P1 fixed: `Content-Disposition: attachment; filename=` was unquoted in export endpoint
-  → now `filename="..."` per RFC 6266.
-- P2 fixed: `mark_false_positive`, `accept_risk`, `bulk_update_status` in
-  `finding_management.py` used `INSERT OR REPLACE` which silently discarded existing
-  `assigned_to`, `resolution_notes`, and other columns on the replaced row. Replaced with
-  explicit UPDATE-or-INSERT pattern.
-- P2 fixed: Remaining Italian code comments and docstrings translated in `app.py` and `db.py`.
-
-### 436/436 tests passing as of last verified run
-
-### Remaining known gaps (low priority)
-- Analytics page table fallback when JS is disabled entirely (noscript)
-- Findings fallback template per_page is capped at 200 server-side
-- Webhook SSRF check validates only literal IP addresses; DNS-rebinding not mitigated
-  (documented in webhooks.py comment; needs per-request DNS pre-resolution for high-security)
-
-## Repository goal
-Improve the dashboard's visual quality and UX, identify and fix the actual bugs in the project, harden the app where needed, and keep the existing architecture stable and maintainable.
-
-## Core constraints
-- Keep the current stack unless a change is strictly necessary.
-- Do not do destructive rewrites.
-- Do not introduce heavy dependencies without strong justification.
-- Do not break existing workflows, APIs, Docker setup, or orchestrator/dashboard integration.
-- Prefer small, reviewable, production-ready changes.
-- Avoid cosmetic-only edits with little practical value.
-- Do not make assumptions without checking the code first.
-- Do not run destructive git commands.
-- Do not delete large portions of code unless clearly justified.
-- Do not commit unless explicitly asked.
-
-## PHASE 0 — REUSE CURRENT SESSION CONTEXT
-Before doing anything else:
-1. Summarize current understanding of the repository from this session.
-2. List any files already inspected or modified.
-3. Identify any partial fixes, unfinished work, open questions, or risky assumptions.
-4. Then continue from the current state instead of duplicating work.
-
-## PHASE 1 — REPOSITORY AUDIT
-Perform a focused but comprehensive audit. Inspect at minimum:
-- dashboard templates, CSS/JS/static assets
-- FastAPI app structure and routes
-- backend services and helpers
-- orchestrator integration points
-- DB access layer
-- auth / RBAC / API key handling
-- Docker / docker-compose setup
-- configuration and environment handling
-- test suite and CI-related files
-- error handling and logging
-- concurrency-sensitive code
-- webhook / external request logic
-- caching logic
-- any oversized monolithic modules
-
-Produce an audit structured as:
-- A. Architecture summary
-- B. Bugs found
-- C. UX/UI problems found
-- D. Security / hardening issues found
-- E. Code quality / maintainability issues found
-- F. Test gaps
-
-Classify findings by priority: P0 (critical), P1 (functional bugs), P2 (polish).
-
-## PHASE 2 — HIGH-PRIORITY BUG HUNT
-Investigate and verify these areas explicitly:
-- SQLite concurrency issues; enable WAL mode if missing
-- unsafe DB access patterns or locking issues
-- dashboard container running as root
-- missing or weak healthchecks in docker-compose
-- RBAC / API key privilege escalation risks
-- webhook SSRF risk and insufficient URL validation
-- shallow clone behavior that may weaken gitleaks/history-based scanning
-- cache invalidation problems involving commit hash or scan identity
-- oversized app.py or similar monoliths causing fragility
-- inconsistent error responses
-- broken empty/loading/error states in the UI
-- brittle filtering, sorting, pagination, or search behavior
-- template rendering or data-shape mismatches
-- race conditions between dashboard, orchestrator, and persistence layer
-
-## PHASE 3 — UI / UX REDESIGN WITHOUT STACK CHURN
-Improve the dashboard so it looks like a credible modern enterprise security platform. Focus on:
-- visual hierarchy, spacing and layout rhythm
-- typography and readability
-- color consistency and contrast
-- accessible severity badges
-- findings tables and scan result readability
-- filters, search, and status indicators
-- headers, nav, actions, and page structure
-- loading / empty / error states
-- responsive behavior on desktop and laptop widths
-- consistency between pages/components
-- clarity of key actions and scan status
-
-Design direction: professional, clean, high signal-to-noise, security-product feel, not flashy, practical.
-
-## PHASE 4 — IMPLEMENTATION RULES
-Work in this order: Audit → Prioritized plan → P0 fixes → P1 fixes → UI/UX → Tests → Verification → Summary.
-
-While implementing:
-- inspect before editing
-- keep changes localized
-- prefer readability
-- preserve backward compatibility
-- add comments only where useful
-- improve logging/error messages when they help operations
-- avoid speculative refactors
-
-## PHASE 5 — TESTING AND VERIFICATION
-Use the repo's existing validation workflow (README, Makefile, pyproject.toml, CI configs). Run unit tests, lint checks, targeted regression tests. Do not fake successful verification.
-
-## PHASE 6 — OUTPUT FORMAT
-Respond with a structured engineering report:
-1. Current session recap
-2. Audit summary
-3. Prioritized plan (P0/P1/P2)
-4. Implemented changes by file
-5. Confirmed bug fixes
-6. UI/UX improvements
-7. Security hardening
-8. Verification results
-9. Residual issues / follow-up recommendations
-10. Final concise changelog
-
-## EXECUTION STYLE
-- Verify before claiming.
-- Prefer real fixes over theoretical commentary.
-- If you find an issue, patch it when reasonable.
-- Do not bloat the response with generic advice.
-- Do not stop at analysis only.
-- Continue through audit, implementation, and verification unless blocked.
+Aggiungi in <head> di app.html:
+```html
+<!-- Inter font -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Tailwind CSS CDN (play CDN, no build required ) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+        colors: {
+          sidebar: { DEFAULT: '#0f172a', hover: '#1e293b', active: '#1e40af', border: 'rgba(255,255,255,0.06 )' },
+          critical: { DEFAULT: '#ef4444', bg: '#fef2f2', text: '#991b1b' },
+          high:     { DEFAULT: '#f97316', bg: '#fff7ed', text: '#9a3412' },
+          medium:   { DEFAULT: '#eab308', bg: '#fefce8', text: '#854d0e' },
+          low:      { DEFAULT: '#3b82f6', bg: '#eff6ff', text: '#1d4ed8' },
+        }
+      }
+    }
+  }
+</script>
+Puoi mantenere app.css solo per le variabili CSS e le regole che Tailwind non copre (es. animazioni custom, Chart.js overrides). Tutto il resto migra a classi Tailwind.
+Identità visiva target: "Enterprise Security Console"
+Ispirazione: Elastic SIEM, Datadog Security, Wiz Cloud Security. NON Notion, NON Linear, NON consumer app.
+Caratteristiche obbligatorie:
+Sidebar: sfondo #0f172a (slate-950), non indigo. Voci di navigazione con icone Lucide (via CDN: https://unpkg.com/lucide@latest ), label uppercase tracking-wide, indicatore active con bordo sinistro blu (border-l-2 border-blue-500), non background highlight
+Topbar: sfondo bianco con border-b border-slate-200, breadcrumb leggibile text-slate-900 font-semibold, sottotitolo text-slate-500 text-sm, separatore verticale | tra heading e subtitle
+Cards KPI: bordo border border-slate-200, ombra shadow-sm, numero grande text-3xl font-bold text-slate-900, label text-xs font-medium text-slate-500 uppercase tracking-wider, icona colorata in alto a destra
+Tabelle: header bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b-2 border-slate-200, righe con hover:bg-slate-50 transition-colors, bordi sottili divide-y divide-slate-100
+Badge severità: pill con font mono, dimensioni fisse, colori ad alto contrasto:
+CRITICAL: bg-red-100 text-red-800 border border-red-200
+HIGH: bg-orange-100 text-orange-800 border border-orange-200
+MEDIUM: bg-yellow-100 text-yellow-800 border border-yellow-200
+LOW: bg-blue-100 text-blue-800 border border-blue-200
+Badge stato scansione:
+RUNNING: spinner SVG animato + text-blue-600 bg-blue-50
+COMPLETED: checkmark + text-green-700 bg-green-50
+FAILED: X + text-red-700 bg-red-50
+Grafici Chart.js: palette ['#3b82f6','#ef4444','#f97316','#eab308','#8b5cf6'], griglia rgba(0,0,0,0.04), font Inter, tooltip con backgroundColor: '#0f172a', borderRadius: 8
+Pulsanti primari: bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-2 transition-colors
+Dark mode: quando <html class="dark">, sidebar diventa #020617, surface #0f172a, testo #f1f5f9
+Pagina di login
+Redesign completo: layout centrato, card max-w-sm con ombra shadow-xl, logo + nome prodotto sopra il form, campo username e password con label floating o label sopra, pulsante full-width, footer con versione. Sfondo: gradiente from-slate-900 to-slate-800.
+Vincoli tecnici
+Mantieni tutti gli attributi Vue (v-if, v-for, :class, @click, v-model) — non rimuoverne nessuno
+Le chiamate API /api/* non cambiano
+I ref Vue ($refs.trendChart, $refs.severityChart ecc.) devono puntare agli stessi canvas
+Puoi aggiungere Lucide Icons via lucide.createIcons() chiamato in mounted()
+NON usare DaisyUI (conflitti con Tailwind CDN play mode)
+NON usare PrimeVue (richiede build per i temi)
+Ordine di esecuzione
+Leggi app.html, app.css, app.js nella loro interezza prima di scrivere qualsiasi codice
+Riscrivi app.css riducendolo al minimo (solo ciò che Tailwind non può fare)
+Aggiorna app.html sostituendo le classi custom con classi Tailwind
+Aggiorna app.js solo per i colori dei grafici e l'inizializzazione di Lucide
+Riscrivi login.html
+Per ogni file, mostra il diff o il file completo — non snippet parziali
+Dopo ogni file, elenca esplicitamente cosa è cambiato e perché

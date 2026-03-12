@@ -352,8 +352,8 @@
                   <th v-if="colVisible('status')">Status</th>
                   <th v-if="colVisible('policy_status')">Policy</th>
                   <th v-if="colVisible('findings_count')" class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
-                  <th v-if="colVisible('critical_count')">C</th>
-                  <th v-if="colVisible('high_count')">H</th>
+                  <th v-if="colVisible('critical_count')" title="Critical findings">Crit</th>
+                  <th v-if="colVisible('high_count')" title="High findings">High</th>
                   <th v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
                   <th>Actions</th>
                 </tr>
@@ -395,9 +395,9 @@
           </div>
           <!-- Pagination -->
           <div class="pagination-bar">
-            <button class="btn-secondary btn-sm" @click="prevScansPage" :disabled="scansPage <= 1">&#x2190; Precedente</button>
-            <span class="page-info">Pagina {{ scansPage }}</span>
-            <button class="btn-secondary btn-sm" @click="nextScansPage" :disabled="!scansCursor">Successiva &#x2192;</button>
+            <button class="btn-secondary btn-sm" @click="prevScansPage" :disabled="scansPage <= 1">&#x2190; Previous</button>
+            <span class="page-info">Page {{ scansPage }}</span>
+            <button class="btn-secondary btn-sm" @click="nextScansPage" :disabled="!scansCursor">Next &#x2192;</button>
           </div>
         </div>
       </div>
@@ -599,7 +599,8 @@
           <div class="card">
             <div class="card-header"><h2>Target Risk Ranking</h2></div>
             <div class="risk-ranking" v-if="analyticsData.targetRisk">
-              <div v-for="(target, idx) in analyticsData.targetRisk.slice(0, 10)" :key="target.target" class="risk-row">
+              <!-- Sort by average_risk descending so highest-risk target is always #1 -->
+              <div v-for="(target, idx) in analyticsData.targetRisk.slice().sort((a,b) => b.average_risk - a.average_risk).slice(0, 10)" :key="target.target" class="risk-row">
                 <span class="risk-rank">#{{ idx + 1 }}</span>
                 <span class="risk-name">{{ target.target }}</span>
                 <div class="risk-bar-wrap">
@@ -691,12 +692,12 @@
           <div class="compare-summary-grid">
             <div class="compare-summary-card compare-new">
               <div class="compare-summary-num">{{ compareResult.summary.new }}</div>
-              <div class="compare-summary-label">Nuovi findings</div>
+              <div class="compare-summary-label">New Findings</div>
               <div class="compare-summary-desc">Present in B, not in A</div>
             </div>
             <div class="compare-summary-card compare-resolved">
               <div class="compare-summary-num">{{ compareResult.summary.resolved }}</div>
-              <div class="compare-summary-label">Risolti</div>
+              <div class="compare-summary-label">Resolved</div>
               <div class="compare-summary-desc">Present in A, not in B</div>
             </div>
             <div class="compare-summary-card compare-unchanged">
@@ -825,42 +826,65 @@
 
         <!-- Notifications tab -->
         <div v-if="settingsTab === 'notifications'" class="card">
-          <div class="card-header"><h2>Notification Preferences</h2></div>
+          <div class="card-header">
+            <h2>Notification Preferences</h2>
+          </div>
           <div class="settings-form">
-            <p style="font-size:13px;color:var(--color-text-secondary);margin:-8px 0 4px">Configure when and how to receive email notifications for security events.</p>
-            <div class="form-group">
+            <!-- Delivery -->
+            <p class="settings-section-heading">Delivery</p>
+            <div class="form-input-group">
               <label class="form-label">Recipient Email</label>
-              <input type="email" v-model="notifPrefs.user_email" class="filter-input" placeholder="security@example.com">
+              <input type="email" v-model="notifPrefs.user_email" placeholder="security@example.com" autocomplete="email">
+              <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);margin-top:4px;display:block">Notification emails will be sent to this address.</span>
             </div>
+
+            <!-- Alerts -->
+            <p class="settings-section-heading">Alert triggers</p>
             <div class="form-group">
-              <label class="form-label">Alert on Critical findings</label>
+              <div>
+                <span class="form-label">Critical findings alert</span>
+                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Immediate notification when a critical severity finding is detected.</span>
+              </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.critical_alerts">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
-              <label class="form-label">Alert on High findings</label>
+              <div>
+                <span class="form-label">High findings alert</span>
+                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Notification when high severity findings are detected.</span>
+              </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.high_alerts">
                 <span class="toggle-slider"></span>
               </label>
             </div>
+
+            <!-- Reports -->
+            <p class="settings-section-heading">Reports &amp; summaries</p>
             <div class="form-group">
-              <label class="form-label">Weekly digest</label>
+              <div>
+                <span class="form-label">Weekly digest</span>
+                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Receive a weekly summary of findings and scan activity.</span>
+              </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.weekly_digest">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
-              <label class="form-label">Notify on scan completion</label>
+              <div>
+                <span class="form-label">Scan completion summary</span>
+                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Email summary after each scan completes.</span>
+              </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.scan_summaries">
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="modal-actions">
+
+            <div class="settings-actions">
               <button class="btn-primary" @click="saveNotificationPrefs">Save preferences</button>
             </div>
           </div>

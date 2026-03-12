@@ -39,7 +39,7 @@ function formatDate(iso) {
   if (!iso) return '—';
   try {
     const d = new Date(iso);
-    return d.toLocaleString('it-IT', {
+    return d.toLocaleString('en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit'
     });
@@ -89,7 +89,7 @@ createApp({
         { key: 'findings_count', label: 'Findings', visible: true },
         { key: 'critical_count', label: 'Critical', visible: true },
         { key: 'high_count', label: 'High', visible: true },
-        { key: 'created_at', label: 'Data', visible: true },
+        { key: 'created_at', label: 'Date', visible: true },
       ],
 
       // ── Charts refs (managed via $refs)
@@ -438,17 +438,25 @@ createApp({
           },
         },
       });
-      // Load real data from the API
+      // Load real data from the API, then hide empty status categories
       const statusKeys = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
       Promise.all(statusKeys.map(s =>
         apiFetch(`/api/findings/paginated?status=${s}&per_page=1`)
           .then(r => r.pagination ? r.pagination.count : 0)
           .catch(() => 0)
       )).then(counts => {
-        if (this.charts.remediation) {
+        if (!this.charts.remediation) return;
+        // Filter out categories with zero findings to reduce visual noise
+        const nonZeroIdx = counts.map((c, i) => c > 0 ? i : -1).filter(i => i >= 0);
+        if (nonZeroIdx.length > 0) {
+          this.charts.remediation.data.labels = nonZeroIdx.map(i => labels[i]);
+          this.charts.remediation.data.datasets[0].data = nonZeroIdx.map(i => counts[i]);
+          this.charts.remediation.data.datasets[0].backgroundColor = nonZeroIdx.map(i => colors[i]);
+        } else {
+          // No findings at all — show all with zeros (better than empty chart)
           this.charts.remediation.data.datasets[0].data = counts;
-          this.charts.remediation.update();
         }
+        this.charts.remediation.update();
       });
     },
 
@@ -524,32 +532,99 @@ createApp({
       if (!canvas) return;
       if (this.charts.trend) this.charts.trend.destroy();
       const trendData = this.trend.slice(-14);
+
+      // Filter out datasets where all values are zero to avoid confusing empty lines
+      const scanValues = trendData.map(t => t.scans || 0);
+      const findingValues = trendData.map(t => t.findings || 0);
+      const hasScans = scanValues.some(v => v > 0);
+      const hasFindings = findingValues.some(v => v > 0);
+
+      const datasets = [];
+      if (hasScans) {
+        datasets.push({
+          label: 'Scans',
+          data: scanValues,
+          borderColor: '#4f46e5',
+          backgroundColor: 'rgba(79,70,229,0.08)',
+          tension: 0.3,
+          fill: true,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          yAxisID: 'yScans',
+        });
+      }
+      if (hasFindings) {
+        datasets.push({
+          label: 'Findings',
+          data: findingValues,
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239,68,68,0.05)',
+          tension: 0.3,
+          fill: true,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          yAxisID: 'yFindings',
+        });
+      }
+      // Fallback if no data yet
+      if (datasets.length === 0) {
+        datasets.push({
+          label: 'Scans', data: trendData.map(() => 0),
+          borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)',
+          tension: 0.3, fill: true, pointRadius: 3, yAxisID: 'yScans',
+        });
+      }
+
       this.charts.trend = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
-          labels: trendData.map(t => t.day),
-          datasets: [
-            {
-              label: 'Scans', data: trendData.map(t => t.scans),
-              borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)',
-              tension: 0.3, fill: true, pointRadius: 4,
-            },
-            {
-              label: 'Findings', data: trendData.map(t => t.findings || 0),
-              borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.05)',
-              tension: 0.3, fill: true, pointRadius: 4,
-            },
-          ],
+          labels: trendData.map(t => {
+            // Format day labels as short dates (e.g. "12 Mar")
+            try {
+              const d = new Date(t.day);
+              return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            } catch { return t.day; }
+          }),
+          datasets,
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: {
+              display: true,
               position: 'bottom',
-              labels: { boxWidth: 12, font: { size: 11 }, padding: 16 },
+              labels: { boxWidth: 12, font: { size: 11 }, padding: 20 },
+            },
+            tooltip: {
+              callbacks: {
+                title: (items) => items[0]?.label || '',
+              },
             },
           },
-          scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 11 }, maxTicksLimit: 7 },
+            },
+            yScans: {
+              type: 'linear',
+              position: 'left',
+              beginAtZero: true,
+              grid: { color: this.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
+              ticks: { precision: 0, font: { size: 11 }, color: '#4f46e5' },
+              title: { display: true, text: 'Scans', font: { size: 10 }, color: '#4f46e5' },
+            },
+            yFindings: {
+              type: 'linear',
+              position: 'right',
+              beginAtZero: true,
+              grid: { drawOnChartArea: false },
+              ticks: { precision: 0, font: { size: 11 }, color: '#ef4444' },
+              title: { display: true, text: 'Findings', font: { size: 10 }, color: '#ef4444' },
+            },
+          },
         },
       });
     },
@@ -1191,7 +1266,7 @@ createApp({
       try {
         const params = new URLSearchParams({ format, scan_id: scanId, limit: 1000 });
         const res = await fetch(`/api/export/findings?${params}`);
-        if (!res.ok) throw new Error('Export fallito');
+        if (!res.ok) throw new Error('Export failed');
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1212,7 +1287,7 @@ createApp({
         const params = new URLSearchParams({ format, limit: 1000 });
         if (includeAnalytics) params.set('include_analytics', true);
         const res = await fetch(`/api/export/findings?${params}`);
-        if (!res.ok) throw new Error('Export fallito');
+        if (!res.ok) throw new Error('Export failed');
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1245,11 +1320,11 @@ createApp({
 
     statusLabel(status) {
       const labels = {
-        COMPLETED_CLEAN: 'Pulita',
-        COMPLETED_WITH_FINDINGS: 'Con findings',
-        PARTIAL_FAILED: 'Parziale',
-        FAILED: 'Fallita',
-        RUNNING: 'In corso',
+        COMPLETED_CLEAN: 'Clean',
+        COMPLETED_WITH_FINDINGS: 'With Findings',
+        PARTIAL_FAILED: 'Partial',
+        FAILED: 'Failed',
+        RUNNING: 'Running',
       };
       return labels[status] || status;
     },
@@ -1268,7 +1343,7 @@ createApp({
     },
 
     copyToClipboard(text) {
-      navigator.clipboard.writeText(text).then(() => this.showToast('Copiato negli appunti'));
+      navigator.clipboard.writeText(text).then(() => this.showToast('Copied to clipboard'));
     },
 
     // ── Dark Mode ────────────────────────────────────────────────────────────────

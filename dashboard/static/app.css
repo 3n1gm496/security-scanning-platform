@@ -113,6 +113,7 @@ html, body {
 #app {
   display: flex;
   height: 100vh;
+  /* overflow:hidden clips the sidebar without preventing page-content from scrolling */
   overflow: hidden;
 }
 
@@ -133,6 +134,27 @@ html, body {
 .sidebar.collapsed {
   width: var(--sidebar-collapsed-width);
   min-width: var(--sidebar-collapsed-width);
+}
+
+/* When collapsed, hide the mini-logo from the header so the toggle button is
+   centered and always reachable. The shield icon appears as the first nav item. */
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: var(--space-4) var(--space-2);
+}
+
+.sidebar.collapsed .sidebar-logo-mini {
+  display: none;
+}
+
+/* Ensure the toggle button is visually obvious when sidebar is collapsed */
+.sidebar.collapsed .sidebar-toggle {
+  background: var(--sidebar-hover-bg);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+.sidebar.collapsed .sidebar-toggle:hover {
+  background: rgba(255,255,255,0.15);
 }
 
 .sidebar-header {
@@ -164,7 +186,10 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  /* width: 100% would consume all header space and push the toggle button
+     off-screen when the sidebar is collapsed (56px total). Use auto instead. */
+  width: auto;
+  flex-shrink: 0;
 }
 
 .sidebar-toggle {
@@ -393,6 +418,9 @@ html, body {
 .page-content {
   flex: 1;
   overflow-y: auto;
+  /* min-height: 0 is critical — without it, flex won't shrink this below its content
+     height, so overflow-y: auto never activates and content gets clipped at 100vh */
+  min-height: 0;
   padding: var(--space-6);
   display: flex;
   flex-direction: column;
@@ -457,6 +485,7 @@ html, body {
   gap: var(--space-5);
 }
 
+/* chart cards need overflow: visible so canvas tooltips can render outside bounds */
 .chart-card { overflow: visible; }
 .chart-card .card-header { border-bottom: none; padding-bottom: var(--space-2); }
 .chart-card .card-header h2 { font-size: var(--font-md); }
@@ -466,13 +495,16 @@ html, body {
 .chart-container {
   position: relative;
   height: 240px;
-  padding: 0 var(--space-5) var(--space-4);
+  /* padding gives breathing room around the canvas itself */
+  padding: var(--space-1) var(--space-4) var(--space-4);
+  /* Prevent canvas from overflowing if Chart.js miscalculates on resize */
+  overflow: hidden;
 }
 
-/* chart-container-tall: altezza maggiorata per ospitare la leggenda in basso */
+/* chart-container-tall: extra height to accommodate bottom legend */
 .chart-container-tall {
   height: 300px;
-  padding-bottom: var(--space-6);
+  padding-bottom: var(--space-8);
 }
 
 .chart-stat {
@@ -683,7 +715,10 @@ tr:last-child td { border-bottom: none; }
 
 /* ── Findings table with sticky header ────────────────────── */
 
-.findings-table-wrap { overflow-x: auto; overflow-y: auto; max-height: 65vh; }
+/* Do NOT set max-height here — constraining the table inside a flexbox-scrolling
+   page-content traps the pagination bar below the visible area. Let page-content
+   handle the scroll; the table just needs horizontal overflow support. */
+.findings-table-wrap { overflow-x: auto; }
 .findings-table-wrap thead th { position: sticky; top: 0; z-index: 2; background: var(--color-bg); }
 
 /* ── Pagination ───────────────────────────────────────────── */
@@ -693,8 +728,11 @@ tr:last-child td { border-bottom: none; }
   align-items: center;
   justify-content: center;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--color-border-light);
+  /* Prevent pagination from being clipped — always shown as part of card flow */
+  flex-shrink: 0;
+  background: var(--color-surface);
 }
 
 .page-info { font-size: var(--font-sm); color: var(--color-text-secondary); }
@@ -1202,26 +1240,83 @@ tr:last-child td { border-bottom: none; }
 .tab-btn:hover { color: var(--color-primary); }
 .tab-btn.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
 
+/* ── Notification Preferences — polished SaaS settings panel ── */
+
 .settings-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  max-width: 480px;
-  padding: var(--space-5);
+  gap: 0;
+  max-width: 560px;
+  padding: var(--space-6);
 }
+
+.settings-section-heading {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin: var(--space-5) 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+}
+.settings-section-heading:first-child { margin-top: 0; }
 
 .settings-form .form-group {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border-light);
 }
+.settings-form .form-group:last-of-type { border-bottom: none; }
 
-.settings-form .form-group .form-label {
+.settings-form .form-label {
   flex: 1;
   font-size: var(--font-md);
   font-weight: 500;
   color: var(--color-text);
+}
+.settings-form .form-label-hint {
+  display: block;
+  font-size: var(--font-xs);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.settings-form .form-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+.settings-form .form-input-group .form-label {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+.settings-form .form-input-group input {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-base);
+  color: var(--color-text);
+  background: var(--color-surface);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.settings-form .form-input-group input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-5);
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--color-border-light);
 }
 
 /* ── Forms ────────────────────────────────────────────────── */
@@ -1582,18 +1677,31 @@ code {
 
 /* ── Responsive ───────────────────────────────────────────── */
 
+/* Keep 2-col chart grid down to 1200px; collapse earlier to prevent chart clipping */
 @media (max-width: 1200px) {
   .chart-grid { grid-template-columns: 1fr 1fr; }
 }
 
+/* Half-screen on a typical 1920px display is ~960px — below 1024px go single column */
 @media (max-width: 1024px) {
   .chart-grid { grid-template-columns: 1fr; }
   .chart-card-wide, .chart-card-full { grid-column: auto; }
   .detail-grid { grid-template-columns: 1fr; }
   .two-cols-grid { grid-template-columns: 1fr; }
-  .compare-summary-grid { grid-template-columns: 1fr; }
+  .compare-summary-grid { grid-template-columns: 1fr 1fr; }
   .compare-selectors { flex-direction: column; }
   .compare-vs { padding-bottom: 0; }
+  /* Tighten page padding to gain more usable width */
+  .page-content { padding: var(--space-5); gap: var(--space-4); }
+}
+
+@media (max-width: 860px) {
+  /* At half-screen on ≤1720px displays the sidebar starts to cramp the content */
+  .page-content { padding: var(--space-4); gap: var(--space-4); }
+  .topbar-slim { padding: 0 var(--space-4); }
+  .compare-summary-grid { grid-template-columns: 1fr; }
+  /* Allow KPI cards to wrap more aggressively */
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 }
 
 @media (max-width: 768px) {

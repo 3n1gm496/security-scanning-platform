@@ -43,7 +43,7 @@ Do not re-audit or re-implement the items listed below.
   explicit UPDATE-or-INSERT pattern.
 - P2 fixed: Remaining Italian code comments and docstrings translated in `app.py` and `db.py`.
 
-### 245/245 tests passing as of last verified run
+### 436/436 tests passing as of last verified run
 
 ### Remaining known gaps (low priority)
 - Analytics page table fallback when JS is disabled entirely (noscript)

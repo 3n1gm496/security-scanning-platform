@@ -124,7 +124,9 @@ def test_scans_paginator_policy_filter():
             findings_count INTEGER NOT NULL DEFAULT 0,
             critical_count INTEGER NOT NULL DEFAULT 0,
             high_count INTEGER NOT NULL DEFAULT 0,
-            medium_count INTEGER NOT NULL DEFAULT 0
+            medium_count INTEGER NOT NULL DEFAULT 0,
+            low_count INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT
         )
     """)
     for i in range(5):

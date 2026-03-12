@@ -257,13 +257,31 @@ createApp({
       document.documentElement.setAttribute('data-theme', 'dark');
     }
 
-    // ── Minimal keyboard: Escape to close modals
+    // ── Keyboard: Escape to close modals + Tab focus trap
     this._keyHandler = (e) => {
       if (e.key === 'Escape') {
         this.showFindingModal = false;
         this.showScanModal = false;
         this.selectedFinding = null;
         this.selectedScan = null;
+        this.showCreateKeyModal = false;
+        this.showCreateWebhookModal = false;
+      }
+      // Focus trap: keep Tab within the active modal
+      if (e.key === 'Tab') {
+        const overlay = document.querySelector('.modal-overlay[role="dialog"]');
+        if (!overlay) return;
+        const focusable = overlay.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
       }
     };
     document.addEventListener('keydown', this._keyHandler);
@@ -295,6 +313,18 @@ createApp({
   },
 
   methods: {
+    // ── Modal accessibility ───────────────────────────────────────────────────
+
+    async focusModal() {
+      await nextTick();
+      const overlay = document.querySelector('.modal-overlay[role="dialog"]');
+      if (!overlay) return;
+      const first = overlay.querySelector(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (first) first.focus();
+    },
+
     // ── Chart theme helpers ────────────────────────────────────────────────────
 
     applyChartDefaults() {
@@ -303,7 +333,7 @@ createApp({
       Chart.defaults.borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
     },
 
-    // ── Toggle colonne ───────────────────────────────────────────────────────────────────────────────────
+    // ── Toggle columns ───────────────────────────────────────────────────────────────────────────────────
 
     colVisible(key) {
       const col = this.scanColumns.find(c => c.key === key);
@@ -669,6 +699,7 @@ createApp({
 
     openScanDetail(scan) {
       this.selectedScan = scan;
+      this.focusModal();
     },
 
     viewScanFindings(scan) {
@@ -760,6 +791,7 @@ createApp({
 
     async openFindingDetail(finding) {
       this.selectedFinding = finding;
+      this.focusModal();
       this.findingModalTab = 'info';
       this.newFindingStatus = '';
       this.findingStatusNotes = '';
@@ -1044,8 +1076,8 @@ createApp({
       this.compareResult = null;
       try {
         const result = await apiFetch(`/api/scans/compare?scan_id_1=${this.compareIdA}&scan_id_2=${this.compareIdB}`);
-        // Normalizza la risposta API: l'API restituisce { scan_1, scan_2, diff: { new_count, ... } }
-        // Il template si aspetta { summary: { new, resolved, unchanged }, new_findings, resolved_findings }
+        // Normalize API response: the API returns { scan_1, scan_2, diff: { new_count, ... } }
+        // The template expects { summary: { new, resolved, unchanged }, new_findings, resolved_findings }
         if (result && result.diff) {
           this.compareResult = {
             scan_1: result.scan_1,

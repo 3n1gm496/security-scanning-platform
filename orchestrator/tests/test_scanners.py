@@ -150,3 +150,35 @@ def test_clone_repo_failure(monkeypatch, tmp_path):
     with pytest.raises(ScannerError) as excinfo:
         clone_repo("https://github.com/githubtraining/hellogitworld.git", str(tmp_path / "repo"))
     assert "git clone failed" in str(excinfo.value)
+
+
+def test_clone_repo_rejects_file_scheme(tmp_path):
+    """file:// URLs must be rejected to prevent SSRF / local file access."""
+    with pytest.raises(ScannerError, match="Unsupported URL scheme"):
+        clone_repo("file:///etc/passwd", str(tmp_path / "repo"))
+
+
+def test_clone_repo_rejects_ssh_scheme(tmp_path):
+    """ssh:// URLs must be rejected."""
+    with pytest.raises(ScannerError, match="Unsupported URL scheme"):
+        clone_repo("ssh://git@github.com/foo/bar.git", str(tmp_path / "repo"))
+
+
+def test_clone_repo_rejects_git_scheme(tmp_path):
+    """git:// URLs must be rejected (unencrypted protocol)."""
+    with pytest.raises(ScannerError, match="Unsupported URL scheme"):
+        clone_repo("git://github.com/foo/bar.git", str(tmp_path / "repo"))
+
+
+def test_clone_repo_allows_https(monkeypatch, tmp_path):
+    """https:// URLs must be accepted."""
+    monkeypatch.setattr("orchestrator.scanners.run_command",
+                        lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
+    clone_repo("https://github.com/foo/bar.git", str(tmp_path / "repo"))
+
+
+def test_clone_repo_allows_http(monkeypatch, tmp_path):
+    """http:// URLs must be accepted (some internal repos use plain HTTP)."""
+    monkeypatch.setattr("orchestrator.scanners.run_command",
+                        lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
+    clone_repo("http://internal.corp/foo/bar.git", str(tmp_path / "repo"))

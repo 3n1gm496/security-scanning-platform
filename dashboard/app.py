@@ -34,7 +34,6 @@ from db import (
     fetch_kpis,
     list_findings,
     list_scans,
-    parse_artifacts,
     recent_failed_scans,
     scans_trend,
     severity_breakdown,
@@ -340,95 +339,16 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
     return templates.TemplateResponse(request, "app.html", context)
 
 
-@app.get("/scans", response_class=HTMLResponse)
-def scans_page(
-    request: Request,
-    target: str | None = None,
-    status_value: str | None = Query(default=None, alias="status"),
-    policy_status: str | None = None,
-    user: str = Depends(get_current_user),
-) -> HTMLResponse:
-    scans = list_scans(DB_PATH, 200, target=target, status=status_value, policy_status=policy_status)
-    for scan in scans:
-        scan["artifacts"] = parse_artifacts(scan)
-    return templates.TemplateResponse(
-        request,
-        "scans.html",
-        {
-            "user": user,
-            "scans": scans,
-            "targets": distinct_targets(DB_PATH),
-            "selected_target": target,
-            "selected_status": status_value,
-            "selected_policy_status": policy_status,
-        },
-    )
+@app.get("/scans")
+def scans_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
+    """Deprecated SSR route — redirect to SPA."""
+    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#scans"})
 
 
-_FINDINGS_PAGE_SIZE = 50
-_FINDINGS_MAX_PAGE_SIZE = 200
-
-
-@app.get("/findings", response_class=HTMLResponse)
-def findings_page(
-    request: Request,
-    severity: str | None = None,
-    tool: str | None = None,
-    target: str | None = None,
-    scan_id: str | None = None,
-    category: str | None = None,
-    page: int = 1,
-    per_page: int = _FINDINGS_PAGE_SIZE,
-    user: str = Depends(get_current_user),
-) -> HTMLResponse:
-    page = max(1, page)
-    per_page = max(1, min(per_page, _FINDINGS_MAX_PAGE_SIZE))
-    offset = (page - 1) * per_page
-
-    filter_kwargs = dict(severity=severity, tool=tool, target=target, scan_id=scan_id, category=category)
-    total = count_findings(DB_PATH, **filter_kwargs)
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    page = min(page, total_pages)
-    offset = (page - 1) * per_page
-
-    findings = list_findings(DB_PATH, per_page, offset=offset, **filter_kwargs)
-
-    for finding in findings:
-        raw_remediation = (finding.get("remediation") or "").strip()
-        if raw_remediation:
-            finding["remediation_display"] = raw_remediation
-            continue
-
-        try:
-            remediation_guide = RemediationEngine.generate_remediation(finding)
-        except Exception as _rem_err:
-            LOGGER.warning("remediation.guide_failed", finding_id=finding.get("id"), error=str(_rem_err))
-            remediation_guide = {}
-        steps = remediation_guide.get("steps") or []
-        if steps:
-            finding["remediation_display"] = steps[0]
-        else:
-            finding["remediation_display"] = remediation_guide.get("title", "-")
-
-    return templates.TemplateResponse(
-        request,
-        "findings.html",
-        {
-            "user": user,
-            "findings": findings,
-            "tools": distinct_tools(DB_PATH),
-            "targets": distinct_targets(DB_PATH),
-            "selected_severity": severity,
-            "selected_tool": tool,
-            "selected_target": target,
-            "selected_scan_id": scan_id,
-            "selected_category": category,
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": total_pages,
-        },
-    )
+@app.get("/findings")
+def findings_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
+    """Deprecated SSR route — redirect to SPA."""
+    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#findings"})
 
 
 @app.get("/api/kpi")

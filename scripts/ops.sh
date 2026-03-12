@@ -67,7 +67,7 @@ die() {
 pause() {
   if [[ -t 0 ]]; then
     echo
-    read -r -p "Premi INVIO per continuare..." _
+    read -r -p "Press ENTER to continue..." _
   fi
 }
 
@@ -863,7 +863,7 @@ cmd_dev() {
   ${COMPOSE} -f docker-compose.yml -f docker-compose.dev.yml up -d --build
   init_scan_db
   info "Dashboard (dev): $(dashboard_url)"
-  info "I servizi sono in esecuzione con live-reload. Premi Ctrl+C per fermare i log."
+  info "Services running with live-reload. Press Ctrl+C to stop."
   ${COMPOSE} -f docker-compose.yml -f docker-compose.dev.yml logs -f
 }
 

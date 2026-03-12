@@ -8,6 +8,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from tenacity import (
     retry,
@@ -97,6 +98,15 @@ def clone_repo(repo_url: str, destination: str, ref: str | None = None, depth: i
                secrets or vulnerabilities introduced in older commits.
                Set via ``execution.git_clone_depth`` in settings.yaml.
     """
+    # Validate URL scheme to prevent SSRF via file://, ssh://, etc.
+    _ALLOWED_SCHEMES = {"https", "http"}
+    parsed = urlparse(repo_url)
+    if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
+        raise ScannerError(
+            f"Unsupported URL scheme '{parsed.scheme}' for git clone — "
+            f"only {', '.join(sorted(_ALLOWED_SCHEMES))} are allowed"
+        )
+
     Path(destination).parent.mkdir(parents=True, exist_ok=True)
     command = ["git", "clone", "--quiet", "-c", "credential.helper="]
     if depth and depth > 0:

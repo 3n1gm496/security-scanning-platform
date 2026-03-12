@@ -10,10 +10,10 @@ from typing import Any
 
 from db import get_connection
 
-# OWASP Top 10 2021 mapping
-# Keys are exact category values used by the orchestrator scanners.
-# Only categories with a direct, unambiguous OWASP mapping are included.
-OWASP_TOP_10_MAPPING: dict[str, str] = {
+# OWASP Top 10 2021 mapping — exact category match.
+# Includes both the orchestrator normalizer categories (sast, sca, iac, etc.)
+# and the fine-grained categories used by nuclei/specific scanners.
+OWASP_TOP_10_CATEGORY_MAPPING: dict[str, str] = {
     # A01 — Broken Access Control
     "csrf": "A01:2021 - Broken Access Control",
     "idor": "A01:2021 - Broken Access Control",
@@ -23,14 +23,22 @@ OWASP_TOP_10_MAPPING: dict[str, str] = {
     "crypto": "A02:2021 - Cryptographic Failures",
     "encryption": "A02:2021 - Cryptographic Failures",
     "secret": "A02:2021 - Cryptographic Failures",
-    # A03 — Injection
+    # A03 — Injection (sast covers static analysis findings: injection, XSS, etc.)
+    "sast": "A03:2021 - Injection",
     "sqli": "A03:2021 - Injection",
     "xss": "A03:2021 - Injection",
     "subprocess": "A03:2021 - Injection",
-    # A05 — Security Misconfiguration
+    "dast": "A03:2021 - Injection",
+    # A05 — Security Misconfiguration (iac findings are misconfigurations)
     "misconfig": "A05:2021 - Security Misconfiguration",
-    # A06 — Vulnerable and Outdated Components
+    "iac": "A05:2021 - Security Misconfiguration",
+    "network": "A05:2021 - Security Misconfiguration",
+    # A06 — Vulnerable and Outdated Components (sca/container/vulnerability)
     "cve": "A06:2021 - Vulnerable and Outdated Components",
+    "sca": "A06:2021 - Vulnerable and Outdated Components",
+    "container": "A06:2021 - Vulnerable and Outdated Components",
+    "vulnerability": "A06:2021 - Vulnerable and Outdated Components",
+    "web": "A06:2021 - Vulnerable and Outdated Components",
     # A08 — Software and Data Integrity Failures
     "deserialization": "A08:2021 - Software and Data Integrity Failures",
     # A09 — Security Logging and Monitoring Failures
@@ -38,6 +46,31 @@ OWASP_TOP_10_MAPPING: dict[str, str] = {
     # A10 — Server-Side Request Forgery
     "ssrf": "A10:2021 - Server-Side Request Forgery",
 }
+
+# Keyword-based OWASP mapping applied to the finding title when category alone
+# does not produce a match.  Each tuple is (keyword, owasp_category).
+OWASP_TITLE_KEYWORDS: list[tuple[str, str]] = [
+    ("access control", "A01:2021 - Broken Access Control"),
+    ("authorization", "A01:2021 - Broken Access Control"),
+    ("traversal", "A01:2021 - Broken Access Control"),
+    ("csrf", "A01:2021 - Broken Access Control"),
+    ("hardcoded", "A02:2021 - Cryptographic Failures"),
+    ("password", "A02:2021 - Cryptographic Failures"),
+    ("private key", "A02:2021 - Cryptographic Failures"),
+    ("secret", "A02:2021 - Cryptographic Failures"),
+    ("crypto", "A02:2021 - Cryptographic Failures"),
+    ("injection", "A03:2021 - Injection"),
+    ("xss", "A03:2021 - Injection"),
+    ("sql", "A03:2021 - Injection"),
+    ("command", "A03:2021 - Injection"),
+    ("eval(", "A03:2021 - Injection"),
+    ("deserializ", "A08:2021 - Software and Data Integrity Failures"),
+    ("ssrf", "A10:2021 - Server-Side Request Forgery"),
+    ("misconfigur", "A05:2021 - Security Misconfiguration"),
+    ("cve-", "A06:2021 - Vulnerable and Outdated Components"),
+    ("vulnerable", "A06:2021 - Vulnerable and Outdated Components"),
+    ("outdated", "A06:2021 - Vulnerable and Outdated Components"),
+]
 
 # Common CWE mappings
 CWE_MAPPING = {
@@ -98,16 +131,25 @@ def calculate_risk_score(finding: dict[str, Any]) -> float:
     return min(base_score, 100.0)
 
 
-def map_to_owasp(category: str) -> str | None:
-    """Map finding category to OWASP Top 10 2021.
+def map_to_owasp(category: str, title: str = "") -> str | None:
+    """Map finding category (and optionally title) to OWASP Top 10 2021.
 
-    Uses exact match on the category abbreviation used by the orchestrator
-    scanners (e.g. 'sqli', 'xss', 'csrf').  Only categories with a direct,
-    unambiguous OWASP mapping are returned; everything else returns None.
+    First tries exact match on the category.  If that fails, scans the
+    finding title for known keywords.
     """
-    if not category:
-        return None
-    return OWASP_TOP_10_MAPPING.get(category.lower())
+    if category:
+        result = OWASP_TOP_10_CATEGORY_MAPPING.get(category.lower())
+        if result:
+            return result
+
+    # Fallback: keyword match on title
+    if title:
+        title_lower = title.lower()
+        for keyword, owasp in OWASP_TITLE_KEYWORDS:
+            if keyword in title_lower:
+                return owasp
+
+    return None
 
 
 def map_to_cwe(category: str) -> str | None:
@@ -165,7 +207,7 @@ def get_risk_distribution(db_path: str) -> dict[str, Any]:
 def get_compliance_summary(db_path: str) -> dict[str, Any]:
     """Generate OWASP Top 10 and CWE compliance summary."""
     with get_connection(db_path) as conn:
-        findings = conn.execute("SELECT category, severity FROM findings").fetchall()
+        findings = conn.execute("SELECT category, severity, title FROM findings").fetchall()
 
     owasp_counts: dict[str, int] = {}
     cwe_counts: dict[str, int] = {}
@@ -173,8 +215,9 @@ def get_compliance_summary(db_path: str) -> dict[str, Any]:
 
     for finding in findings:
         category = finding["category"] or ""
+        title = finding["title"] or ""
 
-        owasp = map_to_owasp(category)
+        owasp = map_to_owasp(category, title)
         if owasp:
             owasp_counts[owasp] = owasp_counts.get(owasp, 0) + 1
         else:

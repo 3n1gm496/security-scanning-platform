@@ -215,10 +215,10 @@
           <span>Charts unavailable — Chart.js could not be loaded from CDN. Check your network connection or CSP policy. Data tables remain accessible on this page.</span>
         </div>
 
-        <!-- Trend chart (full width — most important for situational awareness) -->
+        <!-- Severity breakdown chart (full width — most useful for vulnerability tracking) -->
         <div class="card chart-card" v-if="chartsAvailable">
           <div class="card-header">
-            <h2>Scan &amp; Finding Trend (14 days)</h2>
+            <h2>Severity Breakdown by Scan</h2>
           </div>
           <div class="chart-container chart-container-tall">
             <canvas ref="trendChart"></canvas>
@@ -835,25 +835,25 @@
             <div class="form-input-group">
               <label class="form-label">Recipient Email</label>
               <input type="email" v-model="notifPrefs.user_email" placeholder="security@example.com" autocomplete="email">
-              <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);margin-top:4px;display:block">Notification emails will be sent to this address.</span>
+              <span class="form-label-hint">Notification emails will be sent to this address.</span>
             </div>
 
             <!-- Alerts -->
             <p class="settings-section-heading">Alert triggers</p>
-            <div class="form-group">
+            <div class="notif-row">
               <div>
                 <span class="form-label">Critical findings alert</span>
-                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Immediate notification when a critical severity finding is detected.</span>
+                <span class="form-label-hint">Immediate notification when a critical severity finding is detected.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.critical_alerts">
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="form-group">
+            <div class="notif-row">
               <div>
                 <span class="form-label">High findings alert</span>
-                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Notification when high severity findings are detected.</span>
+                <span class="form-label-hint">Notification when high severity findings are detected.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.high_alerts">
@@ -863,20 +863,20 @@
 
             <!-- Reports -->
             <p class="settings-section-heading">Reports &amp; summaries</p>
-            <div class="form-group">
+            <div class="notif-row">
               <div>
                 <span class="form-label">Weekly digest</span>
-                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Receive a weekly summary of findings and scan activity.</span>
+                <span class="form-label-hint">Receive a weekly summary of findings and scan activity.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.weekly_digest">
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="form-group">
+            <div class="notif-row">
               <div>
                 <span class="form-label">Scan completion summary</span>
-                <span class="settings-form .form-label-hint" style="font-size:var(--font-xs);color:var(--color-text-secondary);display:block;margin-top:1px">Email summary after each scan completes.</span>
+                <span class="form-label-hint">Email summary after each scan completes.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.scan_summaries">

@@ -124,20 +124,20 @@
       </div>
 
       <!-- Pagination controls -->
-      <div style="display:flex;align-items:center;gap:12px;padding:16px 0 0;justify-content:flex-end;">
+      <div class="pagination-bar">
         {% set qs_base %}severity={{ selected_severity or '' }}&tool={{ selected_tool or '' }}&target={{ selected_target or '' }}&category={{ selected_category or '' }}&per_page={{ per_page }}{% endset %}
         {% if page > 1 %}
-          <a href="/findings?{{ qs_base }}&page={{ page - 1 }}" class="btn-secondary" style="padding:6px 14px;text-decoration:none;">&#8592; Prev</a>
+          <a href="/findings?{{ qs_base }}&page={{ page - 1 }}" class="btn-secondary">&#8592; Previous</a>
         {% else %}
-          <span class="btn-secondary" style="padding:6px 14px;opacity:0.4;cursor:default;">&#8592; Prev</span>
+          <span class="btn-secondary" style="opacity:0.4;cursor:default;">&#8592; Previous</span>
         {% endif %}
 
-        <span style="font-size:0.85rem;color:var(--text-secondary,#6b7280);">{{ page }} / {{ total_pages }}</span>
+        <span class="page-info">Page {{ page }} of {{ total_pages }}</span>
 
         {% if page < total_pages %}
-          <a href="/findings?{{ qs_base }}&page={{ page + 1 }}" class="btn-secondary" style="padding:6px 14px;text-decoration:none;">Next &#8594;</a>
+          <a href="/findings?{{ qs_base }}&page={{ page + 1 }}" class="btn-secondary">Next &#8594;</a>
         {% else %}
-          <span class="btn-secondary" style="padding:6px 14px;opacity:0.4;cursor:default;">Next &#8594;</span>
+          <span class="btn-secondary" style="opacity:0.4;cursor:default;">Next &#8594;</span>
         {% endif %}
       </div>
 

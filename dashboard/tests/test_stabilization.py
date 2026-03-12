@@ -208,7 +208,7 @@ def test_findings_page_pagination_prev_next(auth_client):
     assert resp.status_code == 200
     html = resp.text
     # Both Prev and Next links should be active (not disabled)
-    assert "&#8592; Prev</a>" in html
+    assert "&#8592; Previous</a>" in html
     assert "Next &#8594;</a>" in html
 
 
@@ -218,7 +218,7 @@ def test_findings_page_first_page_no_prev(auth_client):
     assert resp.status_code == 200
     html = resp.text
     # Disabled prev is a <span>, not an <a>
-    assert "&#8592; Prev</span>" in html
+    assert "&#8592; Previous</span>" in html
     assert "Next &#8594;</a>" in html
 
 

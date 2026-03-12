@@ -242,8 +242,15 @@ thead {
   background: linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
   border-top: 1px solid var(--border);
   border-bottom: 2px solid var(--border);
+  /* Sticky thead on an overflow-x:auto scrolling parent is not reliable;
+     use th-level sticky instead (see th rule below) */
+}
+
+thead th {
   position: sticky;
   top: 0;
+  z-index: 1;
+  background: inherit;
 }
 
 th {
@@ -467,7 +474,56 @@ button:active {
 .table-wrap {
   border: 1px solid var(--border-light);
   border-radius: 12px;
-  overflow: hidden;
+  /* overflow-x:auto allows tables to scroll horizontally on narrow screens
+     instead of being clipped. overflow:hidden was trapping table content. */
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+/* ============================================================================
+   Pagination / secondary button (used in findings.html, scans.html)
+   ============================================================================ */
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 14px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  /* Override the default button gradient from the global button rule */
+  background-image: none;
+  text-transform: none;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+.btn-secondary:hover:not([style*="opacity:0.4"]) {
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Pagination bar */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 4px 4px;
+  flex-wrap: wrap;
+}
+.pagination-bar .page-info {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .login-form h1 {

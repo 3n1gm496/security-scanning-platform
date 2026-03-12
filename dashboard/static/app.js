@@ -1,6 +1,6 @@
 /**
  * Security Scanning Platform — SPA Vue.js
- * Versione 2.0 — Architettura SPA completa con paginazione, triage e analytics
+ * Version 2.0 — Complete SPA architecture with pagination, triage and analytics
  */
 
 const { createApp, ref, reactive, computed, onMounted, nextTick, watch } = Vue;
@@ -79,7 +79,7 @@ createApp({
       availableTools: init.availableTools || [],
       availableUsers: [],
 
-      // ── Toggle colonne tabella scansioni
+      // ── Toggle scan table columns
       scanColumns: [
         { key: 'id', label: 'ID', visible: false },
         { key: 'target_name', label: 'Target', visible: true },

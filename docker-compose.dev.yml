@@ -10,11 +10,11 @@ services:
   orchestrator:
     build:
       network: host
-    # Per lo sviluppo, manteniamo il container in esecuzione per consentire l'esecuzione manuale dei comandi.
+    # For development, keep the container running to allow manual command execution.
     command: ["tail", "-f", "/dev/null"]
     volumes:
       - ./orchestrator:/app
       - ./data:/data
       - ./config:/app/config:ro
-    # Rimuoviamo il profilo manuale per avviarlo di default in dev
+    # Remove the manual profile to start it by default in dev
     profiles: []

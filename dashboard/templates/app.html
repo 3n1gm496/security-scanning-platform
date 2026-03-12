@@ -281,7 +281,7 @@
       </div>
 
       <!-- ================================================================
-           PAGE: SCANSIONI
+           PAGE: SCANS
       ================================================================ -->
       <div v-if="currentPage === 'scans'" class="page-content">
         <!-- Filters -->
@@ -655,7 +655,7 @@
       </div>
 
       <!-- ================================================================
-           PAGE: CONFRONTA SCANSIONI
+           PAGE: COMPARE SCANS
       ================================================================ -->
       <div v-if="currentPage === 'compare'" class="page-content">
         <div class="card">
@@ -1118,7 +1118,7 @@
     </div>
 
     <!-- ================================================================
-         MODAL: NUOVA SCANSIONE
+         MODAL: NEW SCAN
     ================================================================ -->
     <div class="modal-overlay" v-if="showScanModal" @click.self="showScanModal = false">
       <div class="modal modal-sm">
@@ -1130,7 +1130,7 @@
           <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px">Configure and start a new security scan.</p>
           <div class="form-group">
             <label class="form-label">Scan name</label>
-            <input type="text" v-model="newScanForm.name" class="filter-input" placeholder="es. my-app-v2.0" autocomplete="off">
+            <input type="text" v-model="newScanForm.name" class="filter-input" placeholder="e.g. my-app-v2.0" autocomplete="off">
           </div>
           <div class="form-group">
             <label class="form-label">Target type</label>
@@ -1169,11 +1169,11 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Nome</label>
-            <input type="text" v-model="newKeyForm.name" class="filter-input" placeholder="es. ci-runner">
+            <label class="form-label">Name</label>
+            <input type="text" v-model="newKeyForm.name" class="filter-input" placeholder="e.g. ci-runner">
           </div>
           <div class="form-group">
-            <label class="form-label">Ruolo</label>
+            <label class="form-label">Role</label>
             <select v-model="newKeyForm.role" class="filter-select">
               <option value="admin">Admin</option>
               <option value="operator">Operator</option>
@@ -1182,7 +1182,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Expiry (days, optional)</label>
-            <input type="number" v-model="newKeyForm.expires_days" class="filter-input" placeholder="es. 90">
+            <input type="number" v-model="newKeyForm.expires_days" class="filter-input" placeholder="e.g. 90">
           </div>
           <div v-if="newKeyResult" class="new-key-result">
             <p>Key created. Copy it now — it will not be shown again:</p>
@@ -1206,13 +1206,13 @@
     <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="showCreateWebhookModal = false">
       <div class="modal modal-sm">
         <div class="modal-header">
-          <h2 class="modal-title">Nuovo Webhook</h2>
+          <h2 class="modal-title">New Webhook</h2>
           <button class="modal-close" @click="showCreateWebhookModal = false">&#x2715;</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Nome</label>
-            <input type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="es. slack-alerts">
+            <label class="form-label">Name</label>
+            <input type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="e.g. slack-alerts">
           </div>
           <div class="form-group">
             <label class="form-label">URL</label>

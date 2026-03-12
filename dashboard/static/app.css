@@ -334,7 +334,7 @@ html, body {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
-  min-height: 0; /* necessario per scroll corretto in flex column */
+  min-height: 0; /* necessary for correct scroll in flex column */
   background: var(--color-bg);
 }
 
@@ -671,7 +671,7 @@ td {
   font-size: var(--font-base);
 }
 
-/* Righe alternate per migliorare la leggibilità */
+/* Alternate rows to improve readability */
 tbody tr:nth-child(even) td {
   background: var(--color-bg);
 }

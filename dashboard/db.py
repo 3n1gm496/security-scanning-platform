@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from datetime import datetime, timezone
 from typing import Any
 
 from db_adapter import get_connection
+from logging_config import get_logger
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 def _utc_now() -> str:
@@ -367,7 +367,7 @@ def _run_migrations(db_path: str) -> None:
                 "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
                 (version, description, _utc_now()),
             )
-        LOGGER.info("Applied schema migration v%s: %s", version, description)
+        LOGGER.info("db.migration_applied", version=version, description=description)
 
 
 def init_db(db_path: str):

@@ -14,7 +14,6 @@ The adapter normalises:
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import sqlite3
@@ -22,7 +21,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator
 
-LOGGER = logging.getLogger(__name__)
+from logging_config import get_logger
+
+LOGGER = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Backend detection
@@ -234,12 +235,12 @@ def get_connection(db_path: str | None = None) -> _ConnectionWrapper:
                  Defaults to DASHBOARD_DB_PATH env var.
     """
     if _IS_POSTGRES:
-        LOGGER.debug("Connecting to PostgreSQL via DATABASE_URL")
+        LOGGER.debug("db.connect.postgres")
         return _ConnectionWrapper(_pg_connect(), is_pg=True)
 
     # SQLite fallback
     path = db_path or os.environ.get("DASHBOARD_DB_PATH", "/data/security_scans.db")
-    LOGGER.debug("Connecting to SQLite at %s", path)
+    LOGGER.debug("db.connect.sqlite", path=path)
     return _ConnectionWrapper(_sqlite_connect(path), is_pg=False)
 
 

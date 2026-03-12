@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 import secrets
 import time
@@ -15,7 +14,10 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-LOGGER = logging.getLogger(__name__)
+from logging_config import configure_logging, get_logger
+
+configure_logging()
+LOGGER = get_logger(__name__)
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -158,9 +160,7 @@ try:
 
     init_db(DB_PATH)
 except Exception as _init_err:
-    import logging as _logging
-
-    _logging.getLogger(__name__).warning("DB schema init warning: %s", _init_err)
+    LOGGER.warning("db.init_warning", error=str(_init_err))
 
 # Initialize RBAC tables
 init_rbac_tables()

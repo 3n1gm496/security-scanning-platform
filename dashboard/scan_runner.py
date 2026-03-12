@@ -7,15 +7,15 @@ Extracted from app.py to allow independent unit testing and cleaner imports.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import subprocess
 import uuid
 from datetime import datetime, timezone
 
 from db import get_connection
+from logging_config import get_logger
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 # Resolved at import time so tests can override via env var
 _DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -85,7 +85,7 @@ def run_scan(
     started_at = started_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     insert_running_scan(scan_id, started_at, target_type, name, target)
-    LOGGER.info("Scan starting: id=%s name=%r target=%r type=%s", scan_id, name, target, target_type)
+    LOGGER.info("scan.starting", scan_id=scan_id, name=name, target=target, target_type=target_type)
 
     try:
         env = os.environ.copy()
@@ -117,20 +117,20 @@ def run_scan(
 
         try:
             output_json = json.loads(result.stdout)
-            LOGGER.info("Scan completed: id=%s returncode=%d", scan_id, result.returncode)
+            LOGGER.info("scan.completed", scan_id=scan_id, returncode=result.returncode)
             return {"status": "completed", "scan_id": scan_id, "output": output_json, "returncode": result.returncode}
         except json.JSONDecodeError:
             msg = "Failed to parse orchestrator output"
-            LOGGER.error("Scan %s: %s (returncode=%d)", scan_id, msg, result.returncode)
+            LOGGER.error("scan.output_parse_error", scan_id=scan_id, returncode=result.returncode)
             update_scan_failed(scan_id, msg)
             return {"status": "error", "scan_id": scan_id, "message": msg, "returncode": result.returncode}
 
     except subprocess.TimeoutExpired:
         msg = "Scan timed out after 30 minutes"
-        LOGGER.error("Scan %s timed out: name=%r", scan_id, name)
+        LOGGER.error("scan.timeout", scan_id=scan_id, name=name)
         update_scan_failed(scan_id, msg)
         return {"status": "error", "scan_id": scan_id, "message": msg}
     except Exception as e:
-        LOGGER.exception("Scan %s unexpected error: %s", scan_id, e)
+        LOGGER.exception("scan.unexpected_error", scan_id=scan_id, error=str(e))
         update_scan_failed(scan_id, str(e))
         return {"status": "error", "scan_id": scan_id, "message": str(e)}

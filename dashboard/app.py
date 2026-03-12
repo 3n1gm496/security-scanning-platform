@@ -10,9 +10,11 @@ import io
 import subprocess
 import json
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from threading import Lock
 
 from logging_config import configure_logging, get_logger
 
@@ -20,7 +22,7 @@ configure_logging()
 LOGGER = get_logger(__name__)
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -102,6 +104,29 @@ from pagination import FindingsPaginator, ScansPaginator
 from charting import ChartingEngine
 from notifications import EmailNotificationEngine, NotificationPreferencesManager
 from metrics import get_metrics
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TTL cache for analytics queries — avoids re-querying on every dashboard load
+# ──────────────────────────────────────────────────────────────────────────────
+
+_ttl_cache: dict[str, tuple[float, object]] = {}
+_ttl_lock = Lock()
+ANALYTICS_CACHE_TTL = int(os.getenv("ANALYTICS_CACHE_TTL_SECONDS", "60"))
+
+
+def _cached(key: str, fn, ttl: int = ANALYTICS_CACHE_TTL):
+    """Return cached result or call fn() and store for ttl seconds."""
+    now = time.monotonic()
+    with _ttl_lock:
+        if key in _ttl_cache:
+            expires, value = _ttl_cache[key]
+            if now < expires:
+                return value
+    result = fn()
+    with _ttl_lock:
+        _ttl_cache[key] = (now + ttl, result)
+    return result
+
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -625,7 +650,7 @@ def toggle_webhook_endpoint(
 @app.get("/api/export/findings", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def export_findings_endpoint(
     format: str = Query(..., pattern="^(json|csv|sarif|html|pdf)$"),
-    limit: int = Query(1000, ge=1, le=10000),
+    limit: int = Query(1000, ge=1, le=50000),
     severity: str | None = None,
     tool: str | None = None,
     target: str | None = None,
@@ -652,25 +677,65 @@ def export_findings_endpoint(
                 break
 
     # Export based on format
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     if format == "json":
         content = export_to_json(findings)
         media_type = "application/json"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+        filename = f"findings_{ts}.json"
 
     elif format == "csv":
+        # Stream CSV in batches for large exports to limit memory usage
+        if total > 1000:
+            filename = f"findings_{ts}.csv"
+            batch_size = 1000
+
+            def _csv_stream():
+                header_written = False
+                for offset in range(0, limit, batch_size):
+                    batch = list_findings(
+                        DB_PATH, limit=min(batch_size, limit - offset),
+                        severity=severity, tool=tool, target=target,
+                        scan_id=scan_id, offset=offset,
+                    )
+                    if not batch:
+                        break
+                    if not header_written:
+                        all_fields = sorted({k for row in batch for k in row})
+                        buf = io.StringIO()
+                        w = csv.DictWriter(buf, fieldnames=all_fields)
+                        w.writeheader()
+                        yield buf.getvalue()
+                        header_written = True
+                    else:
+                        all_fields = sorted({k for row in batch for k in row})
+                    buf = io.StringIO()
+                    w = csv.DictWriter(buf, fieldnames=all_fields)
+                    for row in batch:
+                        w.writerow(row)
+                    yield buf.getvalue()
+
+            return StreamingResponse(
+                _csv_stream(),
+                media_type="text/csv",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "X-Total-Count": str(total),
+                },
+            )
+
         content = export_to_csv(findings)
         media_type = "text/csv"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"findings_{ts}.csv"
 
     elif format == "sarif":
         content = export_to_sarif(findings)
         media_type = "application/json"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.sarif"
+        filename = f"findings_{ts}.sarif"
 
     elif format == "html":
         content = export_to_html(findings, scan_info)
         media_type = "text/html"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"
+        filename = f"findings_{ts}.html"
 
     elif format == "pdf":
         # Gather analytics data if requested
@@ -683,7 +748,7 @@ def export_findings_endpoint(
 
         content = export_to_pdf(findings, scan_info, analytics_data)
         media_type = "application/pdf"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"findings_{ts}.pdf"
 
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid format")
@@ -704,31 +769,31 @@ def export_findings_endpoint(
 @app.get("/api/analytics/risk-distribution", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_risk_distribution(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get risk score distribution across all findings."""
-    return get_risk_distribution(DB_PATH)
+    return _cached("risk_distribution", lambda: get_risk_distribution(DB_PATH))
 
 
 @app.get("/api/analytics/compliance", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_compliance(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get OWASP Top 10 and CWE compliance mapping."""
-    return get_compliance_summary(DB_PATH)
+    return _cached("compliance", lambda: get_compliance_summary(DB_PATH))
 
 
 @app.get("/api/analytics/trends", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_trends(days: int = Query(90, ge=7, le=365), auth: AuthContext = Depends(require_auth)) -> dict:
     """Get detailed trend analysis with risk scoring over time."""
-    return get_trend_analysis(DB_PATH, days=days)
+    return _cached(f"trends_{days}", lambda: get_trend_analysis(DB_PATH, days=days))
 
 
 @app.get("/api/analytics/target-risk", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_target_risk(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """Get targets ranked by aggregated risk score."""
-    return get_target_risk_ranking(DB_PATH)
+    return _cached("target_risk", lambda: get_target_risk_ranking(DB_PATH))
 
 
 @app.get("/api/analytics/tool-effectiveness", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_tool_effectiveness(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """Analyze tool effectiveness by findings and risk detection."""
-    return get_tool_effectiveness(DB_PATH)
+    return _cached("tool_effectiveness", lambda: get_tool_effectiveness(DB_PATH))
 
 
 @app.get(
@@ -869,6 +934,19 @@ def api_get_finding_state(finding_id: int, auth: AuthContext = Depends(require_a
     if not state:
         return {"finding_id": finding_id, "status": "new", "assigned_to": None}
     return state
+
+
+@app.get("/api/findings/status-counts")
+def api_findings_status_counts(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Return finding counts grouped by triage status in a single query."""
+    with get_connection(DB_PATH) as conn:
+        rows = conn.execute("""
+            SELECT COALESCE(fs.status, 'new') AS status, COUNT(*) AS count
+            FROM findings f
+            LEFT JOIN finding_states fs ON fs.finding_id = f.id
+            GROUP BY COALESCE(fs.status, 'new')
+        """).fetchall()
+    return {row["status"]: row["count"] for row in rows}
 
 
 @app.patch(

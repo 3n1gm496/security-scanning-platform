@@ -186,3 +186,56 @@ def test_index_html_not_served(auth_client):
     assert resp.status_code == 200
     # Ensure it's the Vue SPA, not the old index.html
     assert "vue" in resp.text.lower() or "app" in resp.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: status-counts endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_status_counts_endpoint(auth_client):
+    """GET /api/findings/status-counts returns a dict of status -> count."""
+    resp = auth_client.get("/api/findings/status-counts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    # With 12 findings and no triage, all should be 'new'
+    assert data.get("new", 0) == 12
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: TTL cache
+# ---------------------------------------------------------------------------
+
+
+def test_ttl_cache_returns_cached_value():
+    """_cached should return same result within TTL window."""
+    from app import _cached, _ttl_cache
+
+    call_count = 0
+
+    def expensive():
+        nonlocal call_count
+        call_count += 1
+        return {"result": call_count}
+
+    # Clear any previous cache entry
+    _ttl_cache.pop("test_ttl", None)
+
+    r1 = _cached("test_ttl", expensive, ttl=60)
+    r2 = _cached("test_ttl", expensive, ttl=60)
+    assert r1 == r2
+    assert call_count == 1  # Only called once
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: streaming CSV export (large limit)
+# ---------------------------------------------------------------------------
+
+
+def test_export_csv_small(auth_client):
+    """Small CSV export returns standard Response with X-Exported-Count."""
+    resp = auth_client.get("/api/export/findings?format=csv&limit=100")
+    assert resp.status_code == 200
+    assert resp.headers.get("content-type", "").startswith("text/csv")
+    assert "X-Exported-Count" in resp.headers

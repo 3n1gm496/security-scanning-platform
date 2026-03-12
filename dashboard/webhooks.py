@@ -24,6 +24,7 @@ from db_adapter import is_postgres
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 WEBHOOK_RETRY_COUNT = int(os.getenv("WEBHOOK_RETRY_COUNT", "3"))
+WEBHOOK_CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("WEBHOOK_CIRCUIT_BREAKER_THRESHOLD", "5"))
 
 # ---------------------------------------------------------------------------
 # SSRF protection — blocked IP ranges
@@ -99,9 +100,16 @@ def init_webhook_tables():
                 created_at TEXT NOT NULL,
                 last_triggered_at TEXT,
                 success_count INTEGER DEFAULT 0,
-                failure_count INTEGER DEFAULT 0
+                failure_count INTEGER DEFAULT 0,
+                consecutive_failures INTEGER DEFAULT 0
             )
         """)
+
+        # Migrate: add column if missing (safe for SQLite)
+        try:
+            conn.execute("SELECT consecutive_failures FROM webhooks LIMIT 0")
+        except Exception:
+            conn.execute("ALTER TABLE webhooks ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS webhook_deliveries (
@@ -146,7 +154,7 @@ def list_webhooks() -> list[dict]:
     with get_connection(DASHBOARD_DB_PATH) as conn:
         rows = conn.execute("""
             SELECT id, name, url, events, is_active, created_at, last_triggered_at,
-                   success_count, failure_count
+                   success_count, failure_count, consecutive_failures
             FROM webhooks
             ORDER BY created_at DESC
         """).fetchall()
@@ -284,23 +292,41 @@ def _log_delivery(
 
 
 def _update_webhook_stats(webhook_id: int, success: bool):
-    """Update webhook statistics."""
+    """Update webhook statistics and trip circuit breaker on repeated failures."""
+    now = datetime.now(timezone.utc).isoformat()
     with get_connection(DASHBOARD_DB_PATH) as conn:
         if success:
             conn.execute(
                 """
                 UPDATE webhooks
                 SET success_count = success_count + 1,
+                    consecutive_failures = 0,
                     last_triggered_at = ?
                 WHERE id = ?
                 """,
-                (datetime.now(timezone.utc).isoformat(), webhook_id),
+                (now, webhook_id),
             )
         else:
             conn.execute(
-                "UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = ?",
+                """
+                UPDATE webhooks
+                SET failure_count = failure_count + 1,
+                    consecutive_failures = consecutive_failures + 1
+                WHERE id = ?
+                """,
                 (webhook_id,),
             )
+            # Circuit breaker: auto-disable after N consecutive failures
+            row = conn.execute(
+                "SELECT consecutive_failures FROM webhooks WHERE id = ?", (webhook_id,)
+            ).fetchone()
+            if row and row["consecutive_failures"] >= WEBHOOK_CIRCUIT_BREAKER_THRESHOLD:
+                conn.execute("UPDATE webhooks SET is_active = 0 WHERE id = ?", (webhook_id,))
+                logger.warning(
+                    "webhook.circuit_breaker_tripped",
+                    webhook_id=webhook_id,
+                    consecutive_failures=row["consecutive_failures"],
+                )
 
 
 async def notify_scan_completed(scan_id: int, scan_data: dict):

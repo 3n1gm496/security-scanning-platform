@@ -288,3 +288,46 @@ class TestValidateWebhookUrl:
                 url="http://10.0.0.1/internal",
                 events=[WebhookEvent.SCAN_COMPLETED],
             )
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker tests (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class TestWebhookCircuitBreaker:
+    """Webhook circuit breaker should auto-disable after consecutive failures."""
+
+    def test_circuit_breaker_trips_after_threshold(self, db_setup):
+        """Webhook is auto-disabled after WEBHOOK_CIRCUIT_BREAKER_THRESHOLD failures."""
+        from webhooks import _update_webhook_stats, WEBHOOK_CIRCUIT_BREAKER_THRESHOLD
+
+        wid = create_webhook(
+            name="CB Test", url="https://example.com/hook",
+            events=[WebhookEvent.SCAN_COMPLETED],
+        )
+
+        # Simulate consecutive failures up to threshold
+        for _ in range(WEBHOOK_CIRCUIT_BREAKER_THRESHOLD):
+            _update_webhook_stats(wid, success=False)
+
+        webhook = list_webhooks()[0]
+        assert webhook["is_active"] == 0  # auto-disabled
+        assert webhook["consecutive_failures"] >= WEBHOOK_CIRCUIT_BREAKER_THRESHOLD
+
+    def test_success_resets_consecutive_failures(self, db_setup):
+        """A successful delivery resets the consecutive_failures counter."""
+        from webhooks import _update_webhook_stats
+
+        wid = create_webhook(
+            name="Reset Test", url="https://example.com/hook",
+            events=[WebhookEvent.SCAN_COMPLETED],
+        )
+
+        _update_webhook_stats(wid, success=False)
+        _update_webhook_stats(wid, success=False)
+        _update_webhook_stats(wid, success=True)
+
+        webhook = list_webhooks()[0]
+        assert webhook["consecutive_failures"] == 0
+        assert webhook["is_active"] == 1

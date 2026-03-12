@@ -42,7 +42,7 @@ def insert_running_scan(scan_id: str, started_at: str, target_type: str, name: s
                 (scan_id, started_at, started_at, target_type, name, target),
             )
     except Exception:
-        pass  # Non-fatal: the actual scan still runs
+        LOGGER.warning("insert_running_scan failed for %s", scan_id, exc_info=True)
 
 
 def update_scan_failed(scan_id: str, error_message: str) -> None:
@@ -55,7 +55,7 @@ def update_scan_failed(scan_id: str, error_message: str) -> None:
                 (now, error_message, scan_id),
             )
     except Exception:
-        pass  # Non-fatal
+        LOGGER.warning("update_scan_failed failed for %s", scan_id, exc_info=True)
 
 
 def run_scan(

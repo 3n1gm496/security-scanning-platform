@@ -913,9 +913,7 @@ def trigger_scan(
 
     # Pre-assign scan ID and start time so we can return them immediately
     # (including in async mode, before the worker thread begins).
-    import uuid as _uuid_mod
-
-    scan_id = str(_uuid_mod.uuid4())
+    scan_id = str(_uuid.uuid4())
     started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     if async_mode:

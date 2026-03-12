@@ -2,6 +2,7 @@
 Finding Management System - Track finding lifecycle and remediation status.
 """
 
+import logging
 import os
 from datetime import datetime, timezone
 from enum import Enum
@@ -9,6 +10,8 @@ from typing import Optional
 
 from db import get_connection
 from db_adapter import is_postgres
+
+logger = logging.getLogger(__name__)
 
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 
@@ -275,6 +278,7 @@ def bulk_update_status(finding_ids: list[int], status: FindingStatus, user: str)
                     )
                 updated_count += 1
             except Exception:
+                logger.warning("Failed to update finding %d status", finding_id, exc_info=True)
                 continue
 
     return {"updated_count": updated_count, "status": status.value, "finding_ids": finding_ids}

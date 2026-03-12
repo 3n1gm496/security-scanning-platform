@@ -11,6 +11,7 @@ Supports:
 
 from __future__ import annotations
 
+import logging
 import os
 import smtplib
 from urllib.parse import quote_plus
@@ -20,6 +21,8 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Any
 from hashlib import sha256
+
+logger = logging.getLogger(__name__)
 
 
 class EmailNotificationEngine:
@@ -256,7 +259,7 @@ class EmailNotificationEngine:
 
             return True
         except Exception as e:
-            print(f"Failed to send email to {to_email}: {e}")
+            logger.error("Failed to send email to %s: %s", to_email, e)
             return False
 
 
@@ -303,14 +306,13 @@ class NotificationPreferencesManager:
             conn.commit()
             return True
         except Exception as e:
-            print(f"Failed to save preferences: {e}")
+            logger.error("Failed to save preferences: %s", e)
             return False
 
     @staticmethod
     def get_preferences(conn: Any, user_email: str) -> dict[str, Any] | None:
         """Get notification preferences for a user."""
         try:
-            pass  # row_factory handled by db_adapter
             row = conn.execute(
                 "SELECT * FROM notification_preferences WHERE user_email = ?",
                 (user_email,),
@@ -329,7 +331,6 @@ class NotificationPreferencesManager:
     ) -> list[str]:
         """Get all email subscribers for a specific alert type."""
         try:
-            pass  # row_factory handled by db_adapter
             allowed_alert_types = {
                 "critical_alerts": "critical_alerts",
                 "high_alerts": "high_alerts",

@@ -10,9 +10,8 @@ import csv
 import io
 import subprocess
 import json
-from collections import defaultdict, deque
+from collections import defaultdict
 from pathlib import Path
-from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -41,6 +40,15 @@ from db import (
     get_connection,
 )
 from monitoring import router as monitoring_router
+from rate_limit import (
+    is_rate_limited,
+    start_cleanup_timer,
+    RATE_LIMIT_REQUESTS,
+    RATE_LIMIT_WINDOW_SECONDS,
+    LOGIN_RATE_LIMIT_REQUESTS,
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+)
+from scan_runner import run_scan, insert_running_scan, update_scan_failed
 from rbac import (
     Role,
     Permission,
@@ -126,11 +134,6 @@ def _verify_password(plain: str, stored: str) -> bool:
     return secrets.compare_digest(plain, stored)
 
 
-RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_RATE_LIMIT_REQUESTS", "180"))
-RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_RATE_LIMIT_WINDOW_SECONDS", "60"))
-# Stricter limits for the login endpoint to prevent brute-force attacks
-LOGIN_RATE_LIMIT_REQUESTS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_REQUESTS", "10"))
-LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("DASHBOARD_LOGIN_RATE_LIMIT_WINDOW_SECONDS", "60"))
 # Maximum number of concurrent background scans. Prevents unbounded thread growth
 # when async_mode=True is used repeatedly. Configurable via env var.
 MAX_SCAN_WORKERS = int(os.getenv("DASHBOARD_MAX_SCAN_WORKERS", "4"))
@@ -175,31 +178,8 @@ app.include_router(monitoring_router, prefix="/api")
 
 _RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics", "/api/metrics/json", "/metrics"}
 
-# In-process sliding-window rate limiter.
-# _rate_buckets maps (scope, client_id) -> deque of monotonic timestamps.
-# A periodic cleanup timer evicts stale entries to prevent unbounded memory growth.
-_rate_buckets: dict[tuple[str, str], deque] = {}
-_rate_lock = Lock()
-_CLEANUP_INTERVAL_SECONDS = 300  # run cleanup every 5 minutes
-
-
-def _evict_stale_buckets() -> None:
-    """Remove bucket entries whose last timestamp is older than the longest window."""
-    cutoff = time.monotonic() - max(RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_WINDOW_SECONDS)
-    with _rate_lock:
-        stale = [k for k, dq in _rate_buckets.items() if not dq or dq[-1] < cutoff]
-        for k in stale:
-            del _rate_buckets[k]
-    # Reschedule
-    t = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
-    t.daemon = True
-    t.start()
-
-
-# Start the first cleanup cycle
-_cleanup_timer = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
-_cleanup_timer.daemon = True
-_cleanup_timer.start()
+# Start the background rate-bucket eviction timer (defined in rate_limit.py)
+start_cleanup_timer()
 
 notification_engine = EmailNotificationEngine()
 
@@ -217,22 +197,6 @@ def _client_key(request: Request) -> str:
     return "unknown"
 
 
-def _is_rate_limited(scope: str, client_id: str, limit: int, window: int, now: float) -> bool:
-    """Sliding-window rate limiter. Returns True if the request should be blocked."""
-    key = (scope, client_id)
-    with _rate_lock:
-        if key not in _rate_buckets:
-            _rate_buckets[key] = deque()
-        bucket = _rate_buckets[key]
-        threshold = now - window
-        while bucket and bucket[0] < threshold:
-            bucket.popleft()
-        if len(bucket) >= limit:
-            return True
-        bucket.append(now)
-    return False
-
-
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     now = time.monotonic()
@@ -241,7 +205,7 @@ async def security_middleware(request: Request, call_next):
 
     # Brute-force protection on the login endpoint
     if path == "/login" and request.method == "POST":
-        if _is_rate_limited("login", client_id, LOGIN_RATE_LIMIT_REQUESTS, LOGIN_RATE_LIMIT_WINDOW_SECONDS, now):
+        if is_rate_limited("login", client_id, LOGIN_RATE_LIMIT_REQUESTS, LOGIN_RATE_LIMIT_WINDOW_SECONDS, now):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many login attempts. Please wait before retrying."},
@@ -250,7 +214,7 @@ async def security_middleware(request: Request, call_next):
 
     # General API rate limiting
     if path.startswith("/api") and path not in _RATE_LIMIT_EXCLUDED_PATHS:
-        if _is_rate_limited("api", client_id, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, now):
+        if is_rate_limited("api", client_id, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, now):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Retry later."},
@@ -503,7 +467,7 @@ def api_scans(
 
 @app.get("/api/findings")
 def api_findings(
-    limit: int = 500,
+    limit: int = Query(500, ge=1, le=5000),
     severity: str | None = None,
     tool: str | None = None,
     target: str | None = None,
@@ -867,106 +831,7 @@ def get_remediation_guidance(finding_id: int, auth: AuthContext = Depends(requir
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _insert_running_scan(scan_id: str, started_at: str, target_type: str, name: str, target: str) -> None:
-    """Pre-insert a RUNNING placeholder row so the scan shows up immediately in the list."""
-    try:
-        with get_connection(DB_PATH) as conn:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO scans (
-                    id, created_at, finished_at, target_type, target_name, target_value,
-                    status, policy_status, findings_count, critical_count, high_count,
-                    medium_count, low_count, info_count, unknown_count,
-                    raw_report_dir, normalized_report_path, artifacts_json, tools_json
-                ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', 'PENDING', 0, 0, 0, 0, 0, 0, 0, '', '', '{}', '[]')
-                """,
-                (scan_id, started_at, started_at, target_type, name, target),
-            )
-    except Exception:
-        pass  # Non-fatal: the actual scan still runs
-
-
-def _update_scan_failed(scan_id: str, error_message: str) -> None:
-    """Update a RUNNING scan to FAILED when the subprocess exits abnormally."""
-    try:
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        with get_connection(DB_PATH) as conn:
-            conn.execute(
-                "UPDATE scans SET status='FAILED', finished_at=?, error_message=? WHERE id=? AND status='RUNNING'",
-                (now, error_message, scan_id),
-            )
-    except Exception:
-        pass  # Non-fatal
-
-
-def run_scan_async(
-    target_type: str,
-    target: str,
-    name: str,
-    root_dir: str,
-    scan_id: str | None = None,
-    started_at: str | None = None,
-) -> dict:
-    """Execute orchestrator scan and save results to database."""
-    scan_id = scan_id or str(_uuid.uuid4())
-    started_at = started_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-    # Pre-insert a RUNNING placeholder so the scan appears in the list immediately.
-    _insert_running_scan(scan_id, started_at, target_type, name, target)
-    LOGGER.info("Scan starting: id=%s name=%r target=%r type=%s", scan_id, name, target, target_type)
-
-    try:
-        env = os.environ.copy()
-        env["PYTHONPATH"] = f"{root_dir}:{env.get('PYTHONPATH', '')}"
-        env["ORCH_DB_PATH"] = f"{root_dir}/data/security_scans.db"
-        env["REPORTS_DIR"] = f"{root_dir}/data/reports"
-        env["WORKSPACE_DIR"] = f"{root_dir}/data/workspaces"
-        env["ORCH_CACHE_DIR"] = f"{root_dir}/data/cache"
-        env["DASHBOARD_DB_PATH"] = f"{root_dir}/data/security_scans.db"
-
-        # Propagate log level so orchestrator uses the same verbosity.
-        log_level = os.getenv("LOG_LEVEL", "INFO")
-
-        # Build orchestrator command
-        cmd = [
-            "python3",
-            "-m",
-            "orchestrator.main",
-            "--target-type", target_type,
-            "--target", target,
-            "--target-name", name,
-            "--settings", f"{root_dir}/config/settings.yaml",
-            "--scan-id", scan_id,
-            "--log-level", log_level,
-        ]
-
-        # stdout=PIPE captures the JSON result; stderr=None lets orchestrator logs
-        # flow to the dashboard process stderr, making them visible in Docker logs
-        # (docker compose logs -f dashboard) in real time.
-        result = subprocess.run(
-            cmd, cwd=root_dir, stdout=subprocess.PIPE, stderr=None,
-            text=True, env=env, timeout=1800,
-        )
-
-        # Parse JSON output
-        try:
-            output_json = json.loads(result.stdout)
-            LOGGER.info("Scan completed: id=%s returncode=%d", scan_id, result.returncode)
-            return {"status": "completed", "output": output_json, "returncode": result.returncode}
-        except json.JSONDecodeError:
-            msg = "Failed to parse orchestrator output"
-            LOGGER.error("Scan %s: %s (returncode=%d)", scan_id, msg, result.returncode)
-            _update_scan_failed(scan_id, msg)
-            return {"status": "error", "message": msg, "returncode": result.returncode}
-    except subprocess.TimeoutExpired:
-        msg = "Scan timed out after 30 minutes"
-        LOGGER.error("Scan %s timed out: name=%r", scan_id, name)
-        _update_scan_failed(scan_id, msg)
-        return {"status": "error", "message": msg}
-    except Exception as e:
-        LOGGER.exception("Scan %s unexpected error: %s", scan_id, e)
-        _update_scan_failed(scan_id, str(e))
-        return {"status": "error", "message": str(e)}
+# run_scan, insert_running_scan, update_scan_failed are imported from scan_runner
 
 
 @app.post("/api/scan/trigger", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
@@ -1020,18 +885,19 @@ def trigger_scan(
 
     # Pre-assign scan ID and start time so we can return them immediately
     # (including in async mode, before the worker thread begins).
-    scan_id = str(_uuid.uuid4())
+    import uuid as _uuid_mod
+    scan_id = str(_uuid_mod.uuid4())
     started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     if async_mode:
         # Submit to bounded thread pool to prevent unbounded thread growth.
         # If the pool is at capacity, submit() still queues the task internally
         # (ThreadPoolExecutor uses an unbounded internal queue by default).
-        _scan_executor.submit(run_scan_async, target_type, target, name, str(root_dir), scan_id, started_at)
+        _scan_executor.submit(run_scan, target_type, target, name, str(root_dir), scan_id, started_at)
         return {"status": "queued", "scan_id": scan_id, "message": "Scan queued and running in background", "target_name": name}
     else:
         # Wait for scan to complete
-        return run_scan_async(target_type, target, name, str(root_dir), scan_id, started_at)
+        return run_scan(target_type, target, name, str(root_dir), scan_id, started_at)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1164,7 +1030,7 @@ def api_bulk_update_status(
 
 
 @app.get("/api/badge/{target_name}.svg")
-def generate_badge(target_name: str) -> Response:
+def generate_badge(target_name: str, auth: AuthContext = Depends(require_auth)) -> Response:
     """Generate SVG badge for scan status."""
     # Get latest scan for target
     with get_connection(DB_PATH) as conn:
@@ -1522,6 +1388,31 @@ def get_notification_preferences(auth: AuthContext = Depends(require_auth)) -> d
     with get_connection(DB_PATH) as conn:
         prefs = NotificationPreferencesManager.get_preferences(conn, user_identifier)
     return {"preferences": prefs or {}}
+
+
+@app.get("/api/audit", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
+def get_audit_log(
+    limit: int = Query(100, ge=1, le=1000),
+    action: str | None = Query(None),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Return recent audit log entries (admin only).
+
+    Query parameters:
+    - limit: Number of entries to return (1-1000, default 100)
+    - action: Filter by action type (e.g. api_key.create, webhook.delete)
+    """
+    query = "SELECT * FROM audit_log"
+    params: list = []
+    if action:
+        query += " WHERE action = ?"
+        params.append(action)
+    query += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+
+    with get_connection(DB_PATH) as conn:
+        rows = conn.execute(query, params).fetchall()
+    return {"items": [dict(r) for r in rows], "count": len(rows)}
 
 
 @app.get("/api/users", dependencies=[Depends(require_auth)])

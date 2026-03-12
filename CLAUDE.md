@@ -5,6 +5,23 @@ You are already inside this repository and you have already been working on it i
 Do NOT restart blindly from zero.
 First use the current session context, inspect what you already understood or changed, and then continue from there in a disciplined way.
 
+## SESSION STARTUP PROTOCOL — run every time before doing anything else
+
+```bash
+git fetch origin main
+git reset --soft origin/main   # align branch to latest main, keep local changes staged
+# OR if branch is clean: git reset --hard origin/main
+```
+
+This eliminates recurring merge conflicts. The branch must always be at most 1 clean
+commit ahead of main. Never let rebase replay 20+ commits — reset-soft + single commit instead.
+
+Also always run before committing:
+```bash
+black dashboard/
+python -m pytest -x -q
+```
+
 ## CURRENT STATE (as of 2026-03-12) — do not redo this work
 
 All phases have been executed and committed to `claude/security-platform-review-MqdAz`.

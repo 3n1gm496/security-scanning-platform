@@ -1109,7 +1109,7 @@ createApp({
     },
 
     async revokeApiKey(prefix) {
-      if (!confirm(`Revocare la chiave ${prefix}?`)) return;
+      if (!confirm(`Revoke key ${prefix}?`)) return;
       try {
         await apiFetch(`/api/keys/${prefix}`, { method: 'DELETE' });
         await this.loadApiKeys();
@@ -1156,7 +1156,7 @@ createApp({
     },
 
     async deleteWebhook(id) {
-      if (!confirm('Eliminare questo webhook?')) return;
+      if (!confirm('Delete this webhook?')) return;
       try {
         await apiFetch(`/api/webhooks/${id}`, { method: 'DELETE' });
         await this.loadWebhooks();

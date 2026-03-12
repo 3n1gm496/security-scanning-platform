@@ -547,7 +547,7 @@
           <!-- Pagination -->
           <div class="pagination-bar">
             <button class="btn-secondary btn-sm" @click="prevFindingsPage" :disabled="findingsPage <= 1">&#x2190; Previous</button>
-            <span class="page-info">Page {{ findingsPage }} &bull; {{ findings.length }} risultati</span>
+            <span class="page-info">Page {{ findingsPage }} &bull; {{ findings.length }} results</span>
             <button class="btn-secondary btn-sm" @click="nextFindingsPage" :disabled="!findingsCursor">Next &#x2192;</button>
           </div>
         </div>
@@ -663,7 +663,7 @@
             <div class="compare-selector-group">
               <label class="filter-label">Scan A (baseline)</label>
               <select v-model="compareIdA" class="filter-select">
-                <option value="">Seleziona...</option>
+                <option value="">Select...</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
                   #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
                 </option>
@@ -673,7 +673,7 @@
             <div class="compare-selector-group">
               <label class="filter-label">Scan B (comparison)</label>
               <select v-model="compareIdB" class="filter-select">
-                <option value="">Seleziona...</option>
+                <option value="">Select...</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
                   #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
                 </option>
@@ -782,7 +782,7 @@
                   <td><span class="badge" :class="key.role === 'admin' ? 'badge-danger' : key.role === 'operator' ? 'badge-warning' : 'badge-neutral'">{{ key.role }}</span></td>
                   <td>{{ key.created_by || '—' }}</td>
                   <td class="cell-nowrap">{{ formatDate(key.created_at) }}</td>
-                  <td class="cell-nowrap">{{ key.expires_at ? formatDate(key.expires_at) : 'Mai' }}</td>
+                  <td class="cell-nowrap">{{ key.expires_at ? formatDate(key.expires_at) : 'Never' }}</td>
                   <td>
                     <button class="btn-danger btn-sm" @click="revokeApiKey(key.prefix)">Revoke</button>
                   </td>
@@ -920,7 +920,7 @@
                     <span class="detail-val"><code>{{ selectedFinding.scan_id }}</code></span>
                   </div>
                   <div class="detail-row">
-                    <span class="detail-key">Data</span>
+                    <span class="detail-key">Date</span>
                     <span class="detail-val">{{ formatDate(selectedFinding.timestamp) }}</span>
                   </div>
                 </div>
@@ -1064,7 +1064,7 @@
                 <div class="detail-row"><span class="detail-key">Total Findings</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
                 <div class="detail-row"><span class="detail-key">Critical</span><span class="detail-val"><span class="sev-pill sev-critical" v-if="selectedScan.critical_count > 0">{{ selectedScan.critical_count }}</span><span v-else>0</span></span></div>
                 <div class="detail-row"><span class="detail-key">High</span><span class="detail-val"><span class="sev-pill sev-high" v-if="selectedScan.high_count > 0">{{ selectedScan.high_count }}</span><span v-else>0</span></span></div>
-                <div class="detail-row"><span class="detail-key">Data</span><span class="detail-val">{{ formatDate(selectedScan.created_at) }}</span></div>
+                <div class="detail-row"><span class="detail-key">Date</span><span class="detail-val">{{ formatDate(selectedScan.created_at) }}</span></div>
               </div>
             </div>
             <div class="detail-col">

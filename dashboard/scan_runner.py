@@ -26,7 +26,9 @@ def _db_path() -> str:
     return os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 
 
-def insert_running_scan(scan_id: str, started_at: str, target_type: str, name: str, target: str) -> None:
+def insert_running_scan(
+    scan_id: str, started_at: str, target_type: str, name: str, target: str
+) -> None:
     """Pre-insert a RUNNING placeholder row so the scan shows up in the list immediately."""
     try:
         with get_connection(_db_path()) as conn:
@@ -97,33 +99,20 @@ def run_scan(
         log_level = os.getenv("LOG_LEVEL", "INFO")
 
         cmd = [
-            "python3",
-            "-m",
-            "orchestrator.main",
-            "--target-type",
-            target_type,
-            "--target",
-            target,
-            "--target-name",
-            name,
-            "--settings",
-            f"{root_dir}/config/settings.yaml",
-            "--scan-id",
-            scan_id,
-            "--log-level",
-            log_level,
+            "python3", "-m", "orchestrator.main",
+            "--target-type", target_type,
+            "--target", target,
+            "--target-name", name,
+            "--settings", f"{root_dir}/config/settings.yaml",
+            "--scan-id", scan_id,
+            "--log-level", log_level,
         ]
 
         # stdout=PIPE captures the JSON result; stderr=None lets orchestrator logs
         # flow to the dashboard process stderr (visible via docker compose logs -f).
         result = subprocess.run(
-            cmd,
-            cwd=root_dir,
-            stdout=subprocess.PIPE,
-            stderr=None,
-            text=True,
-            env=env,
-            timeout=1800,
+            cmd, cwd=root_dir, stdout=subprocess.PIPE, stderr=None,
+            text=True, env=env, timeout=1800,
         )
 
         try:

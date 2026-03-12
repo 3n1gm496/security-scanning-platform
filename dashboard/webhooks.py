@@ -229,6 +229,9 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
                     return True, None
                 else:
                     error_msg = f"HTTP {response_status}: {response_body}"
+                    # 4xx client errors will not succeed on retry — break immediately
+                    if response_status is not None and 400 <= response_status < 500:
+                        break
 
             except Exception as e:
                 error_msg = str(e)

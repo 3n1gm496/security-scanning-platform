@@ -398,7 +398,7 @@ def _run_migrations(db_path: str) -> None:
 
 
 def init_db(db_path: str):
-    """Inizializza lo schema del database se non esiste."""
+    """Initialise the database schema if it does not exist."""
     with _conn(db_path) as conn:
         conn.executescript(SCHEMA_SQL)
     _run_migrations(db_path)

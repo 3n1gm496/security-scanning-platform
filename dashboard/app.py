@@ -151,10 +151,10 @@ app.add_middleware(
     same_site="lax",
 )
 
-# ── Inizializzazione del database principale (scans + findings) ──────────────
-# Il dashboard può avviarsi prima che l'orchestratore abbia mai scritto sul DB.
-# Questo blocco garantisce che le tabelle esistano, evitando OperationalError
-# su un database vuoto (es. primo avvio, ambiente di sviluppo, CI).
+# ── Database initialisation (scans + findings) ───────────────────────────────
+# The dashboard may start before the orchestrator has ever written to the DB.
+# This block ensures the tables exist, preventing OperationalError on an empty
+# database (e.g. first boot, dev environment, CI).
 try:
     from db import init_db
 
@@ -266,14 +266,14 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 
 
 # ---------------------------------------------------------------------------
-# Autenticazione basata su sessione (login form)
+# Session-based authentication (login form)
 # ---------------------------------------------------------------------------
 
 
 def get_current_user(request: Request) -> str:
-    """Dependency che restituisce l'utente autenticato.
-    - per pagine HTML non-autenticate effettua redirect a /login
-    - per chiamate API restituisce 401
+    """Return the authenticated user.
+    - For unauthenticated HTML pages: redirect to /login.
+    - For API calls: return 401 Unauthorized.
     """
     user = request.session.get("user")
     if not user:
@@ -289,7 +289,7 @@ def get_current_user(request: Request) -> str:
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, error: str | None = None) -> HTMLResponse:
-    """Mostra il form di login. Se già autenticato, reindirizza all'overview."""
+    """Show the login form. If already authenticated, redirect to the overview."""
     if request.session.get("user"):
         return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
     return templates.TemplateResponse(request, "login.html", {"error": error})
@@ -309,10 +309,10 @@ async def login(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "Credenziali non valide"},
+            {"error": "Invalid credentials"},
             status_code=401,
         )
-    # setta la sessione e reindirizza
+    # Set session and redirect to the main page
     request.session["user"] = username
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
 
@@ -767,7 +767,7 @@ def export_findings_endpoint(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid format")
 
     return Response(
-        content=content, media_type=media_type, headers={"Content-Disposition": f"attachment; filename={filename}"}
+        content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 
@@ -1039,14 +1039,14 @@ def api_get_finding_comments(finding_id: int, auth: AuthContext = Depends(requir
 )
 def api_bulk_update_status(
     finding_ids: list[int],
-    status: str,
+    status_value: str = Query(..., alias="status"),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Bulk update status for multiple findings."""
     try:
-        finding_status = FindingStatus(status)
+        finding_status = FindingStatus(status_value)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status_value}")
 
     result = bulk_update_status(finding_ids, finding_status, user=auth.api_key_prefix or "unknown")
     return result

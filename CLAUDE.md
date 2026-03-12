@@ -28,11 +28,28 @@ Do not re-audit or re-implement the items listed below.
 - app.html: lang="en", Chart.js onerror fallback added
 - app.js: Chart.js availability guard, remaining Italian toast fixed
 
-### All 228 tests passing as of last verified run
+### Full bug-elimination pass (2026-03-12) — do not redo
+- P0 fixed: `api_bulk_update_status` parameter `status: str` shadowed the imported
+  `starlette.status` module → `AttributeError` on invalid input. Renamed to `status_value`.
+- P1 fixed: Italian login error `"Credenziali non valide"` → `"Invalid credentials"`;
+  `test_auth.py` updated to match.
+- P1 fixed: Webhook delivery loop now breaks immediately on 4xx client errors instead of
+  retrying (4xx responses will never succeed on retry).
+- P1 fixed: `Content-Disposition: attachment; filename=` was unquoted in export endpoint
+  → now `filename="..."` per RFC 6266.
+- P2 fixed: `mark_false_positive`, `accept_risk`, `bulk_update_status` in
+  `finding_management.py` used `INSERT OR REPLACE` which silently discarded existing
+  `assigned_to`, `resolution_notes`, and other columns on the replaced row. Replaced with
+  explicit UPDATE-or-INSERT pattern.
+- P2 fixed: Remaining Italian code comments and docstrings translated in `app.py` and `db.py`.
+
+### 245/245 tests passing as of last verified run
 
 ### Remaining known gaps (low priority)
 - Analytics page table fallback when JS is disabled entirely (noscript)
 - Findings fallback template per_page is capped at 200 server-side
+- Webhook SSRF check validates only literal IP addresses; DNS-rebinding not mitigated
+  (documented in webhooks.py comment; needs per-request DNS pre-resolution for high-security)
 
 ## Repository goal
 Improve the dashboard's visual quality and UX, identify and fix the actual bugs in the project, harden the app where needed, and keep the existing architecture stable and maintainable.

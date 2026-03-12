@@ -165,20 +165,25 @@ def mark_false_positive(finding_id: int, reason: str, user: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
 
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO finding_states
-            (finding_id, status, false_positive_reason, created_at, updated_at)
-            VALUES (
-                ?,
-                'false_positive',
-                ?,
-                COALESCE((SELECT created_at FROM finding_states WHERE finding_id = ?), ?),
-                ?
+        existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE finding_states
+                SET status = 'false_positive', false_positive_reason = ?, updated_at = ?
+                WHERE finding_id = ?
+                """,
+                (reason, now, finding_id),
             )
-            """,
-            (finding_id, reason, finding_id, now, now),
-        )
+        else:
+            conn.execute(
+                """
+                INSERT INTO finding_states
+                (finding_id, status, false_positive_reason, created_at, updated_at)
+                VALUES (?, 'false_positive', ?, ?, ?)
+                """,
+                (finding_id, reason, now, now),
+            )
 
     add_finding_comment(finding_id, user, f"Marked as false positive: {reason}")
 
@@ -190,22 +195,27 @@ def accept_risk(finding_id: int, justification: str, expires_at: str, user: str)
     now = datetime.now(timezone.utc).isoformat()
 
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO finding_states
-            (finding_id, status, risk_acceptance_justification, risk_acceptance_expires_at,
-             created_at, updated_at)
-            VALUES (
-                ?,
-                'risk_accepted',
-                ?,
-                ?,
-                COALESCE((SELECT created_at FROM finding_states WHERE finding_id = ?), ?),
-                ?
+        existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE finding_states
+                SET status = 'risk_accepted', risk_acceptance_justification = ?,
+                    risk_acceptance_expires_at = ?, updated_at = ?
+                WHERE finding_id = ?
+                """,
+                (justification, expires_at, now, finding_id),
             )
-            """,
-            (finding_id, justification, expires_at, finding_id, now, now),
-        )
+        else:
+            conn.execute(
+                """
+                INSERT INTO finding_states
+                (finding_id, status, risk_acceptance_justification, risk_acceptance_expires_at,
+                 created_at, updated_at)
+                VALUES (?, 'risk_accepted', ?, ?, ?, ?)
+                """,
+                (finding_id, justification, expires_at, now, now),
+            )
 
     add_finding_comment(finding_id, user, f"Risk accepted until {expires_at}: {justification}")
 
@@ -252,18 +262,19 @@ def bulk_update_status(finding_ids: list[int], status: FindingStatus, user: str)
     with get_connection(DASHBOARD_DB_PATH) as conn:
         for finding_id in finding_ids:
             try:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO finding_states (finding_id, status, created_at, updated_at)
-                    VALUES (
-                        ?,
-                        ?,
-                        COALESCE((SELECT created_at FROM finding_states WHERE finding_id = ?), ?),
-                        ?
+                existing = conn.execute(
+                    "SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)
+                ).fetchone()
+                if existing:
+                    conn.execute(
+                        "UPDATE finding_states SET status = ?, updated_at = ? WHERE finding_id = ?",
+                        (status.value, now, finding_id),
                     )
-                    """,
-                    (finding_id, status.value, finding_id, now, now),
-                )
+                else:
+                    conn.execute(
+                        "INSERT INTO finding_states (finding_id, status, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                        (finding_id, status.value, now, now),
+                    )
                 updated_count += 1
             except Exception:
                 continue

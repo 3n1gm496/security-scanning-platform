@@ -56,7 +56,7 @@ def test_login_redirects_anonymous(client):
 def test_login_wrong_credentials(client):
     resp = client.post("/login", data={"username": "foo", "password": "bar"})
     assert resp.status_code == 401
-    assert "Credenziali non valide" in resp.text
+    assert "Invalid credentials" in resp.text
 
 
 def test_login_and_access(client):

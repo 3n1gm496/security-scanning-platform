@@ -531,61 +531,28 @@ createApp({
       const canvas = this.$refs.trendChart;
       if (!canvas) return;
       if (this.charts.trend) this.charts.trend.destroy();
-      const trendData = this.trend.slice(-14);
 
-      // Filter out datasets where all values are zero to avoid confusing empty lines
-      const scanValues = trendData.map(t => t.scans || 0);
-      const findingValues = trendData.map(t => t.findings || 0);
-      const hasScans = scanValues.some(v => v > 0);
-      const hasFindings = findingValues.some(v => v > 0);
+      // Use recent scans data to build a stacked bar chart of severity counts.
+      // This is far more useful than the old empty line chart: it shows exactly
+      // how many critical/high/medium/low findings each scan produced.
+      const scans = (this.recentScans || []).slice(0, 12).reverse();
+      if (scans.length === 0) return;
 
-      const datasets = [];
-      if (hasScans) {
-        datasets.push({
-          label: 'Scans',
-          data: scanValues,
-          borderColor: '#4f46e5',
-          backgroundColor: 'rgba(79,70,229,0.08)',
-          tension: 0.3,
-          fill: true,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          yAxisID: 'yScans',
-        });
-      }
-      if (hasFindings) {
-        datasets.push({
-          label: 'Findings',
-          data: findingValues,
-          borderColor: '#ef4444',
-          backgroundColor: 'rgba(239,68,68,0.05)',
-          tension: 0.3,
-          fill: true,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          yAxisID: 'yFindings',
-        });
-      }
-      // Fallback if no data yet
-      if (datasets.length === 0) {
-        datasets.push({
-          label: 'Scans', data: trendData.map(() => 0),
-          borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)',
-          tension: 0.3, fill: true, pointRadius: 3, yAxisID: 'yScans',
-        });
-      }
+      const labels = scans.map(s => {
+        const name = s.target_name || s.id || '?';
+        return name.length > 18 ? name.slice(0, 16) + '…' : name;
+      });
 
       this.charts.trend = new Chart(canvas.getContext('2d'), {
-        type: 'line',
+        type: 'bar',
         data: {
-          labels: trendData.map(t => {
-            // Format day labels as short dates (e.g. "12 Mar")
-            try {
-              const d = new Date(t.day);
-              return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-            } catch { return t.day; }
-          }),
-          datasets,
+          labels,
+          datasets: [
+            { label: 'Critical', data: scans.map(s => s.critical_count || 0), backgroundColor: '#dc2626', borderRadius: 3 },
+            { label: 'High', data: scans.map(s => s.high_count || 0), backgroundColor: '#f97316', borderRadius: 3 },
+            { label: 'Medium', data: scans.map(s => s.medium_count || 0), backgroundColor: '#f59e0b', borderRadius: 3 },
+            { label: 'Low', data: scans.map(s => s.low_count || 0), backgroundColor: '#3b82f6', borderRadius: 3 },
+          ],
         },
         options: {
           responsive: true,
@@ -599,30 +566,25 @@ createApp({
             },
             tooltip: {
               callbacks: {
-                title: (items) => items[0]?.label || '',
+                footer: (items) => {
+                  const total = items.reduce((sum, i) => sum + (i.raw || 0), 0);
+                  return 'Total: ' + total;
+                },
               },
             },
           },
           scales: {
             x: {
+              stacked: true,
               grid: { display: false },
-              ticks: { font: { size: 11 }, maxTicksLimit: 7 },
+              ticks: { font: { size: 11 }, maxRotation: 45 },
             },
-            yScans: {
-              type: 'linear',
-              position: 'left',
+            y: {
+              stacked: true,
               beginAtZero: true,
               grid: { color: this.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
-              ticks: { precision: 0, font: { size: 11 }, color: '#4f46e5' },
-              title: { display: true, text: 'Scans', font: { size: 10 }, color: '#4f46e5' },
-            },
-            yFindings: {
-              type: 'linear',
-              position: 'right',
-              beginAtZero: true,
-              grid: { drawOnChartArea: false },
-              ticks: { precision: 0, font: { size: 11 }, color: '#ef4444' },
-              title: { display: true, text: 'Findings', font: { size: 10 }, color: '#ef4444' },
+              ticks: { precision: 0, font: { size: 11 } },
+              title: { display: true, text: 'Findings', font: { size: 10 } },
             },
           },
         },

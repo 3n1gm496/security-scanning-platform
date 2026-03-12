@@ -82,8 +82,8 @@ createApp({
       scanColumns: [
         { key: 'id', label: 'ID', visible: false },
         { key: 'target_name', label: 'Target', visible: true },
-        { key: 'target_type', label: 'Tipo', visible: true },
-        { key: 'status', label: 'Stato', visible: true },
+        { key: 'target_type', label: 'Type', visible: true },
+        { key: 'status', label: 'Status', visible: true },
         { key: 'policy_status', label: 'Policy', visible: true },
         { key: 'findings_count', label: 'Findings', visible: true },
         { key: 'critical_count', label: 'Critical', visible: true },
@@ -191,22 +191,22 @@ createApp({
     pageTitle() {
       const titles = {
         dashboard: 'Dashboard',
-        scans: 'Scansioni',
+        scans: 'Scans',
         findings: 'Findings',
         analytics: 'Analytics',
-        compare: 'Confronta Scansioni',
+        compare: 'Compare Scans',
         settings: 'Settings',
       };
       return titles[this.currentPage] || '';
     },
     pageSubtitle() {
       const subs = {
-        dashboard: 'Panoramica della postura di sicurezza',
-        scans: 'Storico delle esecuzioni di scansione',
-        findings: 'Vulnerabilità rilevate e gestione del ciclo di vita',
-        analytics: 'Risk scoring, compliance e trend',
-        compare: 'Analisi differenziale tra due scansioni',
-        settings: 'Gestione API keys, webhooks e configurazione',
+        dashboard: 'Security posture overview',
+        scans: 'History of all scan executions',
+        findings: 'Detected vulnerabilities and lifecycle management',
+        analytics: 'Risk scoring, compliance and trends',
+        compare: 'Differential analysis between two scans',
+        settings: 'API keys, webhooks and configuration',
       };
       return subs[this.currentPage] || '';
     },
@@ -257,10 +257,10 @@ createApp({
     };
     document.addEventListener('keydown', this._keyHandler);
 
-    // Carica la lista utenti per il datalist di assegnazione
+    // Load the user list for the assignment datalist
     this.loadAvailableUsers();
 
-    // Se il trend non è stato iniettato dal server, caricalo dall'API
+    // If trend data was not server-injected, fetch it from the API
     if (!this.trend || this.trend.length === 0) {
       try {
         const trendResp = await apiFetch('/api/trends?days=14').catch(() => null);
@@ -417,7 +417,7 @@ createApp({
           labels,
           datasets: [{
             label: 'Findings',
-            data: [0, 0, 0, 0, 0, 0], // aggiornato async
+            data: [0, 0, 0, 0, 0, 0], // updated async
             backgroundColor: colors,
             borderRadius: 6,
             borderSkipped: false,
@@ -436,7 +436,7 @@ createApp({
           },
         },
       });
-      // Carica i dati reali dall'API
+      // Load real data from the API
       const statusKeys = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
       Promise.all(statusKeys.map(s =>
         apiFetch(`/api/findings/paginated?status=${s}&per_page=1`)
@@ -455,7 +455,7 @@ createApp({
       if (!canvas) return;
       if (this.charts.severity) this.charts.severity.destroy();
       const data = this.severityBreakdown;
-      // Ordine fisso per leggibilità: dal più grave al meno grave
+      // Fixed order for readability: most to least severe
       const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO', 'UNKNOWN'];
       const colorMap = {
         CRITICAL: '#dc2626', HIGH: '#f97316', MEDIUM: '#f59e0b',
@@ -528,7 +528,7 @@ createApp({
           labels: trendData.map(t => t.day),
           datasets: [
             {
-              label: 'Scansioni', data: trendData.map(t => t.scans),
+              label: 'Scans', data: trendData.map(t => t.scans),
               borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)',
               tension: 0.3, fill: true, pointRadius: 4,
             },
@@ -571,7 +571,7 @@ createApp({
         this.scansTotal = scanPag.count || this.scans.length;
         this.scansCursor = scanPag.next_cursor || null;
       } catch (e) {
-        this.showToast('Errore nel caricamento delle scansioni: ' + e.message, 'error');
+        this.showToast('Failed to load scans: ' + e.message, 'error');
       } finally {
         this.scansLoading = false;
       }
@@ -651,7 +651,7 @@ createApp({
         this.findingsTotal = pag.count || this.findings.length;
         this.findingsCursor = pag.next_cursor || null;
       } catch (e) {
-        this.showToast('Errore nel caricamento dei findings: ' + e.message, 'error');
+        this.showToast('Failed to load findings: ' + e.message, 'error');
       } finally {
         this.findingsLoading = false;
       }
@@ -692,12 +692,12 @@ createApp({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ finding_ids: this.selectedFindings, status: this.bulkStatus }),
         });
-        this.showToast(`Stato aggiornato per ${this.selectedFindings.length} findings`);
+        this.showToast(`Status updated for ${this.selectedFindings.length} findings`);
         this.selectedFindings = [];
         this.bulkStatus = '';
         await this.loadFindings(true);
       } catch (e) {
-        this.showToast('Errore aggiornamento bulk: ' + e.message, 'error');
+        this.showToast('Bulk update failed: ' + e.message, 'error');
       }
     },
 
@@ -749,10 +749,10 @@ createApp({
         this.findingState.updated_at = new Date().toISOString();
         this.newFindingStatus = '';
         this.findingStatusNotes = '';
-        this.showToast('Stato aggiornato');
+        this.showToast('Status updated');
         await this.loadFindings(true);
       } catch (e) {
-        this.showToast('Errore: ' + e.message, 'error');
+        this.showToast('Error: ' + e.message, 'error');
       }
     },
 
@@ -763,10 +763,10 @@ createApp({
         fd.append('status', 'false_positive');
         await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = 'false_positive';
-        this.showToast('Finding segnato come false positive');
+        this.showToast('Finding marked as false positive');
         await this.loadFindings(true);
       } catch (e) {
-        this.showToast('Errore: ' + e.message, 'error');
+        this.showToast('Error: ' + e.message, 'error');
       }
     },
 
@@ -781,10 +781,10 @@ createApp({
         this.showAcceptRiskForm = false;
         this.acceptRiskJustification = '';
         this.acceptRiskExpiry = '';
-        this.showToast('Rischio accettato');
+        this.showToast('Risk accepted');
         await this.loadFindings(true);
       } catch (e) {
-        this.showToast('Errore: ' + e.message, 'error');
+        this.showToast('Error: ' + e.message, 'error');
       }
     },
 
@@ -796,9 +796,9 @@ createApp({
         await fetch(`/api/findings/${this.selectedFinding.id}/assign`, { method: 'POST', body: fd });
         this.findingState.assigned_to = this.assignTo;
         this.assignTo = '';
-        this.showToast('Finding assegnato');
+        this.showToast('Finding assigned');
       } catch (e) {
-        this.showToast('Errore: ' + e.message, 'error');
+        this.showToast('Error: ' + e.message, 'error');
       }
     },
 
@@ -810,9 +810,9 @@ createApp({
         await fetch(`/api/findings/${this.selectedFinding.id}/comment`, { method: 'POST', body: fd });
         this.findingComments = await apiFetch(`/api/findings/${this.selectedFinding.id}/comments`);
         this.newComment = '';
-        this.showToast('Commento aggiunto');
+        this.showToast('Comment added');
       } catch (e) {
-        this.showToast('Errore: ' + e.message, 'error');
+        this.showToast('Error: ' + e.message, 'error');
       }
     },
 
@@ -835,7 +835,7 @@ createApp({
         this.buildAnalyticsTrendChart();
         this.buildToolEffChart();
       } catch (e) {
-        this.showToast('Errore caricamento analytics: ' + e.message, 'error');
+        this.showToast('Failed to load analytics: ' + e.message, 'error');
       } finally {
         this.loading = false;
       }
@@ -970,7 +970,7 @@ createApp({
           this.compareIdB = this.selectedScans[1];
         }
       } catch (e) {
-        this.showToast('Errore caricamento lista scansioni: ' + e.message, 'error');
+        this.showToast('Failed to load scan list: ' + e.message, 'error');
       }
     },
 
@@ -1007,7 +1007,7 @@ createApp({
           this.compareResult = result;
         }
       } catch (e) {
-        this.showToast('Errore comparazione: ' + e.message, 'error');
+        this.showToast('Comparison failed: ' + e.message, 'error');
       } finally {
         this.compareLoading = false;
       }
@@ -1034,12 +1034,12 @@ createApp({
         // Close modal and reset form on success
         this.showScanModal = false;
         this.newScanForm = { name: '', target: '', target_type: 'local' };
-        this.showToast('Scansione avviata con successo');
+        this.showToast('Scan started successfully');
         await this.loadScans(true);
         this.startScanPolling(triggerTime);
       } catch (e) {
         // Keep modal open on error so user can fix the input
-        this.showToast('Errore avvio scansione: ' + e.message, 'error');
+        this.showToast('Failed to start scan: ' + e.message, 'error');
       } finally {
         this.scanTriggering = false;
       }
@@ -1051,9 +1051,9 @@ createApp({
       try {
         const resp = await apiFetch('/api/notifications/preferences').catch(() => null);
         if (resp && resp.preferences) {
-          // Non sovrascrivere user_email con l'identificatore interno (es. "admin"):
-          // il campo user_email nel DB è usato come chiave di lookup, non come email destinatario.
-          // Se il valore non contiene "@" non è un'email valida e va ignorato.
+          // Do not overwrite user_email with an internal identifier (e.g. "admin"):
+          // the user_email field in the DB is used as a lookup key, not an email recipient.
+          // If the value does not contain "@" it is not a valid email and should be ignored.
           const prefs = { ...resp.preferences };
           if (prefs.user_email && !prefs.user_email.includes('@')) {
             delete prefs.user_email;
@@ -1072,9 +1072,9 @@ createApp({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.notifPrefs),
         });
-        this.showToast('Preferenze salvate');
+        this.showToast('Preferences saved');
       } catch (e) {
-        this.showToast('Errore salvataggio preferenze: ' + e.message, 'error');
+        this.showToast('Failed to save preferences: ' + e.message, 'error');
       }
     },
 
@@ -1084,7 +1084,7 @@ createApp({
       try {
         this.apiKeys = await apiFetch('/api/keys');
       } catch (e) {
-        this.showToast('Errore caricamento API keys: ' + e.message, 'error');
+        this.showToast('Failed to load API keys: ' + e.message, 'error');
       }
     },
 
@@ -1098,9 +1098,9 @@ createApp({
         const data = await res.json();
         this.newKeyResult = data.key;
         await this.loadApiKeys();
-        this.showToast('API key creata');
+        this.showToast('API key created');
       } catch (e) {
-        this.showToast('Errore creazione key: ' + e.message, 'error');
+        this.showToast('Failed to create key: ' + e.message, 'error');
       }
     },
 
@@ -1109,9 +1109,9 @@ createApp({
       try {
         await apiFetch(`/api/keys/${prefix}`, { method: 'DELETE' });
         await this.loadApiKeys();
-        this.showToast('API key revocata');
+        this.showToast('API key revoked');
       } catch (e) {
-        this.showToast('Errore revoca: ' + e.message, 'error');
+        this.showToast('Failed to revoke key: ' + e.message, 'error');
       }
     },
 
@@ -1119,7 +1119,7 @@ createApp({
       try {
         this.webhooks = await apiFetch('/api/webhooks');
       } catch (e) {
-        this.showToast('Errore caricamento webhooks: ' + e.message, 'error');
+        this.showToast('Failed to load webhooks: ' + e.message, 'error');
       }
     },
 
@@ -1134,9 +1134,9 @@ createApp({
         this.showCreateWebhookModal = false;
         this.newWebhookForm = { name: '', url: '', events: 'scan.completed', secret: '' };
         await this.loadWebhooks();
-        this.showToast('Webhook creato');
+        this.showToast('Webhook created');
       } catch (e) {
-        this.showToast('Errore creazione webhook: ' + e.message, 'error');
+        this.showToast('Failed to create webhook: ' + e.message, 'error');
       }
     },
 
@@ -1147,7 +1147,7 @@ createApp({
         await fetch(`/api/webhooks/${id}`, { method: 'PATCH', body: fd });
         await this.loadWebhooks();
       } catch (e) {
-        this.showToast('Errore toggle webhook: ' + e.message, 'error');
+        this.showToast('Failed to toggle webhook: ' + e.message, 'error');
       }
     },
 
@@ -1156,9 +1156,9 @@ createApp({
       try {
         await apiFetch(`/api/webhooks/${id}`, { method: 'DELETE' });
         await this.loadWebhooks();
-        this.showToast('Webhook eliminato');
+        this.showToast('Webhook deleted');
       } catch (e) {
-        this.showToast('Errore eliminazione: ' + e.message, 'error');
+        this.showToast('Failed to delete webhook: ' + e.message, 'error');
       }
     },
 
@@ -1191,9 +1191,9 @@ createApp({
         a.click();
         URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        this.showToast(`Export ${format.toUpperCase()} avviato`);
+        this.showToast(`Export ${format.toUpperCase()} started`);
       } catch (e) {
-        this.showToast('Errore export: ' + e.message, 'error');
+        this.showToast('Export failed: ' + e.message, 'error');
       }
     },
 
@@ -1212,9 +1212,9 @@ createApp({
         a.click();
         URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        this.showToast(`Export ${format.toUpperCase()} avviato`);
+        this.showToast(`Export ${format.toUpperCase()} started`);
       } catch (e) {
-        this.showToast('Errore export: ' + e.message, 'error');
+        this.showToast('Export failed: ' + e.message, 'error');
       }
     },
 

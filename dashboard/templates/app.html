@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="it" dir="ltr">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Security Scanning Platform</title>
   <link rel="stylesheet" href="/static/app.css">
-  <!-- Vue.js 3 CDN — SRI hash garantisce integrità del file scaricato -->
+  <!-- Vue.js 3 CDN — SRI hash ensures file integrity -->
   <script
     src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"
     integrity="sha384-6pS1WSZJY7wOk6qQTa9C9U2W1/qzqL7iYoMil7qn9KFeN5fZDAwIExgCd7U5AH+X"
     crossorigin="anonymous"
   ></script>
-  <!-- Chart.js CDN — SRI hash garantisce integrità del file scaricato -->
+  <!-- Chart.js CDN — SRI hash ensures file integrity -->
   <script
     src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"
     integrity="sha384-e6cc9LaIG7xZ3XD5B+jtr1NhTWPQGQdRCh6xiZ+ZFUtWCpg4ycv3Sh+SkZoopvUY"
@@ -24,7 +24,7 @@
     <!-- ================================================================
          SIDEBAR
     ================================================================ -->
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }" role="complementary" aria-label="Sidebar navigazione">
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }" role="complementary" aria-label="Sidebar navigation">
       <div class="sidebar-header">
         <div class="sidebar-logo" v-if="!sidebarCollapsed">
           <svg class="logo-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -39,7 +39,7 @@
             <path d="M9 12L11 14L15 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? 'Espandi sidebar' : 'Comprimi sidebar'">
+        <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
           <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
             <path v-if="sidebarCollapsed" d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path v-else d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -47,14 +47,14 @@
         </button>
       </div>
 
-      <nav class="sidebar-nav" role="navigation" aria-label="Menu principale">
+      <nav class="sidebar-nav" role="navigation" aria-label="Main navigation">
         <a class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click.prevent="navigate('dashboard')" href="#dashboard" :title="sidebarCollapsed ? 'Dashboard' : ''" :aria-current="currentPage === 'dashboard' ? 'page' : false">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Dashboard</span>
         </a>
-        <a class="nav-item" :class="{ active: currentPage === 'scans' }" @click.prevent="navigate('scans')" href="#" :title="sidebarCollapsed ? 'Scansioni' : ''">
+        <a class="nav-item" :class="{ active: currentPage === 'scans' }" @click.prevent="navigate('scans')" href="#" :title="sidebarCollapsed ? 'Scans' : ''">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span class="nav-label" v-if="!sidebarCollapsed">Scansioni</span>
+          <span class="nav-label" v-if="!sidebarCollapsed">Scans</span>
         </a>
         <a class="nav-item" :class="{ active: currentPage === 'findings' }" @click.prevent="navigate('findings')" href="#" :title="sidebarCollapsed ? 'Findings' : ''">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -65,9 +65,9 @@
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Analytics</span>
         </a>
-        <a class="nav-item" :class="{ active: currentPage === 'compare' }" @click.prevent="navigate('compare')" href="#" :title="sidebarCollapsed ? 'Confronta' : ''">
+        <a class="nav-item" :class="{ active: currentPage === 'compare' }" @click.prevent="navigate('compare')" href="#" :title="sidebarCollapsed ? 'Compare' : ''">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span class="nav-label" v-if="!sidebarCollapsed">Confronta</span>
+          <span class="nav-label" v-if="!sidebarCollapsed">Compare</span>
         </a>
         <a class="nav-item" :class="{ active: currentPage === 'settings' }" @click.prevent="navigate('settings')" href="#" :title="sidebarCollapsed ? 'Settings' : ''">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2"/></svg>
@@ -83,7 +83,7 @@
             <span class="user-role">Administrator</span>
           </div>
         </div>
-        <a href="/logout" class="logout-link" title="Esci">
+        <a href="/logout" class="logout-link" title="Sign out">
           <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
       </div>
@@ -103,16 +103,16 @@
           <div class="refresh-control">
             <span class="refresh-dot" :class="{ active: autoRefresh }"></span>
             <span class="refresh-label">{{ autoRefresh ? 'Live' : 'Paused' }}</span>
-            <button class="btn-icon" @click="autoRefresh = !autoRefresh" :title="autoRefresh ? 'Pausa auto-refresh' : 'Avvia auto-refresh'">
+            <button class="btn-icon" @click="autoRefresh = !autoRefresh" :title="autoRefresh ? 'Pause auto-refresh' : 'Start auto-refresh'">
               <svg v-if="autoRefresh" viewBox="0 0 24 24" fill="none" width="14" height="14"><rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/></svg>
               <svg v-else viewBox="0 0 24 24" fill="none" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
             </button>
           </div>
           <button class="btn-secondary btn-sm" @click="refreshCurrentPage">
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="margin-right:4px"><polyline points="23 4 23 10 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Aggiorna
+            Refresh
           </button>
-          <button class="btn-icon" @click="toggleDarkMode" :title="darkMode ? 'Modalità chiara' : 'Modalità scura'" aria-label="Cambia tema">
+          <button class="btn-icon" @click="toggleDarkMode" :title="darkMode ? 'Light mode' : 'Dark mode'" aria-label="Toggle theme">
             <svg v-if="darkMode" viewBox="0 0 24 24" fill="none" width="16" height="16"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             <svg v-else viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -140,14 +140,14 @@
         <!-- Running scan banner -->
         <div class="alert-banner alert-info" v-if="hasRunningScans" style="background:rgba(79,70,229,0.08);border-color:var(--color-primary);color:var(--color-primary)">
           <div class="spinner-sm" style="flex-shrink:0"></div>
-          <span>Scansione in corso... i risultati appariranno automaticamente al termine.</span>
+          <span>Scan in progress… results will appear automatically when complete.</span>
         </div>
 
         <!-- Critical alert banner -->
         <div class="alert-banner alert-critical" v-if="kpis.critical_findings > 0">
           <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span><strong>{{ kpis.critical_findings }} finding critico/i</strong> richiede attenzione immediata.</span>
-          <button class="btn-alert" @click="navigate('findings'); findingsFilter.severity = 'CRITICAL'; loadFindings(true)">Visualizza ora</button>
+          <span><strong>{{ kpis.critical_findings }} critical finding(s)</strong> require immediate attention.</span>
+          <button class="btn-alert" @click="navigate('findings'); findingsFilter.severity = 'CRITICAL'; loadFindings(true)">View now</button>
         </div>
 
         <!-- KPI Cards -->
@@ -158,7 +158,7 @@
             </div>
             <div class="kpi-body">
               <div class="kpi-value">{{ kpis.total_scans ?? '—' }}</div>
-              <div class="kpi-label">Scansioni totali</div>
+              <div class="kpi-label">Total Scans</div>
             </div>
           </div>
           <div class="kpi-card">
@@ -167,7 +167,7 @@
             </div>
             <div class="kpi-body">
               <div class="kpi-value">{{ kpis.total_findings ?? '—' }}</div>
-              <div class="kpi-label">Findings totali</div>
+              <div class="kpi-label">Total Findings</div>
             </div>
           </div>
           <div class="kpi-card kpi-card-danger">
@@ -194,7 +194,7 @@
             </div>
             <div class="kpi-body">
               <div class="kpi-value">{{ kpis.open_targets ?? '—' }}</div>
-              <div class="kpi-label">Target distinti</div>
+              <div class="kpi-label">Distinct Targets</div>
             </div>
           </div>
           <div class="kpi-card">
@@ -203,7 +203,7 @@
             </div>
             <div class="kpi-body">
               <div class="kpi-value">{{ kpis.last_7d_scans ?? '—' }}</div>
-              <div class="kpi-label">Scansioni (7gg)</div>
+              <div class="kpi-label">Scans (7d)</div>
             </div>
           </div>
         </div>
@@ -211,7 +211,7 @@
         <!-- Trend chart (full width — most important for situational awareness) -->
         <div class="card chart-card">
           <div class="card-header">
-            <h2>Trend Scansioni &amp; Findings (14 giorni)</h2>
+            <h2>Scan &amp; Finding Trend (14 days)</h2>
           </div>
           <div class="chart-container chart-container-tall">
             <canvas ref="trendChart"></canvas>
@@ -222,7 +222,7 @@
         <div class="chart-grid">
           <div class="card chart-card">
             <div class="card-header">
-              <h2>Distribuzione Severità</h2>
+              <h2>Severity Distribution</h2>
             </div>
             <div class="chart-container">
               <canvas ref="severityChart"></canvas>
@@ -230,7 +230,7 @@
           </div>
           <div class="card chart-card">
             <div class="card-header">
-              <h2>Progresso Remediation</h2>
+              <h2>Remediation Progress</h2>
             </div>
             <div class="chart-container">
               <canvas ref="remediationChart"></canvas>
@@ -241,10 +241,10 @@
         <!-- Recent Scans -->
         <div class="card">
           <div class="card-header">
-            <h2>Scansioni recenti con findings</h2>
+            <h2>Recent Scans with Findings</h2>
             <div class="card-actions">
-              <button class="btn-primary btn-sm" @click="showScanModal = true">+ Nuova scansione</button>
-              <button class="btn-secondary btn-sm" @click="navigate('scans')">Vedi tutte</button>
+              <button class="btn-primary btn-sm" @click="showScanModal = true">+ New Scan</button>
+              <button class="btn-secondary btn-sm" @click="navigate('scans')">View all</button>
             </div>
           </div>
             <div class="table-wrap">
@@ -252,14 +252,14 @@
                 <thead>
                   <tr>
                     <th>Target</th>
-                    <th>Stato</th>
+                    <th>Status</th>
                     <th>Findings</th>
-                    <th>Data</th>
+                    <th>Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="recentScans.length === 0">
-                    <td colspan="4" class="empty-state">Nessuna scansione con findings</td>
+                    <td colspan="4" class="empty-state">No scans with findings</td>
                   </tr>
                   <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" class="row-clickable">
                     <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
@@ -283,51 +283,51 @@
             <div class="filter-group">
               <label class="filter-label">Target</label>
               <select v-model="scansFilter.target" @change="loadScans(true)" class="filter-select">
-                <option value="">Tutti</option>
+                <option value="">All</option>
                 <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
-              <label class="filter-label">Stato</label>
+              <label class="filter-label">Status</label>
               <select v-model="scansFilter.status" @change="loadScans(true)" class="filter-select">
-                <option value="">Tutti</option>
-                <option value="COMPLETED_CLEAN">Pulita (no findings)</option>
-                <option value="COMPLETED_WITH_FINDINGS">Con findings</option>
-                <option value="PARTIAL_FAILED">Parziale</option>
-                <option value="FAILED">Fallita</option>
+                <option value="">All</option>
+                <option value="COMPLETED_CLEAN">Clean (no findings)</option>
+                <option value="COMPLETED_WITH_FINDINGS">With findings</option>
+                <option value="PARTIAL_FAILED">Partial</option>
+                <option value="FAILED">Failed</option>
               </select>
             </div>
             <div class="filter-group">
               <label class="filter-label">Policy</label>
               <select v-model="scansFilter.policy" @change="loadScans(true)" class="filter-select">
-                <option value="">Tutte</option>
+                <option value="">All</option>
                 <option value="PASS">PASS</option>
                 <option value="BLOCK">BLOCK</option>
                 <option value="UNKNOWN">UNKNOWN</option>
               </select>
             </div>
             <button class="btn-secondary btn-sm" @click="resetScansFilter">Reset</button>
-            <button class="btn-primary btn-sm" @click="showScanModal = true">+ Nuova scansione</button>
+            <button class="btn-primary btn-sm" @click="showScanModal = true">+ New Scan</button>
           </div>
           <!-- Compare bar -->
           <div class="compare-bar" v-if="selectedScans.length > 0">
-            <span class="compare-info">{{ selectedScans.length }} scansion{{ selectedScans.length === 1 ? 'e' : 'i' }} selezionat{{ selectedScans.length === 1 ? 'a' : 'e' }}</span>
+            <span class="compare-info">{{ selectedScans.length }} scan(s) selected</span>
             <button class="btn-primary btn-sm" @click="goToCompare" :disabled="selectedScans.length !== 2">
               <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="margin-right:4px"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Confronta (seleziona 2)
+              Compare (select 2)
             </button>
-            <button class="btn-secondary btn-sm" @click="selectedScans = []">Deseleziona</button>
+            <button class="btn-secondary btn-sm" @click="selectedScans = []">Deselect</button>
           </div>
         </div>
 
         <!-- Scans table -->
         <div class="card">
           <div class="card-header">
-            <h2>Lista scansioni <span class="count-badge">{{ scansTotal }}</span></h2>
+            <h2>Scans <span class="count-badge">{{ scansTotal }}</span></h2>
           </div>
           <!-- Toggle colonne visibili -->
           <div class="col-toggle-bar" style="padding: 10px 20px 0;">
-            <span class="col-toggle-label">Colonne:</span>
+            <span class="col-toggle-label">Columns:</span>
             <button v-for="col in scanColumns" :key="col.key"
               class="col-toggle-btn" :class="{ active: col.visible }"
               @click="col.visible = !col.visible">{{ col.label }}</button>
@@ -337,28 +337,28 @@
               <thead>
                 <tr>
                   <th class="th-check">
-                    <input type="checkbox" disabled title="Seleziona per confrontare">
+                    <input type="checkbox" disabled title="Select to compare">
                   </th>
                   <th v-if="colVisible('id')" class="th-sortable" @click="sortScans('id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
                   <th v-if="colVisible('target_name')" class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
-                  <th v-if="colVisible('target_type')">Tipo</th>
-                  <th v-if="colVisible('status')">Stato</th>
+                  <th v-if="colVisible('target_type')">Type</th>
+                  <th v-if="colVisible('status')">Status</th>
                   <th v-if="colVisible('policy_status')">Policy</th>
                   <th v-if="colVisible('findings_count')" class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
                   <th v-if="colVisible('critical_count')">C</th>
                   <th v-if="colVisible('high_count')">H</th>
-                  <th v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Data <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
-                  <th>Azioni</th>
+                  <th v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="scansLoading">
-                  <td colspan="11" class="loading-row"><div class="spinner-sm"></div> Caricamento...</td>
+                  <td colspan="11" class="loading-row"><div class="spinner-sm"></div> Loading...</td>
                 </tr>
                 <tr v-else-if="scans.length === 0">
                   <td colspan="11" class="empty-state">
                     <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" width="40" height="40"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.5"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                    Nessuna scansione trovata. Prova a modificare i filtri o avvia una nuova scansione.
+                    No scans found. Adjust your filters or trigger a new scan.
                   </td>
                 </tr>
                 <tr v-for="scan in scans" :key="scan.id" class="row-clickable" :class="{ 'row-selected': selectedScans.includes(scan.id) }">
@@ -375,7 +375,7 @@
                   <td v-if="colVisible('high_count')" @click="openScanDetail(scan)"><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
                   <td v-if="colVisible('created_at')" @click="openScanDetail(scan)" class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
                   <td @click.stop>
-                    <button class="btn-icon-sm" @click="openScanDetail(scan)" title="Dettaglio">
+                    <button class="btn-icon-sm" @click="openScanDetail(scan)" title="Details">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
                     <button class="btn-icon-sm" @click="viewScanFindings(scan)" title="Findings">
@@ -403,13 +403,13 @@
         <div class="card filters-card">
           <div class="filters-row">
             <div class="filter-group filter-search">
-              <label class="filter-label">Cerca</label>
-              <input type="text" v-model="findingsFilter.search" @input="debouncedLoadFindings" placeholder="Titolo, CVE, file..." class="filter-input">
+              <label class="filter-label">Search</label>
+              <input type="text" v-model="findingsFilter.search" @input="debouncedLoadFindings" placeholder="Title, CVE, file..." class="filter-input">
             </div>
             <div class="filter-group">
               <label class="filter-label">Severity</label>
               <select v-model="findingsFilter.severity" @change="loadFindings(true)" class="filter-select">
-                <option value="">Tutte</option>
+                <option value="">All</option>
                 <option value="CRITICAL">CRITICAL</option>
                 <option value="HIGH">HIGH</option>
                 <option value="MEDIUM">MEDIUM</option>
@@ -420,41 +420,41 @@
             <div class="filter-group">
               <label class="filter-label">Tool</label>
               <select v-model="findingsFilter.tool" @change="loadFindings(true)" class="filter-select">
-                <option value="">Tutti</option>
+                <option value="">All</option>
                 <option v-for="t in availableTools" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
               <label class="filter-label">Target</label>
               <select v-model="findingsFilter.target" @change="loadFindings(true)" class="filter-select">
-                <option value="">Tutti</option>
+                <option value="">All</option>
                 <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
-              <label class="filter-label">Stato</label>
+              <label class="filter-label">Status</label>
               <select v-model="findingsFilter.status" @change="loadFindings(true)" class="filter-select">
-                <option value="">Tutti gli stati</option>
-                <option value="new">Nuovo</option>
-                <option value="acknowledged">Preso in carico</option>
-                <option value="in_progress">In lavorazione</option>
-                <option value="resolved">Risolto</option>
-                <option value="false_positive">Falso positivo</option>
-                <option value="risk_accepted">Rischio accettato</option>
+                <option value="">All statuses</option>
+                <option value="new">New</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="false_positive">False Positive</option>
+                <option value="risk_accepted">Risk Accepted</option>
               </select>
             </div>
             <div class="filter-group" v-if="findingsFilter.scan_id">
               <label class="filter-label">Scan ID</label>
               <div class="filter-scan-id">
                 <code class="scan-id-badge" :title="findingsFilter.scan_id">{{ findingsFilter.scan_id.substring(0, 8) }}…</code>
-                <button class="btn-icon-sm" @click="findingsFilter.scan_id = ''; loadFindings(true)" title="Rimuovi filtro scan">✕</button>
+                <button class="btn-icon-sm" @click="findingsFilter.scan_id = ''; loadFindings(true)" title="Remove scan filter">✕</button>
               </div>
             </div>
             <button class="btn-secondary btn-sm" @click="resetFindingsFilter">Reset</button>
           </div>
           <!-- Export bar -->
           <div class="export-bar">
-            <span class="export-label">Esporta:</span>
+            <span class="export-label">Export:</span>
             <button class="btn-export" @click="exportFindings('json')">JSON</button>
             <button class="btn-export" @click="exportFindings('csv')">CSV</button>
             <button class="btn-export" @click="exportFindings('sarif')">SARIF</button>
@@ -466,18 +466,18 @@
         <!-- Findings table -->
         <div class="card">
           <div class="card-header">
-            <h2>Lista findings <span class="count-badge">{{ findingsTotal }}</span></h2>
+            <h2>Findings <span class="count-badge">{{ findingsTotal }}</span></h2>
             <div class="bulk-actions" v-if="selectedFindings.length > 0">
-              <span class="bulk-count">{{ selectedFindings.length }} selezionati</span>
+              <span class="bulk-count">{{ selectedFindings.length }} selected</span>
               <select v-model="bulkStatus" class="filter-select filter-select-sm">
-                <option value="">Cambia stato...</option>
+                <option value="">Change status...</option>
                 <option value="acknowledged">Acknowledged</option>
                 <option value="in_progress">In Progress</option>
                 <option value="resolved">Resolved</option>
                 <option value="false_positive">False Positive</option>
               </select>
-              <button class="btn-primary btn-sm" @click="applyBulkStatus" :disabled="!bulkStatus">Applica</button>
-              <button class="btn-secondary btn-sm" @click="selectedFindings = []">Deseleziona</button>
+              <button class="btn-primary btn-sm" @click="applyBulkStatus" :disabled="!bulkStatus">Apply</button>
+              <button class="btn-secondary btn-sm" @click="selectedFindings = []">Deselect</button>
             </div>
           </div>
           <div class="findings-table-wrap">
@@ -490,21 +490,21 @@
                   <th>Severity</th>
                   <th>Tool</th>
                   <th>Target</th>
-                  <th>Titolo</th>
+                  <th>Title</th>
                   <th>CVE / ID</th>
                   <th>File</th>
-                  <th>Stato</th>
-                  <th>Azioni</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="findingsLoading">
-                  <td colspan="9" class="loading-row"><div class="spinner-sm"></div> Caricamento...</td>
+                  <td colspan="9" class="loading-row"><div class="spinner-sm"></div> Loading...</td>
                 </tr>
                 <tr v-else-if="findings.length === 0">
                   <td colspan="9" class="empty-state">
                     <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" width="40" height="40"><path d="M12 2L3 7V12C3 16.55 6.84 20.74 12 22C17.16 20.74 21 16.55 21 12V7L12 2Z" stroke="currentColor" stroke-width="1.5"/><path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Nessun finding trovato. Prova a modificare i filtri.
+                    No findings match the current filters.
                   </td>
                 </tr>
                 <tr v-for="finding in findings" :key="finding.id" class="row-clickable" :class="{ 'row-selected': selectedFindings.includes(finding.id) }">
@@ -529,7 +529,7 @@
                     <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ finding.mgmt_status || 'new' }}</span>
                   </td>
                   <td @click.stop>
-                    <button class="btn-icon-sm" @click="openFindingDetail(finding)" title="Dettaglio">
+                    <button class="btn-icon-sm" @click="openFindingDetail(finding)" title="Details">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
                   </td>
@@ -539,9 +539,9 @@
           </div>
           <!-- Pagination -->
           <div class="pagination-bar">
-            <button class="btn-secondary btn-sm" @click="prevFindingsPage" :disabled="findingsPage <= 1">&#x2190; Precedente</button>
-            <span class="page-info">Pagina {{ findingsPage }} &bull; {{ findings.length }} risultati</span>
-            <button class="btn-secondary btn-sm" @click="nextFindingsPage" :disabled="!findingsCursor">Successiva &#x2192;</button>
+            <button class="btn-secondary btn-sm" @click="prevFindingsPage" :disabled="findingsPage <= 1">&#x2190; Previous</button>
+            <span class="page-info">Page {{ findingsPage }} &bull; {{ findings.length }} risultati</span>
+            <button class="btn-secondary btn-sm" @click="nextFindingsPage" :disabled="!findingsCursor">Next &#x2192;</button>
           </div>
         </div>
       </div>
@@ -572,9 +572,9 @@
               <h2>Trend Risk Score</h2>
               <div class="card-actions">
                 <select v-model="analyticsDays" @change="loadAnalytics" class="filter-select filter-select-sm">
-                  <option :value="30">30 giorni</option>
-                  <option :value="60">60 giorni</option>
-                  <option :value="90">90 giorni</option>
+                  <option :value="30">30 days</option>
+                  <option :value="60">60 days</option>
+                  <option :value="90">90 days</option>
                 </select>
               </div>
             </div>
@@ -594,14 +594,14 @@
                 </div>
                 <span class="risk-score-pill" :class="riskBarClass(target.average_risk)">{{ target.average_risk }}/100</span>
               </div>
-              <p v-if="!analyticsData.targetRisk || analyticsData.targetRisk.length === 0" class="text-muted">Nessun dato disponibile</p>
+              <p v-if="!analyticsData.targetRisk || analyticsData.targetRisk.length === 0" class="text-muted">No data available</p>
             </div>
           </div>
           <div class="card">
-            <div class="card-header"><h2>Mapping OWASP Top 10 2021</h2></div>
+            <div class="card-header"><h2>OWASP Top 10 2021 Mapping</h2></div>
             <div class="table-wrap" v-if="analyticsData.compliance">
               <table>
-                <thead><tr><th>Categoria</th><th>Findings</th><th>Distribuzione</th></tr></thead>
+                <thead><tr><th>Category</th><th>Findings</th><th>Distribution</th></tr></thead>
                 <tbody>
                   <tr v-for="item in analyticsData.compliance.owasp_top_10" :key="item.category">
                     <td class="cell-wrap">{{ item.category }}</td>
@@ -623,7 +623,7 @@
           <div class="card-header"><h2>CWE Top 10</h2></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>CWE</th><th>Findings</th><th>Distribuzione</th></tr></thead>
+              <thead><tr><th>CWE</th><th>Findings</th><th>Distribution</th></tr></thead>
               <tbody>
                 <tr v-for="item in analyticsData.compliance.cwe_top_10" :key="item.cwe">
                   <td><a :href="'https://cwe.mitre.org/data/definitions/' + item.cwe.replace('CWE-', '') + '.html'" target="_blank" class="cve-link">{{ item.cwe }}</a></td>
@@ -645,10 +645,10 @@
       ================================================================ -->
       <div v-if="currentPage === 'compare'" class="page-content">
         <div class="card">
-          <div class="card-header"><h2>Seleziona le scansioni da confrontare</h2></div>
+          <div class="card-header"><h2>Select scans to compare</h2></div>
           <div class="compare-selectors">
             <div class="compare-selector-group">
-              <label class="filter-label">Scansione A (baseline)</label>
+              <label class="filter-label">Scan A (baseline)</label>
               <select v-model="compareIdA" class="filter-select">
                 <option value="">Seleziona...</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
@@ -658,7 +658,7 @@
             </div>
             <div class="compare-vs">VS</div>
             <div class="compare-selector-group">
-              <label class="filter-label">Scansione B (confronto)</label>
+              <label class="filter-label">Scan B (comparison)</label>
               <select v-model="compareIdB" class="filter-select">
                 <option value="">Seleziona...</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
@@ -667,8 +667,8 @@
               </select>
             </div>
             <button class="btn-primary" @click="runCompare" :disabled="!compareIdA || !compareIdB || compareIdA === compareIdB || compareLoading">
-              <span v-if="compareLoading"><div class="spinner-sm" style="display:inline-block;margin-right:6px"></div>Analisi...</span>
-              <span v-else>Confronta</span>
+              <span v-if="compareLoading"><div class="spinner-sm" style="display:inline-block;margin-right:6px"></div>Analyzing...</span>
+              <span v-else>Compare</span>
             </button>
           </div>
         </div>
@@ -679,28 +679,28 @@
             <div class="compare-summary-card compare-new">
               <div class="compare-summary-num">{{ compareResult.summary.new }}</div>
               <div class="compare-summary-label">Nuovi findings</div>
-              <div class="compare-summary-desc">Presenti in B, assenti in A</div>
+              <div class="compare-summary-desc">Present in B, not in A</div>
             </div>
             <div class="compare-summary-card compare-resolved">
               <div class="compare-summary-num">{{ compareResult.summary.resolved }}</div>
               <div class="compare-summary-label">Risolti</div>
-              <div class="compare-summary-desc">Presenti in A, assenti in B</div>
+              <div class="compare-summary-desc">Present in A, not in B</div>
             </div>
             <div class="compare-summary-card compare-unchanged">
               <div class="compare-summary-num">{{ compareResult.summary.unchanged }}</div>
-              <div class="compare-summary-label">Invariati</div>
-              <div class="compare-summary-desc">Presenti in entrambe</div>
+              <div class="compare-summary-label">Unchanged</div>
+              <div class="compare-summary-desc">Present in both</div>
             </div>
           </div>
 
           <!-- New findings table -->
           <div class="card" v-if="compareResult.new_findings.length > 0">
             <div class="card-header">
-              <h2>Nuovi findings <span class="count-badge count-badge-danger">{{ compareResult.new_findings.length }}</span></h2>
+              <h2>New findings <span class="count-badge count-badge-danger">{{ compareResult.new_findings.length }}</span></h2>
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Severity</th><th>Tool</th><th>Titolo</th><th>File</th></tr></thead>
+                <thead><tr><th>Severity</th><th>Tool</th><th>Title</th><th>File</th></tr></thead>
                 <tbody>
                   <tr v-for="f in compareResult.new_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
@@ -716,11 +716,11 @@
           <!-- Resolved findings table -->
           <div class="card" v-if="compareResult.resolved_findings.length > 0">
             <div class="card-header">
-              <h2>Findings risolti <span class="count-badge count-badge-success">{{ compareResult.resolved_findings.length }}</span></h2>
+              <h2>Resolved findings <span class="count-badge count-badge-success">{{ compareResult.resolved_findings.length }}</span></h2>
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Severity</th><th>Tool</th><th>Titolo</th><th>File</th></tr></thead>
+                <thead><tr><th>Severity</th><th>Tool</th><th>Title</th><th>File</th></tr></thead>
                 <tbody>
                   <tr v-for="f in compareResult.resolved_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
@@ -736,8 +736,8 @@
 
         <div v-else-if="!compareLoading" class="empty-compare">
           <svg viewBox="0 0 24 24" fill="none" width="56" height="56" style="opacity:0.2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <p><strong>Confronta due scansioni</strong></p>
-          <p style="font-size:13px;max-width:360px;text-align:center">Seleziona una scansione A (baseline) e una B (confronto) per identificare nuovi findings e quelli risolti tra le due esecuzioni.</p>
+          <p><strong>Compare two scans</strong></p>
+          <p style="font-size:13px;max-width:360px;text-align:center">Select scan A (baseline) and scan B (comparison) to identify new and resolved findings between two runs.</p>
         </div>
       </div>
 
@@ -748,21 +748,21 @@
         <div class="settings-tabs">
           <button class="tab-btn" :class="{ active: settingsTab === 'apikeys' }" @click="settingsTab = 'apikeys'; loadApiKeys()">API Keys</button>
           <button class="tab-btn" :class="{ active: settingsTab === 'webhooks' }" @click="settingsTab = 'webhooks'; loadWebhooks()">Webhooks</button>
-          <button class="tab-btn" :class="{ active: settingsTab === 'notifications' }" @click="settingsTab = 'notifications'; loadNotificationPrefs()">Notifiche</button>
+          <button class="tab-btn" :class="{ active: settingsTab === 'notifications' }" @click="settingsTab = 'notifications'; loadNotificationPrefs()">Notifications</button>
         </div>
 
         <!-- API Keys tab -->
         <div v-if="settingsTab === 'apikeys'" class="card">
           <div class="card-header">
             <h2>API Keys</h2>
-            <button class="btn-primary btn-sm" @click="showCreateKeyModal = true; newKeyResult = ''">+ Nuova chiave</button>
+            <button class="btn-primary btn-sm" @click="showCreateKeyModal = true; newKeyResult = ''">+ New Key</button>
           </div>
-          <p style="font-size:13px;color:var(--color-text-secondary);padding:12px 20px 0">Gestisci le chiavi API per l'accesso programmatico alla piattaforma. Ogni chiave ha un ruolo e permessi specifici.</p>
+          <p style="font-size:13px;color:var(--color-text-secondary);padding:12px 20px 0">Manage API keys for programmatic platform access. Each key has a role and specific permissions.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Nome</th><th>Prefisso</th><th>Ruolo</th><th>Creata da</th><th>Creata il</th><th>Scadenza</th><th>Azioni</th></tr></thead>
+              <thead><tr><th>Name</th><th>Prefix</th><th>Role</th><th>Created by</th><th>Created at</th><th>Expires</th><th>Actions</th></tr></thead>
               <tbody>
-                <tr v-if="apiKeys.length === 0"><td colspan="7" class="empty-state">Nessuna API key</td></tr>
+                <tr v-if="apiKeys.length === 0"><td colspan="7" class="empty-state">No API keys</td></tr>
                 <tr v-for="key in apiKeys" :key="key.prefix">
                   <td>{{ key.name }}</td>
                   <td><code class="id-code">{{ key.prefix }}...</code></td>
@@ -771,7 +771,7 @@
                   <td class="cell-nowrap">{{ formatDate(key.created_at) }}</td>
                   <td class="cell-nowrap">{{ key.expires_at ? formatDate(key.expires_at) : 'Mai' }}</td>
                   <td>
-                    <button class="btn-danger btn-sm" @click="revokeApiKey(key.prefix)">Revoca</button>
+                    <button class="btn-danger btn-sm" @click="revokeApiKey(key.prefix)">Revoke</button>
                   </td>
                 </tr>
               </tbody>
@@ -783,14 +783,14 @@
         <div v-if="settingsTab === 'webhooks'" class="card">
           <div class="card-header">
             <h2>Webhooks</h2>
-            <button class="btn-primary btn-sm" @click="showCreateWebhookModal = true">+ Nuovo webhook</button>
+            <button class="btn-primary btn-sm" @click="showCreateWebhookModal = true">+ New Webhook</button>
           </div>
-          <p style="font-size:13px;color:var(--color-text-secondary);padding:12px 20px 0">Ricevi notifiche in tempo reale su eventi come completamento scansioni o findings critici.</p>
+          <p style="font-size:13px;color:var(--color-text-secondary);padding:12px 20px 0">Receive real-time notifications for events such as scan completion or critical findings.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Nome</th><th>URL</th><th>Eventi</th><th>Attivo</th><th>Azioni</th></tr></thead>
+              <thead><tr><th>Name</th><th>URL</th><th>Events</th><th>Active</th><th>Actions</th></tr></thead>
               <tbody>
-                <tr v-if="webhooks.length === 0"><td colspan="5" class="empty-state">Nessun webhook configurato</td></tr>
+                <tr v-if="webhooks.length === 0"><td colspan="5" class="empty-state">No webhooks configured</td></tr>
                 <tr v-for="wh in webhooks" :key="wh.id">
                   <td>{{ wh.name }}</td>
                   <td class="cell-wrap"><code class="file-code">{{ wh.url }}</code></td>
@@ -802,7 +802,7 @@
                     </label>
                   </td>
                   <td>
-                    <button class="btn-danger btn-sm" @click="deleteWebhook(wh.id)">Elimina</button>
+                    <button class="btn-danger btn-sm" @click="deleteWebhook(wh.id)">Delete</button>
                   </td>
                 </tr>
               </tbody>
@@ -812,43 +812,43 @@
 
         <!-- Notifications tab -->
         <div v-if="settingsTab === 'notifications'" class="card">
-          <div class="card-header"><h2>Preferenze notifiche</h2></div>
+          <div class="card-header"><h2>Notification Preferences</h2></div>
           <div class="settings-form">
-            <p style="font-size:13px;color:var(--color-text-secondary);margin:-8px 0 4px">Configura quando e come ricevere notifiche via email sugli eventi di sicurezza.</p>
+            <p style="font-size:13px;color:var(--color-text-secondary);margin:-8px 0 4px">Configure when and how to receive email notifications for security events.</p>
             <div class="form-group">
-              <label class="form-label">Email destinatario</label>
+              <label class="form-label">Recipient Email</label>
               <input type="email" v-model="notifPrefs.user_email" class="filter-input" placeholder="security@example.com">
             </div>
             <div class="form-group">
-              <label class="form-label">Notifica per finding Critical</label>
+              <label class="form-label">Alert on Critical findings</label>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.critical_alerts">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
-              <label class="form-label">Notifica per finding High</label>
+              <label class="form-label">Alert on High findings</label>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.high_alerts">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
-              <label class="form-label">Digest settimanale</label>
+              <label class="form-label">Weekly digest</label>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.weekly_digest">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="form-group">
-              <label class="form-label">Notifica al completamento scansione</label>
+              <label class="form-label">Notify on scan completion</label>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="notifPrefs.scan_summaries">
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <div class="modal-actions">
-              <button class="btn-primary" @click="saveNotificationPrefs">Salva preferenze</button>
+              <button class="btn-primary" @click="saveNotificationPrefs">Save preferences</button>
             </div>
           </div>
         </div>
@@ -874,10 +874,10 @@
 
         <!-- Modal tabs -->
         <div class="modal-tabs">
-          <button class="tab-btn" :class="{ active: findingModalTab === 'info' }" @click="findingModalTab = 'info'">Informazioni</button>
+          <button class="tab-btn" :class="{ active: findingModalTab === 'info' }" @click="findingModalTab = 'info'">Information</button>
           <button class="tab-btn" :class="{ active: findingModalTab === 'remediation' }" @click="findingModalTab = 'remediation'">Remediation</button>
-          <button class="tab-btn" :class="{ active: findingModalTab === 'manage' }" @click="findingModalTab = 'manage'">Gestione</button>
-          <button class="tab-btn" :class="{ active: findingModalTab === 'comments' }" @click="findingModalTab = 'comments'">Commenti <span class="count-badge" v-if="findingComments.length > 0">{{ findingComments.length }}</span></button>
+          <button class="tab-btn" :class="{ active: findingModalTab === 'manage' }" @click="findingModalTab = 'manage'">Management</button>
+          <button class="tab-btn" :class="{ active: findingModalTab === 'comments' }" @click="findingModalTab = 'comments'">Comments <span class="count-badge" v-if="findingComments.length > 0">{{ findingComments.length }}</span></button>
         </div>
 
         <div class="modal-body">
@@ -886,9 +886,9 @@
             <div class="detail-grid">
               <div class="detail-col">
                 <div class="detail-section">
-                  <h3>Informazioni tecniche</h3>
+                  <h3>Technical details</h3>
                   <div class="detail-row"><span class="detail-key">Tool</span><span class="detail-val"><span class="badge badge-neutral">{{ selectedFinding.tool }}</span></span></div>
-                  <div class="detail-row"><span class="detail-key">Categoria</span><span class="detail-val">{{ selectedFinding.category || '—' }}</span></div>
+                  <div class="detail-row"><span class="detail-key">Category</span><span class="detail-val">{{ selectedFinding.category || '—' }}</span></div>
                   <div class="detail-row"><span class="detail-key">Target</span><span class="detail-val">{{ selectedFinding.target_name }}</span></div>
                   <div class="detail-row" v-if="selectedFinding.cve">
                     <span class="detail-key">CVE</span>
@@ -914,7 +914,7 @@
               </div>
               <div class="detail-col">
                 <div class="detail-section" v-if="selectedFinding.description">
-                  <h3>Descrizione</h3>
+                  <h3>Description</h3>
                   <p class="detail-text">{{ selectedFinding.description }}</p>
                 </div>
                 <div class="detail-section" v-if="selectedFinding.remediation">
@@ -931,23 +931,23 @@
               <div class="remediation-header">
                 <div class="remediation-meta">
                   <span class="remediation-priority" v-if="selectedFinding.remediation_guide.priority">
-                    Priorità: <strong>{{ selectedFinding.remediation_guide.priority }}</strong>
+                    Priority: <strong>{{ selectedFinding.remediation_guide.priority }}</strong>
                   </span>
                   <span class="remediation-effort" v-if="selectedFinding.remediation_guide.effort">
-                    Sforzo: <strong>{{ selectedFinding.remediation_guide.effort }}</strong>
+                    Effort: <strong>{{ selectedFinding.remediation_guide.effort }}</strong>
                   </span>
                 </div>
                 <h3 v-if="selectedFinding.remediation_guide.title">{{ selectedFinding.remediation_guide.title }}</h3>
                 <p v-if="selectedFinding.remediation_guide.description" class="detail-text">{{ selectedFinding.remediation_guide.description }}</p>
               </div>
               <div class="remediation-steps" v-if="selectedFinding.remediation_guide.steps && selectedFinding.remediation_guide.steps.length > 0">
-                <h4>Passi di remediation</h4>
+                <h4>Remediation steps</h4>
                 <ol class="steps-list">
                   <li v-for="(step, idx) in selectedFinding.remediation_guide.steps" :key="idx" class="step-item">{{ step }}</li>
                 </ol>
               </div>
               <div class="remediation-references" v-if="selectedFinding.remediation_guide.references && selectedFinding.remediation_guide.references.length > 0">
-                <h4>Riferimenti</h4>
+                <h4>References</h4>
                 <ul class="references-list">
                   <li v-for="(ref, idx) in selectedFinding.remediation_guide.references" :key="idx">
                     <a :href="ref" target="_blank" class="cve-link">{{ ref }}</a>
@@ -955,56 +955,56 @@
                 </ul>
               </div>
             </div>
-            <div v-else class="empty-state">Nessuna guida di remediation disponibile per questo finding.</div>
+            <div v-else class="empty-state">No remediation guide available for this finding.</div>
           </div>
 
-          <!-- Tab: Gestione -->
+          <!-- Tab: Management -->
           <div v-if="findingModalTab === 'manage'">
             <div class="detail-section">
-              <h3>Stato attuale</h3>
+              <h3>Current status</h3>
               <div class="mgmt-status-row">
                 <span class="status-pill" :class="'status-' + (findingState.status || 'new')">{{ findingState.status || 'new' }}</span>
-                <span v-if="findingState.assigned_to" class="assigned-to">Assegnato a: <strong>{{ findingState.assigned_to }}</strong></span>
-                <span v-if="findingState.updated_at" class="text-muted" style="font-size:12px">Aggiornato: {{ formatDate(findingState.updated_at) }}</span>
+                <span v-if="findingState.assigned_to" class="assigned-to">Assigned to: <strong>{{ findingState.assigned_to }}</strong></span>
+                <span v-if="findingState.updated_at" class="text-muted" style="font-size:12px">Updated: {{ formatDate(findingState.updated_at) }}</span>
               </div>
               <div class="mgmt-actions">
                 <select v-model="newFindingStatus" class="filter-select">
-                  <option value="">Cambia stato...</option>
+                  <option value="">Change status...</option>
                   <option value="acknowledged">Acknowledged</option>
                   <option value="in_progress">In Progress</option>
                   <option value="resolved">Resolved</option>
                   <option value="false_positive">False Positive</option>
                   <option value="risk_accepted">Risk Accepted</option>
                 </select>
-                <textarea v-model="findingStatusNotes" placeholder="Note (opzionale)..." class="comment-input" rows="2" style="margin-top:8px"></textarea>
-                <button class="btn-primary btn-sm" @click="updateFindingStatus" :disabled="!newFindingStatus">Aggiorna stato</button>
+                <textarea v-model="findingStatusNotes" placeholder="Notes (optional)..." class="comment-input" rows="2" style="margin-top:8px"></textarea>
+                <button class="btn-primary btn-sm" @click="updateFindingStatus" :disabled="!newFindingStatus">Update status</button>
               </div>
             </div>
             <div class="detail-section">
-              <h3>Assegnazione</h3>
+              <h3>Assignment</h3>
               <div class="assign-row">
-                <input type="text" v-model="assignTo" placeholder="Assegna a (username)..." class="filter-input" list="users-datalist">
+                <input type="text" v-model="assignTo" placeholder="Assign to (username)..." class="filter-input" list="users-datalist">
                 <datalist id="users-datalist">
                   <option v-for="u in availableUsers" :key="u" :value="u"></option>
                 </datalist>
-                <button class="btn-secondary btn-sm" @click="assignFinding" :disabled="!assignTo">Assegna</button>
+                <button class="btn-secondary btn-sm" @click="assignFinding" :disabled="!assignTo">Assign</button>
               </div>
             </div>
             <div class="detail-section">
-              <h3>Azioni rapide</h3>
+              <h3>Quick actions</h3>
               <div class="quick-mgmt-actions">
-                <button class="btn-secondary btn-sm" @click="markFalsePositive">Segna come False Positive</button>
-                <button class="btn-secondary btn-sm" @click="showAcceptRiskForm = !showAcceptRiskForm">Accetta rischio</button>
+                <button class="btn-secondary btn-sm" @click="markFalsePositive">Mark as False Positive</button>
+                <button class="btn-secondary btn-sm" @click="showAcceptRiskForm = !showAcceptRiskForm">Accept risk</button>
               </div>
               <div v-if="showAcceptRiskForm" class="accept-risk-form">
-                <textarea v-model="acceptRiskJustification" placeholder="Giustificazione..." class="comment-input" rows="2"></textarea>
+                <textarea v-model="acceptRiskJustification" placeholder="Justification..." class="comment-input" rows="2"></textarea>
                 <input type="date" v-model="acceptRiskExpiry" class="filter-input" style="margin-top:8px">
-                <button class="btn-primary btn-sm" @click="acceptRisk" :disabled="!acceptRiskJustification || !acceptRiskExpiry">Conferma</button>
+                <button class="btn-primary btn-sm" @click="acceptRisk" :disabled="!acceptRiskJustification || !acceptRiskExpiry">Confirm</button>
               </div>
             </div>
           </div>
 
-          <!-- Tab: Commenti -->
+          <!-- Tab: Comments -->
           <div v-if="findingModalTab === 'comments'">
             <div class="comments-list" v-if="findingComments.length > 0">
               <div v-for="comment in findingComments" :key="comment.id" class="comment-item">
@@ -1018,10 +1018,10 @@
                 <p class="comment-text">{{ comment.comment }}</p>
               </div>
             </div>
-            <p v-else class="text-muted" style="padding:16px 0">Nessun commento ancora.</p>
+            <p v-else class="text-muted" style="padding:16px 0">No comments yet.</p>
             <div class="add-comment">
-              <textarea v-model="newComment" placeholder="Aggiungi un commento..." class="comment-input" rows="3"></textarea>
-              <button class="btn-primary btn-sm" @click="addComment" :disabled="!newComment.trim()">Aggiungi commento</button>
+              <textarea v-model="newComment" placeholder="Add a comment..." class="comment-input" rows="3"></textarea>
+              <button class="btn-primary btn-sm" @click="addComment" :disabled="!newComment.trim()">Add comment</button>
             </div>
           </div>
         </div>
@@ -1044,11 +1044,11 @@
           <div class="detail-grid">
             <div class="detail-col">
               <div class="detail-section">
-                <h3>Informazioni Scansione</h3>
+                <h3>Scan Details</h3>
                 <div class="detail-row"><span class="detail-key">Scan ID</span><span class="detail-val"><code>{{ selectedScan.id }}</code></span></div>
                 <div class="detail-row"><span class="detail-key">Tipo</span><span class="detail-val">{{ selectedScan.target_type }}</span></div>
                 <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status ? selectedScan.policy_status.toUpperCase() : '—' }}</span></span></div>
-                <div class="detail-row"><span class="detail-key">Findings totali</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
+                <div class="detail-row"><span class="detail-key">Total Findings</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
                 <div class="detail-row"><span class="detail-key">Critical</span><span class="detail-val"><span class="sev-pill sev-critical" v-if="selectedScan.critical_count > 0">{{ selectedScan.critical_count }}</span><span v-else>0</span></span></div>
                 <div class="detail-row"><span class="detail-key">High</span><span class="detail-val"><span class="sev-pill sev-high" v-if="selectedScan.high_count > 0">{{ selectedScan.high_count }}</span><span v-else>0</span></span></div>
                 <div class="detail-row"><span class="detail-key">Data</span><span class="detail-val">{{ formatDate(selectedScan.created_at) }}</span></div>
@@ -1056,17 +1056,17 @@
             </div>
             <div class="detail-col">
               <div class="detail-section" v-if="selectedScan.severity_breakdown">
-                <h3>Breakdown Severità</h3>
+                <h3>Severity Breakdown</h3>
                 <div v-for="(count, sev) in selectedScan.severity_breakdown" :key="sev" class="detail-row">
                   <span class="detail-key"><span class="severity-badge" :class="'sev-' + sev.toLowerCase()">{{ sev }}</span></span>
                   <span class="detail-val"><strong>{{ count }}</strong></span>
                 </div>
               </div>
               <div class="detail-section">
-                <h3>Azioni</h3>
-                <button class="btn-secondary btn-block" style="margin-bottom:8px" @click="viewScanFindings(selectedScan)">Vedi findings di questa scansione</button>
+                <h3>Actions</h3>
+                <button class="btn-secondary btn-block" style="margin-bottom:8px" @click="viewScanFindings(selectedScan)">View findings for this scan</button>
                 <div class="export-bar" style="margin-top:8px;padding-top:8px">
-                  <span class="export-label">Esporta:</span>
+                  <span class="export-label">Export:</span>
                   <button class="btn-export" @click="exportScanFindings(selectedScan.id, 'json')">JSON</button>
                   <button class="btn-export" @click="exportScanFindings(selectedScan.id, 'csv')">CSV</button>
                   <button class="btn-export" @click="exportScanFindings(selectedScan.id, 'sarif')">SARIF</button>
@@ -1086,35 +1086,35 @@
     <div class="modal-overlay" v-if="showScanModal" @click.self="showScanModal = false">
       <div class="modal modal-sm">
         <div class="modal-header">
-          <h2 class="modal-title">Avvia nuova scansione</h2>
+          <h2 class="modal-title">New Scan</h2>
           <button class="modal-close" @click="showScanModal = false">&#x2715;</button>
         </div>
         <div class="modal-body">
-          <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px">Configura e avvia una nuova scansione di sicurezza su un target.</p>
+          <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px">Configure and start a new security scan.</p>
           <div class="form-group">
-            <label class="form-label">Nome scansione</label>
+            <label class="form-label">Scan name</label>
             <input type="text" v-model="newScanForm.name" class="filter-input" placeholder="es. my-app-v2.0" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Tipo target</label>
+            <label class="form-label">Target type</label>
             <select v-model="newScanForm.target_type" class="filter-select">
-              <option value="local">Directory locale</option>
-              <option value="git">Repository Git</option>
+              <option value="local">Local directory</option>
+              <option value="git">Git repository</option>
               <option value="image">Docker Image</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">Target</label>
             <input type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/org/repo' : newScanForm.target_type === 'image' ? 'nginx:latest' : '/data/workspaces/my-project'" autocomplete="off">
-            <span style="font-size:11px;color:var(--color-text-muted)" v-if="newScanForm.target_type === 'git'">URL del repository Git da analizzare</span>
-            <span style="font-size:11px;color:var(--color-text-muted)" v-else-if="newScanForm.target_type === 'image'">Nome e tag dell'immagine Docker</span>
-            <span style="font-size:11px;color:var(--color-text-muted)" v-else>Percorso assoluto della directory da scansionare</span>
+            <span style="font-size:11px;color:var(--color-text-muted)" v-if="newScanForm.target_type === 'git'">URL of the Git repository to scan</span>
+            <span style="font-size:11px;color:var(--color-text-muted)" v-else-if="newScanForm.target_type === 'image'">Docker image name and tag</span>
+            <span style="font-size:11px;color:var(--color-text-muted)" v-else>Absolute path of the directory to scan</span>
           </div>
           <div class="modal-actions">
-            <button class="btn-secondary" @click="showScanModal = false">Annulla</button>
+            <button class="btn-secondary" @click="showScanModal = false">Cancel</button>
             <button class="btn-primary" @click="triggerScan" :disabled="!newScanForm.name || !newScanForm.target || scanTriggering">
-              <span v-if="scanTriggering"><div class="spinner-sm" style="display:inline-block;margin-right:6px"></div>Avvio...</span>
-              <span v-else>Avvia scansione</span>
+              <span v-if="scanTriggering"><div class="spinner-sm" style="display:inline-block;margin-right:6px"></div>Starting...</span>
+              <span v-else>Start scan</span>
             </button>
           </div>
         </div>
@@ -1127,7 +1127,7 @@
     <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="showCreateKeyModal = false">
       <div class="modal modal-sm">
         <div class="modal-header">
-          <h2 class="modal-title">Nuova API Key</h2>
+          <h2 class="modal-title">New API Key</h2>
           <button class="modal-close" @click="showCreateKeyModal = false">&#x2715;</button>
         </div>
         <div class="modal-body">
@@ -1144,20 +1144,20 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Scadenza (giorni, opzionale)</label>
+            <label class="form-label">Expiry (days, optional)</label>
             <input type="number" v-model="newKeyForm.expires_days" class="filter-input" placeholder="es. 90">
           </div>
           <div v-if="newKeyResult" class="new-key-result">
-            <p>Chiave creata. Copiala subito, non sarà più visibile:</p>
+            <p>Key created. Copy it now — it will not be shown again:</p>
             <code class="key-display">{{ newKeyResult }}</code>
-            <button class="btn-secondary btn-sm" @click="copyToClipboard(newKeyResult)">Copia</button>
+            <button class="btn-secondary btn-sm" @click="copyToClipboard(newKeyResult)">Copy</button>
           </div>
           <div class="modal-actions" v-if="!newKeyResult">
-            <button class="btn-secondary" @click="showCreateKeyModal = false">Annulla</button>
-            <button class="btn-primary" @click="createApiKey" :disabled="!newKeyForm.name">Crea</button>
+            <button class="btn-secondary" @click="showCreateKeyModal = false">Cancel</button>
+            <button class="btn-primary" @click="createApiKey" :disabled="!newKeyForm.name">Create</button>
           </div>
           <div class="modal-actions" v-else>
-            <button class="btn-primary" @click="showCreateKeyModal = false; newKeyResult = ''">Chiudi</button>
+            <button class="btn-primary" @click="showCreateKeyModal = false; newKeyResult = ''">Close</button>
           </div>
         </div>
       </div>
@@ -1182,16 +1182,16 @@
             <input type="url" v-model="newWebhookForm.url" class="filter-input" placeholder="https://...">
           </div>
           <div class="form-group">
-            <label class="form-label">Eventi (separati da virgola)</label>
+            <label class="form-label">Events (comma-separated)</label>
             <input type="text" v-model="newWebhookForm.events" class="filter-input" placeholder="scan.completed,finding.critical">
           </div>
           <div class="form-group">
-            <label class="form-label">Secret (opzionale)</label>
+            <label class="form-label">Secret (optional)</label>
             <input type="password" v-model="newWebhookForm.secret" class="filter-input">
           </div>
           <div class="modal-actions">
-            <button class="btn-secondary" @click="showCreateWebhookModal = false">Annulla</button>
-            <button class="btn-primary" @click="createWebhook" :disabled="!newWebhookForm.name || !newWebhookForm.url">Crea</button>
+            <button class="btn-secondary" @click="showCreateWebhookModal = false">Cancel</button>
+            <button class="btn-primary" @click="createWebhook" :disabled="!newWebhookForm.name || !newWebhookForm.url">Create</button>
           </div>
         </div>
       </div>

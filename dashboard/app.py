@@ -111,7 +111,6 @@ USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")
 #   python -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
 # A value starting with '$2b$' or '$2a$' is treated as a bcrypt hash.
 PASSWORD_RAW = os.getenv("DASHBOARD_PASSWORD", "change-me")
-# chiave segreta per sessione (usa .env o variabile ambiente sicura)
 SESSION_SECRET = os.getenv("DASHBOARD_SESSION_SECRET", "please-change-this")
 
 
@@ -161,6 +160,18 @@ try:
     init_db(DB_PATH)
 except Exception as _init_err:
     LOGGER.warning("db.init_warning", error=str(_init_err))
+
+# Warn on insecure defaults — these must be overridden in production.
+if not _is_bcrypt_hash(PASSWORD_RAW) and PASSWORD_RAW in ("change-me", ""):
+    LOGGER.warning(
+        "security.weak_password",
+        detail="DASHBOARD_PASSWORD is set to an insecure default. Set a bcrypt hash via the env var.",
+    )
+if SESSION_SECRET in ("please-change-this", ""):
+    LOGGER.warning(
+        "security.weak_session_secret",
+        detail="DASHBOARD_SESSION_SECRET is set to an insecure default. Set a strong random secret.",
+    )
 
 # Initialize RBAC tables
 init_rbac_tables()
@@ -1270,7 +1281,8 @@ def api_get_finding(
     try:
         remediation = RemediationEngine.generate_remediation(finding_dict)
         finding_dict["remediation_guide"] = remediation
-    except Exception:
+    except Exception as _rem_err:
+        LOGGER.warning("remediation.guide_failed", finding_id=finding_id, error=str(_rem_err))
         finding_dict["remediation_guide"] = {}
     return finding_dict
 

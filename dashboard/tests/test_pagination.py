@@ -108,8 +108,8 @@ def test_scans_paginator_basic():
     conn.close()
 
 
-def test_scans_paginator_policy_filter():
-    """Test scans pagination with policy_status filter."""
+def _make_full_scans_db(rows: list[tuple]) -> sqlite3.Connection:
+    """Helper: create an in-memory scans DB matching the production schema."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.execute("""
@@ -129,17 +129,20 @@ def test_scans_paginator_policy_filter():
             error_message TEXT
         )
     """)
-    for i in range(5):
+    for row in rows:
         conn.execute(
-            "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, 'repository', 'COMPLETED_CLEAN', 'PASS', datetime('now'))",
-            (i, f"pass-{i}"),
-        )
-    for i in range(5, 8):
-        conn.execute(
-            "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, 'repository', 'COMPLETED_WITH_FINDINGS', 'BLOCK', datetime('now'))",
-            (i, f"block-{i}"),
+            "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            row,
         )
     conn.commit()
+    return conn
+
+
+def test_scans_paginator_policy_filter():
+    """Test scans pagination with policy_status filter."""
+    pass_rows = [(i, f"pass-{i}", "repository", "COMPLETED_CLEAN", "PASS") for i in range(5)]
+    block_rows = [(i, f"block-{i}", "repository", "COMPLETED_WITH_FINDINGS", "BLOCK") for i in range(5, 8)]
+    conn = _make_full_scans_db(pass_rows + block_rows)
     paginator = ScansPaginator(per_page=20)
     pass_result = paginator.paginate(conn, policy_filter="PASS")
     assert len(pass_result["items"]) == 5

@@ -5,6 +5,35 @@ You are already inside this repository and you have already been working on it i
 Do NOT restart blindly from zero.
 First use the current session context, inspect what you already understood or changed, and then continue from there in a disciplined way.
 
+## CURRENT STATE (as of 2026-03-12) — do not redo this work
+
+All phases have been executed and committed to `claude/security-platform-review-MqdAz`.
+Do not re-audit or re-implement the items listed below.
+
+### Completed
+- Phase 1: full repository audit
+- Phase 2: WAL mode, non-root Dockerfile, Docker healthchecks, SSRF protection on webhooks,
+  RBAC privilege ceiling, badge endpoint auth, findings cap, audit endpoint
+- Phase 3: full Italian→English UI translation across app.html, app.js, findings.html,
+  scans.html, login.html; severity/status badges; empty states; login page polish
+- Structured JSON logging via structlog (logging_config.py)
+- app.py decomposed: rate_limit.py and scan_runner.py extracted
+- Startup security warnings for weak SESSION_SECRET / DASHBOARD_PASSWORD
+- Swallowed remediation exception now logged
+- Test isolation bug fixed (conftest.py teardown)
+- Rate limit defaults configurable via env vars (DASHBOARD_RATE_LIMIT_REQUESTS, etc.)
+- Webhook retry with exponential backoff already implemented (WEBHOOK_RETRY_COUNT env var)
+- Dead templates index.html and index-vue.html removed
+- findings.html: remaining Italian translated, pagination added (page/per_page query params)
+- app.html: lang="en", Chart.js onerror fallback added
+- app.js: Chart.js availability guard, remaining Italian toast fixed
+
+### All 228 tests passing as of last verified run
+
+### Remaining known gaps (low priority)
+- Analytics page table fallback when JS is disabled entirely (noscript)
+- Findings fallback template per_page is capped at 200 server-side
+
 ## Repository goal
 Improve the dashboard's visual quality and UX, identify and fix the actual bugs in the project, harden the app where needed, and keep the existing architecture stable and maintainable.
 

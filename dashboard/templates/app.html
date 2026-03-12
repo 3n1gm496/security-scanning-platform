@@ -16,6 +16,7 @@
     src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"
     integrity="sha384-e6cc9LaIG7xZ3XD5B+jtr1NhTWPQGQdRCh6xiZ+ZFUtWCpg4ycv3Sh+SkZoopvUY"
     crossorigin="anonymous"
+    onerror="window.__CHARTJS_FAILED=true"
   ></script>
 </head>
 <body>
@@ -208,8 +209,14 @@
           </div>
         </div>
 
+        <!-- Chart.js CDN failure notice -->
+        <div v-if="!chartsAvailable" class="card" style="border-left:4px solid #f59e0b;padding:16px 20px;display:flex;align-items:center;gap:12px;">
+          <span style="font-size:20px">⚠️</span>
+          <span>Charts unavailable — Chart.js could not be loaded from CDN. Check your network connection or CSP policy. Data tables remain accessible on this page.</span>
+        </div>
+
         <!-- Trend chart (full width — most important for situational awareness) -->
-        <div class="card chart-card">
+        <div class="card chart-card" v-if="chartsAvailable">
           <div class="card-header">
             <h2>Scan &amp; Finding Trend (14 days)</h2>
           </div>
@@ -219,7 +226,7 @@
         </div>
 
         <!-- Detail charts row -->
-        <div class="chart-grid">
+        <div class="chart-grid" v-if="chartsAvailable">
           <div class="card chart-card">
             <div class="card-header">
               <h2>Severity Distribution</h2>
@@ -311,12 +318,12 @@
           </div>
           <!-- Compare bar -->
           <div class="compare-bar" v-if="selectedScans.length > 0">
-            <span class="compare-info">{{ selectedScans.length }} scan(s) selected</span>
+            <span class="compare-info">{{ selectedScans.length }} scan{{ selectedScans.length === 1 ? '' : 's' }} selected</span>
             <button class="btn-primary btn-sm" @click="goToCompare" :disabled="selectedScans.length !== 2">
               <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="margin-right:4px"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               Compare (select 2)
             </button>
-            <button class="btn-secondary btn-sm" @click="selectedScans = []">Deselect</button>
+            <button class="btn-secondary btn-sm" @click="selectedScans = []">Deselect all</button>
           </div>
         </div>
 
@@ -550,9 +557,15 @@
            PAGE: ANALYTICS
       ================================================================ -->
       <div v-if="currentPage === 'analytics'" class="page-content">
-        <div class="chart-grid">
+        <!-- Chart.js CDN failure notice -->
+        <div v-if="!chartsAvailable" class="card" style="border-left:4px solid #f59e0b;padding:16px 20px;display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <span style="font-size:20px">⚠️</span>
+          <span>Charts unavailable — Chart.js could not be loaded from CDN. Tabular data below is still accessible.</span>
+        </div>
+
+        <div class="chart-grid" v-if="chartsAvailable">
           <div class="card chart-card">
-            <div class="card-header"><h2>Distribuzione Risk Score</h2></div>
+            <div class="card-header"><h2>Risk Score Distribution</h2></div>
             <div class="chart-container"><canvas ref="riskChart"></canvas></div>
             <div class="chart-stat" v-if="analyticsData.riskDistribution">
               Avg Risk: <strong>{{ analyticsData.riskDistribution.average_risk }}/100</strong>
@@ -1046,7 +1059,7 @@
               <div class="detail-section">
                 <h3>Scan Details</h3>
                 <div class="detail-row"><span class="detail-key">Scan ID</span><span class="detail-val"><code>{{ selectedScan.id }}</code></span></div>
-                <div class="detail-row"><span class="detail-key">Tipo</span><span class="detail-val">{{ selectedScan.target_type }}</span></div>
+                <div class="detail-row"><span class="detail-key">Type</span><span class="detail-val">{{ selectedScan.target_type }}</span></div>
                 <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status ? selectedScan.policy_status.toUpperCase() : '—' }}</span></span></div>
                 <div class="detail-row"><span class="detail-key">Total Findings</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
                 <div class="detail-row"><span class="detail-key">Critical</span><span class="detail-val"><span class="sev-pill sev-critical" v-if="selectedScan.critical_count > 0">{{ selectedScan.critical_count }}</span><span v-else>0</span></span></div>

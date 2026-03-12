@@ -74,6 +74,48 @@ def list_scans(
     return [dict(row) for row in rows]
 
 
+def _findings_where_clause(
+    severity: str | None,
+    tool: str | None,
+    target: str | None,
+    scan_id: str | None,
+    category: str | None,
+) -> tuple[str, list[Any]]:
+    """Build the shared WHERE clause and params for findings queries."""
+    clause = "WHERE 1=1"
+    params: list[Any] = []
+    if severity:
+        clause += " AND severity = ?"
+        params.append(severity)
+    if tool:
+        clause += " AND tool = ?"
+        params.append(tool)
+    if target:
+        clause += " AND target_name = ?"
+        params.append(target)
+    if scan_id:
+        clause += " AND scan_id = ?"
+        params.append(scan_id)
+    if category:
+        clause += " AND category = ?"
+        params.append(category)
+    return clause, params
+
+
+def count_findings(
+    db_path: str,
+    severity: str | None = None,
+    tool: str | None = None,
+    target: str | None = None,
+    scan_id: str | None = None,
+    category: str | None = None,
+) -> int:
+    clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
+    with _conn(db_path) as conn:
+        row = conn.execute(f"SELECT COUNT(*) AS n FROM findings {clause}", params).fetchone()
+    return int(row["n"])
+
+
 def list_findings(
     db_path: str,
     limit: int = 500,
@@ -82,26 +124,11 @@ def list_findings(
     target: str | None = None,
     scan_id: str | None = None,
     category: str | None = None,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
-    query = "SELECT * FROM findings WHERE 1=1"
-    params: list[Any] = []
-    if severity:
-        query += " AND severity = ?"
-        params.append(severity)
-    if tool:
-        query += " AND tool = ?"
-        params.append(tool)
-    if target:
-        query += " AND target_name = ?"
-        params.append(target)
-    if scan_id:
-        query += " AND scan_id = ?"
-        params.append(scan_id)
-    if category:
-        query += " AND category = ?"
-        params.append(category)
-    query += " ORDER BY timestamp DESC, severity DESC LIMIT ?"
-    params.append(limit)
+    clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
+    query = f"SELECT * FROM findings {clause} ORDER BY timestamp DESC, severity DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
     with _conn(db_path) as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]

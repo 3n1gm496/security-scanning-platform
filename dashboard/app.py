@@ -28,6 +28,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from db import (
     cache_hit_stats,
     cache_hit_trend,
+    count_findings,
     distinct_targets,
     distinct_tools,
     fetch_kpis,
@@ -363,6 +364,10 @@ def scans_page(
     )
 
 
+_FINDINGS_PAGE_SIZE = 50
+_FINDINGS_MAX_PAGE_SIZE = 200
+
+
 @app.get("/findings", response_class=HTMLResponse)
 def findings_page(
     request: Request,
@@ -371,17 +376,21 @@ def findings_page(
     target: str | None = None,
     scan_id: str | None = None,
     category: str | None = None,
+    page: int = 1,
+    per_page: int = _FINDINGS_PAGE_SIZE,
     user: str = Depends(get_current_user),
 ) -> HTMLResponse:
-    findings = list_findings(
-        DB_PATH,
-        500,
-        severity=severity,
-        tool=tool,
-        target=target,
-        scan_id=scan_id,
-        category=category,
-    )
+    page = max(1, page)
+    per_page = max(1, min(per_page, _FINDINGS_MAX_PAGE_SIZE))
+    offset = (page - 1) * per_page
+
+    filter_kwargs = dict(severity=severity, tool=tool, target=target, scan_id=scan_id, category=category)
+    total = count_findings(DB_PATH, **filter_kwargs)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    offset = (page - 1) * per_page
+
+    findings = list_findings(DB_PATH, per_page, offset=offset, **filter_kwargs)
 
     for finding in findings:
         raw_remediation = (finding.get("remediation") or "").strip()
@@ -389,7 +398,11 @@ def findings_page(
             finding["remediation_display"] = raw_remediation
             continue
 
-        remediation_guide = RemediationEngine.generate_remediation(finding)
+        try:
+            remediation_guide = RemediationEngine.generate_remediation(finding)
+        except Exception as _rem_err:
+            LOGGER.warning("remediation.guide_failed", finding_id=finding.get("id"), error=str(_rem_err))
+            remediation_guide = {}
         steps = remediation_guide.get("steps") or []
         if steps:
             finding["remediation_display"] = steps[0]
@@ -409,6 +422,10 @@ def findings_page(
             "selected_target": target,
             "selected_scan_id": scan_id,
             "selected_category": category,
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages,
         },
     )
 

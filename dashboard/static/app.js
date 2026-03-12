@@ -64,6 +64,7 @@ createApp({
       // ── Global state
       loading: false,
       autoRefresh: true,
+      chartsAvailable: typeof window.Chart !== 'undefined' && !window.__CHARTJS_FAILED,
       refreshInterval: null,
       toasts: [],
       toastCounter: 0,
@@ -393,6 +394,7 @@ createApp({
     // ── Dashboard Charts ──────────────────────────────────────────────────────
 
     async initDashboardCharts() {
+      if (!this.chartsAvailable) return;
       if (this._chartsBuilding) return;
       this._chartsBuilding = true;
       try {
@@ -829,11 +831,13 @@ createApp({
           apiFetch('/api/analytics/tool-effectiveness'),
         ]);
         this.analyticsData = { riskDistribution: riskDist, compliance, trends, targetRisk, toolEffectiveness };
-        await nextTick();
-        this.buildRiskChart();
-        this.buildOwaspChart();
-        this.buildAnalyticsTrendChart();
-        this.buildToolEffChart();
+        if (this.chartsAvailable) {
+          await nextTick();
+          this.buildRiskChart();
+          this.buildOwaspChart();
+          this.buildAnalyticsTrendChart();
+          this.buildToolEffChart();
+        }
       } catch (e) {
         this.showToast('Failed to load analytics: ' + e.message, 'error');
       } finally {

@@ -1,9 +1,9 @@
 # Changelog
 
-Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
+All notable changes to this project are documented in this file.
 
-Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e il progetto adotta
-[Semantic Versioning](https://semver.org/lang/it/).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project uses
+[Semantic Versioning](https://semver.org/).
 
 ---
 
@@ -11,245 +11,217 @@ Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e il p
 
 ## [1.5.1] — 2026-03-11
 
-Release di correzioni mirate: compatibilità WSL2/Docker Desktop, bug UI/UX della dashboard.
+Release with targeted fixes: WSL2/Docker Desktop compatibility, dashboard UI/UX bugs.
 
 ### Fixed
 
-- **`docker-compose.yml`**: rimosso `network_mode: host` e `network: host` dal build del servizio `dashboard` e `orchestrator`. Questi causavano l'errore "connessione negata" su WSL2 e Docker Desktop (Windows/Mac), dove `network: host` non è supportato. La porta viene ora esposta correttamente tramite port mapping standard (`${DASHBOARD_PORT:-8080}:8080`).
-- **`docker-compose.ci.yml`** (nuovo): file di override dedicato agli ambienti CI/sandbox che non supportano `iptables raw`. Da usare solo in CI: `docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d`.
-- **Dashboard — Grafico "Progresso Remediation" sempre vuoto**: il codice JS cercava `pagination.total` ma l'API `/api/findings/paginated` restituisce `pagination.count`. Il grafico ora mostra correttamente i conteggi per status.
-- **Dashboard — Confronto scansioni non mostrava risultati**: la funzione `runCompare()` non mappava correttamente la risposta dell'API `/api/scans/{id}/compare` (struttura `diff.new_count` vs `summary.new`). La normalizzazione è ora corretta.
-- **Dashboard — Campo email notifiche pre-popolato con nome utente**: il campo `user_email` in Settings → Notifiche mostrava `"admin"` (identificatore interno) invece di essere vuoto. Il JS ora ignora il valore se non contiene `@`.
+- **`docker-compose.yml`**: removed `network_mode: host` and `network: host` from `dashboard` and `orchestrator` service builds. These caused "connection refused" errors on WSL2 and Docker Desktop (Windows/Mac), where `network: host` is not supported. The port is now correctly exposed via standard port mapping (`${DASHBOARD_PORT:-8080}:8080`).
+- **`docker-compose.ci.yml`** (new): dedicated override file for CI/sandbox environments that don't support `iptables raw`. Use only in CI: `docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d`.
+- **Dashboard — "Remediation Progress" chart always empty**: the JS code was looking for `pagination.total` but the `/api/findings/paginated` API returns `pagination.count`. The chart now correctly shows counts by status.
+- **Dashboard — Scan comparison showed no results**: the `runCompare()` function was not correctly mapping the `/api/scans/{id}/compare` API response (structure `diff.new_count` vs `summary.new`). Normalization is now correct.
+- **Dashboard — Notification email field pre-populated with username**: the `user_email` field in Settings → Notifications showed `"admin"` (internal identifier) instead of being empty. The JS now ignores the value if it doesn't contain `@`.
 
 ## [1.5.0] — 2026-03-10
 
-Questa release si concentra sul **miglioramento radicale della qualità e dell'affidabilità dell'orchestratore** attraverso un aumento massiccio della test coverage, che passa dal 72% a oltre l'86%. Sono stati aggiunti 100 nuovi test, portando il totale a 359.
+This release focuses on **radically improving the quality and reliability of the orchestrator** through a massive increase in test coverage, going from 72% to over 86%. 100 new tests were added, bringing the total to 359.
 
 ### Added
 
-- **Aggiunti 100 nuovi test per l'orchestratore**:
-  - **`test_normalizers_extended.py`**: 34 nuovi test per le funzioni di normalizzazione (`normalize_trivy`, `normalize_gitleaks`, `normalize_checkov`) e le funzioni helper (`_severity`, `_fingerprint`, `_rel_path`).
-  - **`test_scanners_extended.py`**: 41 nuovi test per i wrapper degli scanner (`run_semgrep`, `run_trivy_fs`, `run_trivy_image`, `run_gitleaks`, `run_checkov`, `run_syft`), utilizzando mock per simulare l'esecuzione dei comandi e gestire i codici di uscita.
-  - **`test_db_adapter.py`**: 25 nuovi test per il modulo `db_adapter`, validando le classi wrapper per connessione e cursore in modalità SQLite.
-- **Diagramma di architettura aggiornato**: Creato un nuovo diagramma di flusso con Mermaid per rappresentare in modo più chiaro le interazioni tra i componenti.
+- **Added 100 new tests for the orchestrator**:
+  - **`test_normalizers_extended.py`**: 34 new tests for normalization functions (`normalize_trivy`, `normalize_gitleaks`, `normalize_checkov`) and helper functions (`_severity`, `_fingerprint`, `_rel_path`).
+  - **`test_scanners_extended.py`**: 41 new tests for scanner wrappers (`run_semgrep`, `run_trivy_fs`, `run_trivy_image`, `run_gitleaks`, `run_checkov`, `run_syft`), using mocks to simulate command execution and handle exit codes.
+  - **`test_db_adapter.py`**: 25 new tests for the `db_adapter` module, validating connection and cursor wrapper classes in SQLite mode.
+- **Updated architecture diagram**: Created a new Mermaid flow diagram to more clearly represent component interactions.
 
 ### Changed
 
-- **Test Coverage Orchestratore**: Aumentata la test coverage del modulo orchestratore dal **72.13%** all'**86.76%**.
-- **Totale Test**: Il numero totale di test per l'intero progetto è ora di **359** (194 per il dashboard + 165 per l'orchestratore).
+- **Orchestrator Test Coverage**: Increased orchestrator module test coverage from **72.13%** to **86.76%**.
+- **Total Tests**: The total number of tests for the entire project is now **359** (194 for the dashboard + 165 for the orchestrator).
 
 ### Removed
 
-- **Endpoint Deprecati**: Rimossi gli endpoint `/api/findings/by-status` e `/api/findings/stats-by-status` che erano stati sostituiti dalla paginazione basata su cursore.
+- **Deprecated Endpoints**: Removed `/api/findings/by-status` and `/api/findings/stats-by-status` endpoints that had been replaced by cursor-based pagination.
 
 ### Fixed
 
-- **Test `test_semgrep_rate_limit_raises`**: Corretto il test per gestire correttamente l'eccezione `tenacity.RetryError` sollevata dopo il fallimento dei tentativi di retry, garantendo la robustezza del test.
+- **Test `test_semgrep_rate_limit_raises`**: Fixed the test to correctly handle the `tenacity.RetryError` exception raised after retry attempts fail, ensuring test robustness.
 
 ---
 
 ## [1.4.0] — 2026-03-10
 
-Questa release è il risultato di un secondo audit maniacale completo della codebase, focalizzato su sicurezza, qualità del codice, test coverage e edge case. Sono stati corretti 5 bug critici di sicurezza e 6 problemi di qualità del codice.
+This release is the result of a thorough complete audit of the codebase, focused on security, code quality, test coverage, and edge cases. 5 critical security bugs and 6 code quality issues were fixed.
 
 ### Security (S)
 
-- **S1 — Aggiunto Subresource Integrity (SRI) per i CDN**: Aggiunti hash `integrity` ai tag `<script>` per Vue.js e Chart.js, prevenendo il caricamento di risorse compromesse (XSS).
-- **S2 — Aggiunto `Permissions-Policy` header**: Limita l'accesso a feature sensibili del browser (es. `geolocation=()`, `microphone=()`), riducendo la superficie d'attacco.
-- **S3 — Encoding email nel link unsubscribe**: L'email dell'utente viene ora codificata con `urllib.parse.quote_plus` prima di essere inserita nel link, prevenendo problemi con caratteri speciali.
-- **S4 — Validazione `sort_by` in `BasePaginator`**: Aggiunta una whitelist di colonne valide per prevenire SQL injection nel `ORDER BY`.
-- **S5 — Cookie di sessione `HttpOnly`**: Il cookie di sessione è ora `HttpOnly` di default, prevenendo l'accesso da JavaScript (XSS).
+- **S1 — Added Subresource Integrity (SRI) for CDNs**: Added `integrity` hashes to `<script>` tags for Vue.js and Chart.js, preventing loading of compromised resources (XSS).
+- **S2 — Added `Permissions-Policy` header**: Restricts access to sensitive browser features (e.g. `geolocation=()`, `microphone=()`), reducing the attack surface.
+- **S3 — Email encoding in unsubscribe link**: The user email is now encoded with `urllib.parse.quote_plus` before being inserted in the link, preventing issues with special characters.
+- **S4 — `sort_by` validation in `BasePaginator`**: Added a whitelist of valid columns to prevent SQL injection in `ORDER BY`.
+- **S5 — Session cookie `HttpOnly`**: The session cookie is now `HttpOnly` by default, preventing JavaScript access (XSS).
 
 ### Code Quality (Q)
 
-- **Q1 — Workspace cleanup nell'orchestratore**: Aggiunto un blocco `try...finally` in `prepare_target` per garantire che la directory di lavoro temporanea venga sempre rimossa, anche in caso di errore durante il clone git.
-- **Q2 — Catch silenzioso in `evaluate_policy`**: Aggiunto un log `warning` quando il file di policy non viene trovato, invece di fallire silenziosamente.
-- **Q3 — Timeout globale per `fetch`**: Aggiunto un timeout di 30 secondi a tutte le chiamate `fetch` nel frontend tramite `AbortController`, prevenendo richieste bloccate a tempo indeterminato.
-- **Q4 — Catch silenziosi nel frontend**: Corretti 3 `catch` silenziosi in `app.js` aggiungendo `console.debug` per loggare gli errori in modalità debug.
-- **Q5 — Test coverage gaps**: Aggiunti 15 nuovi test in `test_coverage_gaps.py` per coprire le aree non testate di `db.py`, `finding_management.py` e gli endpoint non coperti di `app.py`.
-- **Q6 — Dipendenze di test non pinnate**: Aggiunto `requirements-test.in` all'orchestratore per pinnare anche le dipendenze di test.
+- **Q1 — Workspace cleanup in orchestrator**: Added a `try...finally` block in `prepare_target` to ensure the temporary working directory is always removed, even in case of errors during git clone.
+- **Q2 — Silent catch in `evaluate_policy`**: Added a `warning` log when the policy file is not found, instead of failing silently.
+- **Q3 — Global timeout for `fetch`**: Added a 30-second timeout to all `fetch` calls in the frontend via `AbortController`, preventing requests blocked indefinitely.
+- **Q4 — Silent catches in frontend**: Fixed 3 silent `catch` blocks in `app.js` by adding `console.debug` to log errors in debug mode.
+- **Q5 — Test coverage gaps**: Added 15 new tests in `test_coverage_gaps.py` to cover untested areas of `db.py`, `finding_management.py`, and uncovered endpoints of `app.py`.
+- **Q6 — Unpinned test dependencies**: Added `requirements-test.in` to the orchestrator to also pin test dependencies.
 
 ---
 
 ## [1.3.0] — 2026-03-10
 
-Questa release risolve **11 bug** scoperti durante un audit maniacale completo della codebase (backend, frontend, orchestratore, Docker, CI). Il container è ora self-contained con tutti gli scanner installati.
+This release fixes **11 bugs** discovered during a thorough complete audit of the codebase (backend, frontend, orchestrator, Docker, CI). The container is now self-contained with all scanners installed.
 
 ### Fixed
 
-- **B1 — `AttributeError` a runtime in `api_update_finding_status`**: il parametro Form `status` collideva con il modulo `fastapi.status` importato nello stesso scope. Rinominato in `status_value`.
-- **B2 — `scan_id` dichiarato `int` invece di `str` (UUID)**: il database usa UUID come TEXT; il tipo errato causava zero risultati per qualsiasi filtro per scan. Corretto in `app.py` (route export e paginate) e in `pagination.py`.
-- **B3 — Pulsante "Findings" nella lista scansioni non funzionava**: `viewScanFindings()` impostava `findingsFilter.search` invece di `findingsFilter.scan_id`; l'endpoint `/api/findings/paginated` non accettava il parametro `scan_id`. Entrambi corretti.
-- **B4 — `triggerScan()` inviava JSON invece di `FormData`**: il backend usa `Form(...)` per tutti i parametri; il frontend inviava `Content-Type: application/json` causando 422 Unprocessable Entity.
-- **B5 — Modal "Nuova scansione" non si chiudeva** dopo il trigger riuscito. Aggiunto `this.showScanModal = false` nel callback di successo.
-- **B6 — `findingsSort` non definito in `data()`**: `sortTable()` falliva silenziosamente con `TypeError`. Aggiunto `findingsSort: { column: 'id', order: 'ASC' }` in `data()`.
-- **B7 — Default `enabled=True` per scanner non presenti in `settings.yaml`**: scanner non installati venivano chiamati e fallivano. Cambiato default a `False` in `orchestrator/main.py`.
-- **B8 — `unzip` mancante nell'immagine Docker slim**: il layer di installazione di nuclei falliva con `unzip: not found`. Aggiunto `unzip` alle dipendenze apt.
-- **B9 — Container Docker non includeva i binari scanner**: tutte le scansioni risultavano `PARTIAL_FAILED`. Il Dockerfile ora installa gitleaks v8.30.0, trivy v0.69.3, syft v1.42.2, grype v0.109.1, nuclei v3.7.1 (versioni pinnate) e semgrep + checkov via pip.
-- **B10 — `settings.yaml` con tutti gli scanner disabilitati**: ripristinato con `enabled: true` per tutti gli scanner; `owasp_zap` rimane `false` per default con commento esplicativo sui prerequisiti.
-- **B11 — CI workflow usava `context: ./dashboard`**: il Dockerfile aggiornato copia `orchestrator/` dalla root del progetto; il context del build è stato aggiornato a `.` (root).
+- **B1 — `AttributeError` at runtime in `api_update_finding_status`**: the `status` Form parameter collided with the `fastapi.status` module imported in the same scope. Renamed to `status_value`.
+- **B2 — `scan_id` declared as `int` instead of `str` (UUID)**: the database uses UUID as TEXT; the wrong type caused zero results for any scan filter. Fixed in `app.py` (export and paginate routes) and in `pagination.py`.
+- **B3 — "Findings" button in scan list didn't work**: `viewScanFindings()` was setting `findingsFilter.search` instead of `findingsFilter.scan_id`; the `/api/findings/paginated` endpoint didn't accept the `scan_id` parameter. Both fixed.
+- **B4 — `triggerScan()` sent JSON instead of `FormData`**: the backend uses `Form(...)` for all parameters; the frontend was sending `Content-Type: application/json` causing 422 Unprocessable Entity.
+- **B5 — "New Scan" modal didn't close** after successful trigger. Added `this.showScanModal = false` in the success callback.
+- **B6 — `findingsSort` not defined in `data()`**: `sortTable()` was silently failing with `TypeError`. Added `findingsSort: { column: 'id', order: 'ASC' }` in `data()`.
+- **B7 — Default `enabled=True` for scanners not present in `settings.yaml`**: uninstalled scanners were being called and failing. Changed default to `False` in `orchestrator/main.py`.
+- **B8 — `unzip` missing in Docker slim image**: the nuclei installation layer failed with `unzip: not found`. Added `unzip` to apt dependencies.
+- **B9 — Docker container didn't include scanner binaries**: all scans resulted in `PARTIAL_FAILED`. The Dockerfile now installs gitleaks v8.30.0, trivy v0.69.3, syft v1.42.2, grype v0.109.1, nuclei v3.7.1 (pinned versions) and semgrep + checkov via pip.
+- **B10 — `settings.yaml` with all scanners disabled**: restored with `enabled: true` for all scanners; `owasp_zap` remains `false` by default with an explanatory comment about prerequisites.
+- **B11 — CI workflow used `context: ./dashboard`**: the updated Dockerfile copies `orchestrator/` from the project root; the build context was updated to `.` (root).
 
 ### Added
 
-- Badge `scan_id` nella barra filtri della pagina Findings: mostra l'UUID troncato con pulsante ✕ per rimuovere il filtro; visibile solo quando il filtro scan è attivo.
-- CSS per `.filter-scan-id`, `.scan-id-badge`, `.btn-icon-sm`.
+- `scan_id` badge in the Findings page filter bar: shows the truncated UUID with an ✕ button to remove the filter; visible only when the scan filter is active.
+- CSS for `.filter-scan-id`, `.scan-id-badge`, `.btn-icon-sm`.
 
 ---
 
 ## [1.2.0] — 2026-03-10
 
-Questa release completa la modernizzazione del frontend e degli endpoint API, allineando la paginazione, correggendo le preferenze di notifica e migliorando la compatibilità con Docker in ambienti sandbox.
+This release completes the frontend and API endpoint modernization, aligning pagination, fixing notification preferences, and improving Docker compatibility in sandbox environments.
 
 ### Added
 
-- **Filtro per stato nella paginazione dei findings**: Aggiunto parametro `status` alla route `GET /api/findings/paginated` e al `FindingsPaginator` per filtrare i risultati per stato di triage (`open`, `resolved`, `in_progress`, etc.).
-- **Test di integrazione per filtro stato**: Aggiunto `test_findings_paginator_with_status_filter` per validare il nuovo filtro.
-- **Test di integrazione per preferenze notifiche**: Aggiunto `test_notification_preferences_api_flow` per un test E2E del salvataggio e recupero delle preferenze.
+- **Status filter in findings pagination**: Added `status` parameter to the `GET /api/findings/paginated` route and to `FindingsPaginator` to filter results by triage status (`open`, `resolved`, `in_progress`, etc.).
+- **Integration test for status filter**: Added `test_findings_paginator_with_status_filter` to validate the new filter.
+- **Integration test for notification preferences**: Added `test_notification_preferences_api_flow` for an E2E test of saving and retrieving preferences.
 
 ### Changed
 
-- **Allineamento paginazione frontend**: La funzione `loadFindings()` in `app.js` ora usa esclusivamente l'endpoint `/api/findings/paginated` per tutti i filtri, garantendo una paginazione cursor-based consistente.
-- **Correzione estrazione cursore**: `loadFindings()` e `loadScans()` ora estraggono correttamente `result.pagination.next_cursor` invece di `result.next_cursor`, allineandosi alla struttura della risposta del backend.
-- **Correzione endpoint notifiche**: L'endpoint per le preferenze di notifica è stato corretto da `/api/settings/notifications` a `/api/notifications/preferences` in `app.js`.
-- **Allineamento campi notifiche**: I nomi dei campi nel form delle notifiche (`app.html`) e nel modello Vue (`app.js`) sono stati allineati allo schema del backend (`notify_critical` → `critical_alerts`, etc.).
+- **Frontend pagination alignment**: The `loadFindings()` function in `app.js` now exclusively uses the `/api/findings/paginated` endpoint for all filters, ensuring consistent cursor-based pagination.
+- **Cursor extraction fix**: `loadFindings()` and `loadScans()` now correctly extract `result.pagination.next_cursor` instead of `result.next_cursor`, aligning with the backend response structure.
+- **Notification endpoint fix**: The notification preferences endpoint was corrected from `/api/settings/notifications` to `/api/notifications/preferences` in `app.js`.
+- **Notification field alignment**: Field names in the notification form (`app.html`) and Vue model (`app.js`) were aligned with the backend schema (`notify_critical` → `critical_alerts`, etc.).
 
 ### Fixed
 
-- **Compatibilità Docker in sandbox**: Abilitato `network_mode: "host"` nel `docker-compose.yml` per il servizio `dashboard`, risolvendo l'errore di creazione della rete in ambienti senza supporto per `iptables raw`.
+- **Docker sandbox compatibility**: Enabled `network_mode: "host"` in `docker-compose.yml` for the `dashboard` service, resolving the network creation error in environments without `iptables raw` support.
 
 ---
 
 ## [1.1.0] — 2026-03-09
 
-Questa release consolida i risultati della **due diligence tecnica** condotta sul codebase.
-Tutte le modifiche sono state introdotte tramite Pull Request con CI verde prima del merge.
+This release consolidates the results of the **technical due diligence** conducted on the codebase.
+All changes were introduced through Pull Requests with green CI before merge.
 
-### Sicurezza (P0)
+### Security (P0)
 
-#### fix(security): path traversal su `/api/scan/trigger` — PR #1
+#### fix(security): path traversal on `/api/scan/trigger` — PR #1
 
-- Aggiunta validazione e sanitizzazione degli input `target`, `name` e `target_type`
-  nell'endpoint `/api/scan/trigger` del dashboard.
-- I path locali vengono ora risolti con `os.path.realpath` e verificati contro
-  `WORKSPACE_DIR` configurato: qualsiasi tentativo di uscire dalla directory di lavoro
-  restituisce `HTTP 400`.
-- I nomi dei target sono sanitizzati con una whitelist di caratteri sicuri.
-- Aggiunti 12 test dedicati in `dashboard/tests/test_scan_trigger.py`.
-- Corretti contestualmente: `orchestrator/requirements.txt` (aggiunto `tenacity`),
-  `orchestrator/Dockerfile` e `docker-compose.yml` allineati al contesto di build
-  `./orchestrator` usato dalla CI.
+- Added input validation and sanitization for `target`, `name`, and `target_type` in the `/api/scan/trigger` dashboard endpoint.
+- Local paths are now resolved with `os.path.realpath` and verified against the configured `WORKSPACE_DIR`: any attempt to escape the working directory returns `HTTP 400`.
+- Target names are sanitized with a safe character whitelist.
+- Added 12 dedicated tests in `dashboard/tests/test_scan_trigger.py`.
+- Also fixed: `orchestrator/requirements.txt` (added `tenacity`), `orchestrator/Dockerfile` and `docker-compose.yml` aligned to the `./orchestrator` build context used by CI.
 
-#### feat(security): rate limiting robusto su login e API — PR #2
+#### feat(security): robust rate limiting on login and API — PR #2
 
-- Il rate limiter in-memory ora protegge anche l'endpoint `/login`
-  (limite separato: 10 richieste/minuto per IP).
-- Aggiunta pulizia periodica del dizionario `defaultdict(deque)` tramite
-  `threading.Timer` per prevenire memory leak con molti IP distinti.
-- Corretti contestualmente tutti i warning `flake8` preesistenti in
-  `charting.py`, `finding_management.py`, `notifications.py` e `remediation.py`.
-- Aggiunti 8 test dedicati in `dashboard/tests/test_rate_limiting.py`.
+- The in-memory rate limiter now also protects the `/login` endpoint (separate limit: 10 requests/minute per IP).
+- Added periodic cleanup of the `defaultdict(deque)` dictionary via `threading.Timer` to prevent memory leaks with many distinct IPs.
+- Also fixed all pre-existing `flake8` warnings in `charting.py`, `finding_management.py`, `notifications.py`, and `remediation.py`.
+- Added 8 dedicated tests in `dashboard/tests/test_rate_limiting.py`.
 
-#### feat(security): hashing password con bcrypt — PR #3
+#### feat(security): password hashing with bcrypt — PR #3
 
-- La verifica della password ora supporta hash bcrypt nell'env var
-  `DASHBOARD_PASSWORD` (formato `$2b$...`).
-- Retrocompatibilità garantita: se la variabile contiene una password in chiaro,
-  viene confrontata con `secrets.compare_digest` e viene emesso un warning di
-  deprecazione nel log.
-- Aggiunto `bcrypt>=4.0.0` ai `dashboard/requirements.txt`.
-- Aggiunti 10 test dedicati in `dashboard/tests/test_password_hashing.py`.
+- Password verification now supports bcrypt hashes in the `DASHBOARD_PASSWORD` env var (format `$2b$...`).
+- Backward compatibility guaranteed: if the variable contains a plaintext password, it's compared with `secrets.compare_digest` and a deprecation warning is logged.
+- Added `bcrypt>=4.0.0` to `dashboard/requirements.txt`.
+- Added 10 dedicated tests in `dashboard/tests/test_password_hashing.py`.
 
-### Architettura (P1)
+### Architecture (P1)
 
-#### feat(arch): thread pool bounded per scan async + security headers — PR #4
+#### feat(arch): bounded thread pool for async scans + security headers — PR #4
 
-- Sostituito `threading.Thread` illimitato con `concurrent.futures.ThreadPoolExecutor`
-  con dimensione massima configurabile via `MAX_SCAN_WORKERS` (default: 4).
-- Aggiunti gli header di sicurezza mancanti nel middleware:
+- Replaced unlimited `threading.Thread` with `concurrent.futures.ThreadPoolExecutor` with configurable maximum size via `MAX_SCAN_WORKERS` (default: 4).
+- Added missing security headers in middleware:
   - `Content-Security-Policy` (default-src 'self'; script-src 'self' 'unsafe-inline')
   - `Strict-Transport-Security` (max-age=31536000; includeSubDomains)
-- Aggiunti 6 test dedicati in `dashboard/tests/test_scan_thread_pool.py`.
+- Added 6 dedicated tests in `dashboard/tests/test_scan_thread_pool.py`.
 
-#### refactor(db): centralizzazione connessioni SQLite e fix datetime — PR #5
+#### refactor(db): centralized SQLite connections and datetime fix — PR #5
 
-- `finding_management.py`, `rbac.py` e `webhooks.py` ora usano `get_connection()`
-  da `db.py` invece di chiamare `sqlite3.connect()` direttamente.
-- `get_connection()` imposta sempre `row_factory = sqlite3.Row`, garantendo
-  accesso uniforme per nome di colonna in tutto il codebase.
-- Corretto il bug in `webhooks.py`: `hmac.new()` → `hmac.new()` (era già corretto,
-  verificato che `hmac.new` è un alias valido in Python 3.11).
-- Sostituito `datetime.utcnow()` (deprecato in Python 3.12) con
-  `datetime.now(timezone.utc)` in `monitoring.py` e `charting.py`.
+- `finding_management.py`, `rbac.py`, and `webhooks.py` now use `get_connection()` from `db.py` instead of calling `sqlite3.connect()` directly.
+- `get_connection()` always sets `row_factory = sqlite3.Row`, ensuring uniform column name access throughout the codebase.
+- Fixed the bug in `webhooks.py`: `hmac.new()` → `hmac.new()` (was already correct, verified that `hmac.new` is a valid alias in Python 3.11).
+- Replaced `datetime.utcnow()` (deprecated in Python 3.12) with `datetime.now(timezone.utc)` in `monitoring.py` and `charting.py`.
 
 ### Developer Experience (P2)
 
-#### feat(dx): pinning dipendenze con pip-tools + ops.sh migliorato — PR #6
+#### feat(dx): dependency pinning with pip-tools + improved ops.sh — PR #6
 
-- Introdotto **pip-tools** per la gestione delle dipendenze:
-  - `dashboard/requirements.in` e `orchestrator/requirements.in` come file sorgente
-  - `dashboard/requirements-test.in` e `orchestrator/requirements-test.in` per le
-    dipendenze di test
-  - I `requirements.txt` sono ora generati con `pip-compile` e contengono versioni
-    pinnate di tutte le dipendenze transitive
-- `scripts/ops.sh` — nuovi comandi aggiunti:
-  - `test [dashboard|orchestrator]` — esegue pytest con coverage
-  - `lint [--fix]` — flake8 + black check (con `--fix` applica black)
-  - `deps-compile` — rigenera tutti i `requirements.txt` con pip-compile
-  - `api-key create|list|revoke` — gestione API key dalla CLI
-  - `health` migliorato: verifica anche gli endpoint `/health` e `/ready` con curl
+- Introduced **pip-tools** for dependency management:
+  - `dashboard/requirements.in` and `orchestrator/requirements.in` as source files
+  - `dashboard/requirements-test.in` and `orchestrator/requirements-test.in` for test dependencies
+  - `requirements.txt` files are now generated with `pip-compile` and contain pinned versions of all transitive dependencies
+- `scripts/ops.sh` — new commands added:
+  - `test [dashboard|orchestrator]` — run pytest with coverage
+  - `lint [--fix]` — flake8 + black check (with `--fix` applies black)
+  - `deps-compile` — regenerate all `requirements.txt` with pip-compile
+  - `api-key create|list|revoke` — API key management from CLI
+  - Improved `health`: also checks `/health` and `/ready` endpoints with curl
 
 ### CI/CD
 
 #### feat(ci): GitLab Enterprise CI/CD pipeline — PR #7
 
-- Aggiunto `.gitlab-ci.yml` con pipeline completa in 6 stage:
-  - `lint`: flake8 + black check (parallelo per orchestrator e dashboard)
-  - `test`: pytest con report JUnit e coverage Cobertura (nativi GitLab)
-  - `security`: Bandit SAST con artefatti JSON
-  - `build`: Docker build + push al GitLab Container Registry con layer caching
-    e OCI labels (`org.opencontainers.image.*`)
-  - `scan-self`: auto-scansione del repository tramite la piattaforma stessa;
-    fallisce la pipeline se la policy restituisce `BLOCK` (configurabile)
-  - `deploy`: SSH-based con `docker compose pull && up`; staging automatico su
-    `develop`, production con approvazione manuale su `main`
-  - `nightly:scan`: scansione notturna programmata (solo `schedule`)
-- Aggiunto `templates/gitlab-scan-template.yml`: template riutilizzabile per
-  altri repository del gruppo GitLab tramite `include:`.
-- Aggiunta `docs/gitlab-integration.md`: guida completa con prerequisiti,
-  setup variabili, configurazione server, GitLab Ultimate SAST, scansioni
-  notturne e troubleshooting.
+- Added `.gitlab-ci.yml` with a complete pipeline in 6 stages:
+  - `lint`: flake8 + black check (parallel for orchestrator and dashboard)
+  - `test`: pytest with JUnit report and Cobertura coverage (native GitLab)
+  - `security`: Bandit SAST with JSON artifacts
+  - `build`: Docker build + push to GitLab Container Registry with layer caching and OCI labels (`org.opencontainers.image.*`)
+  - `scan-self`: self-scanning of the repository through the platform itself; fails the pipeline if the policy returns `BLOCK` (configurable)
+  - `deploy`: SSH-based with `docker compose pull && up`; automatic staging on `develop`, production with manual approval on `main`
+  - `nightly:scan`: scheduled nightly scanning (only `schedule`)
+- Added `templates/gitlab-scan-template.yml`: reusable template for other repositories in the GitLab group via `include:`.
+- Added `docs/gitlab-integration.md`: complete guide with prerequisites, variable setup, server configuration, GitLab Ultimate SAST, nightly scans, and troubleshooting.
 
-### Documentazione
+### Documentation
 
-#### docs: aggiornamento README e CHANGELOG — PR #8
+#### docs: README and CHANGELOG update — PR #8
 
 - `README.md`:
-  - Aggiunto badge CI GitHub Actions.
-  - Sezione Features aggiornata con le nuove funzionalità di sicurezza.
-  - Sezione `ops.sh` aggiornata con i nuovi comandi (`test`, `lint`,
-    `deps-compile`, `api-key`).
-  - Sezione Sviluppo aggiornata con istruzioni per test, lint e gestione
-    dipendenze pinnate.
-  - Aggiunto link a `docs/gitlab-integration.md` nella sezione documentazione.
-- Creato `CHANGELOG.md` (questo file).
+  - Added GitHub Actions CI badge.
+  - Features section updated with new security features.
+  - `ops.sh` section updated with new commands (`test`, `lint`, `deps-compile`, `api-key`).
+  - Development section updated with instructions for testing, linting, and pinned dependency management.
+  - Added link to `docs/gitlab-integration.md` in the documentation section.
+- Created `CHANGELOG.md` (this file).
 
 ---
 
 ## [1.0.0] — 2025-01-01
 
-Versione iniziale della piattaforma.
+Initial release of the platform.
 
-### Aggiunto
+### Added
 
-- Orchestratore Python 3.11 con supporto a 10+ scanner OSS (Semgrep, Bandit,
-  Nuclei, Trivy, Grype, Gitleaks, Checkov, Syft, OWASP ZAP).
-- Dashboard FastAPI con autenticazione, RBAC, gestione finding, notifiche email,
-  webhook, export CSV/JSON, metriche Prometheus.
-- Deploy Docker Compose e systemd service/timer.
-- `scripts/ops.sh` come punto di ingresso unificato per tutte le operazioni.
-- CI GitHub Actions con test, lint, SAST e docker build.
-- Integrazione Azure DevOps (`azure-pipelines.yml.example`).
-- Demo app e script `init_demo.sh`.
+- Python 3.11 orchestrator with support for 10+ OSS scanners (Semgrep, Bandit, Nuclei, Trivy, Grype, Gitleaks, Checkov, Syft, OWASP ZAP).
+- FastAPI dashboard with authentication, RBAC, finding management, email notifications, webhooks, CSV/JSON export, Prometheus metrics.
+- Docker Compose and systemd service/timer deployment.
+- `scripts/ops.sh` as unified entry point for all operations.
+- GitHub Actions CI with test, lint, SAST, and docker build.
+- Azure DevOps integration (`azure-pipelines.yml.example`).
+- Demo app and `init_demo.sh` script.
 
 ---
 

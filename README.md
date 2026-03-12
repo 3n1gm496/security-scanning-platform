@@ -6,77 +6,77 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
-Piattaforma open source, Linux-based e CI-agnostic per security scanning centralizzato in ambienti enterprise eterogenei. Orchestrazione automatica di 10+ scanner OSS con dashboard unificata, normalizzazione dei risultati e **418 test di unità e integrazione**.
+Open-source, Linux-based, CI-agnostic platform for centralized security scanning in heterogeneous enterprise environments. Automated orchestration of 10+ OSS scanners with unified dashboard, result normalization, and **436 unit and integration tests**.
 
 🔗 **Repository:** [github.com/3n1gm496/security-scanning-platform](https://github.com/3n1gm496/security-scanning-platform)
 
 ---
 
-## 📋 Indice
+## 📋 Table of Contents
 
-- [Obiettivo](#-obiettivo)
+- [Goal](#-goal)
 - [Features](#-features)
-- [Scanner Supportati](#-scanner-supportati)
-- [Architettura](#-architettura)
+- [Supported Scanners](#-supported-scanners)
+- [Architecture](#-architecture)
 - [Quick Start](#-quick-start)
-- [Configurazione](#-configurazione)
-- [Utilizzo](#-utilizzo)
+- [Configuration](#-configuration)
+- [Usage](#-usage)
 - [Deployment](#-deployment)
 - [Hardening](#-hardening)
-- [Sviluppo](#-sviluppo)
+- [Development](#-development)
 - [Contributing](#-contributing)
-- [Licenza](#-licenza)
+- [License](#-license)
 
 ---
 
-## 🎯 Obiettivo
+## 🎯 Goal
 
-Piattaforma centralizzata, ripetibile e pragmatica per eseguire:
+A centralized, repeatable, and pragmatic platform to run:
 
-- **SAST** con **Semgrep** (repository analysis)
-- **Python-specific SAST** con **Bandit**
-- **Pattern-based discovery** con **Nuclei**
-- **SBOM-based vulnerability scanning** con **Grype**
-- **SCA / dependency scanning** con **Trivy**
-- **Secret scanning** con **Gitleaks**
-- **Container image scanning** con **Trivy**
-- **IaC scanning** con **Checkov**
-- **SBOM generation** con **Syft**
-- **DAST** (opzionale) con **OWASP ZAP**
+- **SAST** with **Semgrep** (repository analysis)
+- **Python-specific SAST** with **Bandit**
+- **Pattern-based discovery** with **Nuclei**
+- **SBOM-based vulnerability scanning** with **Grype**
+- **SCA / dependency scanning** with **Trivy**
+- **Secret scanning** with **Gitleaks**
+- **Container image scanning** with **Trivy**
+- **IaC scanning** with **Checkov**
+- **SBOM generation** with **Syft**
+- **DAST** (optional) with **OWASP ZAP**
 
-Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
+Centralized collection in **SQLite + JSON** with a unified **FastAPI dashboard**.
 
 ---
 
 ## ✨ Features
 
-- **🔄 CI-Agnostic** — Integrabile con GitLab, Jenkins, Azure DevOps, GitHub Actions o cron/systemd
-- **🐳 Containerizzato** — Deploy rapido con Docker Compose su qualsiasi server Linux
-- **📊 Dashboard Centralizzata** — API REST + UI web per visualizzare scan, findings e trend, con paginazione cursor-based e filtri per stato
-- **✅ Test Coverage Elevata** — 418 test totali, con **coverage >86%** per il modulo orchestratore.
-- **🔍 10+ Scanner OSS** — Semgrep, Bandit, Nuclei, Trivy, Grype, Gitleaks, Checkov, ZAP, Syft e altri
-- **📝 Normalizzazione Intelligente** — Output unificato in formato standard per tutti gli scanner
-- **🎯 Policy-based Blocking** — Blocco automatico della pipeline su finding critici
-- **💾 SQLite Backend** — Persistenza dati semplice, backup facili, zero dipendenze esterne
-- **🔐 Autenticazione** — Login basato su form con sessioni sicure; password con hashing bcrypt; cookie `HttpOnly`/`Secure`
+- **🔄 CI-Agnostic** — Integrates with GitLab, Jenkins, Azure DevOps, GitHub Actions, or cron/systemd
+- **🐳 Containerized** — Rapid deployment with Docker Compose on any Linux server
+- **📊 Centralized Dashboard** — REST API + web UI to view scans, findings, and trends, with cursor-based pagination and status filters
+- **✅ High Test Coverage** — 436 total tests, with **coverage >86%** for the orchestrator module
+- **🔍 10+ OSS Scanners** — Semgrep, Bandit, Nuclei, Trivy, Grype, Gitleaks, Checkov, ZAP, Syft, and more
+- **📝 Intelligent Normalization** — Unified output in a standard format for all scanners
+- **🎯 Policy-based Blocking** — Automatic pipeline blocking on critical findings
+- **💾 SQLite Backend** — Simple data persistence, easy backups, zero external dependencies
+- **🔐 Authentication** — Form-based login with secure sessions; bcrypt password hashing; `HttpOnly`/`Secure` cookies
 - **🛡️ Security Headers** — `Content-Security-Policy`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`, `Permissions-Policy`
-- **⚡ Rate Limiting** — Protezione brute-force su `/login` (10 req/min) e API (180 req/min) con sliding window
-- **🔒 Path Traversal Protection** — Validazione e sanitizzazione degli input su tutti gli endpoint di scan
-- **🚀 Batch Scanning** — Scansione multipla di target da file YAML
-- **📈 Trending e History** — Tracking storico dei finding per analisi nel tempo
-- **📧 Email Notifications** — Alert critici e preferenze di notifica granulari per utente (email, canale preferito, digest settimanali/giornalieri)
-- **📡 Prometheus Metrics** — Endpoint `/metrics` per osservabilità e monitoring
-- **🔁 GitLab Enterprise CI** — Pipeline `.gitlab-ci.yml` completa (lint → test → SAST → build → scan-self → deploy)
-- **🌙 Dark Mode** — Tema chiaro/scuro con persistenza in `localStorage`; aggiornamento automatico dei grafici al cambio tema
-- **♿ Accessibilità** — Attributi ARIA (`role`, `aria-label`, `aria-current`), supporto `prefers-reduced-motion`, navigazione da tastiera (Escape per chiudere i modali)
-- **📡 Monitoraggio Scansioni in Tempo Reale** — Polling automatico ogni 5s dopo il lancio di una scansione; banner di stato sulla dashboard; aggiornamento KPI al completamento
+- **⚡ Rate Limiting** — Brute-force protection on `/login` (10 req/min) and API (180 req/min) with sliding window
+- **🔒 Path Traversal Protection** — Input validation and sanitization on all scan endpoints
+- **🚀 Batch Scanning** — Multi-target scanning from YAML files
+- **📈 Trending and History** — Historical finding tracking for time-based analysis
+- **📧 Email Notifications** — Critical alerts and granular per-user notification preferences (email, preferred channel, weekly/daily digests)
+- **📡 Prometheus Metrics** — `/metrics` endpoint for observability and monitoring
+- **🔁 GitLab Enterprise CI** — Complete `.gitlab-ci.yml` pipeline (lint → test → SAST → build → scan-self → deploy)
+- **🌙 Dark Mode** — Light/dark theme with `localStorage` persistence; automatic chart update on theme change
+- **♿ Accessibility** — ARIA attributes (`role`, `aria-label`, `aria-current`), `prefers-reduced-motion` support, keyboard navigation (Escape to close modals)
+- **📡 Real-Time Scan Monitoring** — Automatic polling every 5s after launching a scan; status banner on the dashboard; KPI update on completion
 
 ---
 
-## 🔎 Scanner Supportati
+## 🔎 Supported Scanners
 
-| Scanner | Tipo | Linguaggi/Target | Output |
-|---------|------|------------------|--------|
+| Scanner | Type | Languages/Targets | Output |
+|---------|------|-------------------|--------|
 | **Semgrep** | SAST | Multi-language | SARIF / JSON |
 | **Bandit** | SAST | Python | JSON |
 | **Nuclei** | Pattern/CVE | Web/Network | JSON |
@@ -89,59 +89,59 @@ Raccolta centralizzata in **SQLite + JSON** con **dashboard FastAPI** unificata.
 
 ---
 
-## 🏗️ Architettura
+## 🏗️ Architecture
 
-![Diagramma Architettura Piattaforma di Scansione](docs/architecture.png)
+![Platform Architecture Diagram](docs/architecture.png)
 
-### Struttura Repository
+### Repository Structure
 
 ```text
 .
 ├── .github/workflows/       # GitHub Actions CI (test, lint, SAST, docker build)
 ├── .gitlab-ci.yml           # GitLab Enterprise CI/CD pipeline
 ├── config/
-│   ├── settings.yaml        # Configurazione scanner e policy
-│   ├── policies.yaml        # Policy di blocco pipeline
-│   └── targets.yaml         # Target batch scan
+│   ├── settings.yaml        # Scanner and policy configuration
+│   ├── policies.yaml        # Pipeline blocking policies
+│   └── targets.yaml         # Batch scan targets
 ├── dashboard/
-│   ├── app.py               # Applicazione FastAPI principale
-│   ├── db.py                # Connessione DB centralizzata
-│   ├── requirements.in      # Dipendenze sorgente (pip-tools)
-│   ├── requirements.txt     # Dipendenze pinnate (generato)
+│   ├── app.py               # Main FastAPI application
+│   ├── db.py                # Centralized DB connection
+│   ├── requirements.in      # Source dependencies (pip-tools)
+│   ├── requirements.txt     # Pinned dependencies (generated)
 │   ├── Dockerfile
 │   ├── static/
 │   ├── templates/
-│   └── tests/               # ~194 test per il dashboard
+│   └── tests/               # ~194 tests for the dashboard
 ├── orchestrator/
 │   ├── main.py
-│   ├── requirements.in      # Dipendenze sorgente (pip-tools)
-│   ├── requirements.txt     # Dipendenze pinnate (generato)
-│   └── tests/               # ~165 test per l'orchestratore
+│   ├── requirements.in      # Source dependencies (pip-tools)
+│   ├── requirements.txt     # Pinned dependencies (generated)
+│   └── tests/               # ~242 tests for the orchestrator
 ├── scripts/
-│   ├── ops.sh               # CLI unificata per tutte le operazioni
+│   ├── ops.sh               # Unified CLI for all operations
 │   ├── run_scan.sh
 │   └── schedule_scan.sh
-├── systemd/                 # Service e timer systemd
+├── systemd/                 # systemd services and timers
 ├── CHANGELOG.md
 ├── docker-compose.yml
 └── .env.example
 ```
 
-## Prerequisiti Linux
+## Linux Prerequisites
 
 - Docker Engine + Docker Compose plugin
-- accesso Internet in uscita per:
-  - download immagini / scanner al build
-  - update database Trivy
-  - fetch regole Semgrep community se si usa `p/default`
-- opzionale: accesso a registry container e repository Git remoti
-- opzionale: mount del Docker socket host se si vogliono scansionare immagini locali
+- Outbound Internet access for:
+  - downloading images / scanners at build time
+  - Trivy database updates
+  - fetching Semgrep community rules when using `p/default`
+- Optional: access to container registries and remote Git repositories
+- Optional: host Docker socket mount if you want to scan local images
 
 ---
 
 ## 🚀 Quick Start
 
-### Installazione Rapida
+### Rapid Installation
 
 ```bash
 # Clone repository
@@ -152,15 +152,15 @@ cd security-scanning-platform
 cp .env.example .env
 mkdir -p data/{reports,workspaces,cache/trivy,backups}
 
-# Build e avvio
+# Build and start
 docker compose build
 docker compose up -d
 ```
 
-**Dashboard:** `http://localhost:8080`  
-**Credenziali:** Definite in `.env` (default configurabili)
+**Dashboard:** `http://localhost:8080`
+**Credentials:** Defined in `.env` (configurable defaults)
 
-### Test Demo
+### Demo Test
 
 ```bash
 ./scripts/init_demo.sh
@@ -168,9 +168,9 @@ docker compose up -d
 
 ---
 
-## ⚙️ Configurazione
+## ⚙️ Configuration
 
-### File di Configurazione
+### Configuration Files
 
 #### `config/settings.yaml`
 
@@ -185,7 +185,7 @@ scanners:
   gitleaks:
     enabled: true
     timeout: 180
-  # ... altri scanner
+  # ... other scanners
 
 policies:
   block_on_critical: true
@@ -201,13 +201,13 @@ targets:
     type: local
     path: /path/to/repo
     enabled: true
-  
+
   - name: external-service
     type: git
     url: https://github.com/org/repo.git
     branch: main
     enabled: true
-  
+
   - name: production-image
     type: image
     image: my-registry/my-app:latest
@@ -239,69 +239,69 @@ EMAIL_FROM_NAME=Security Scanner
 
 ---
 
-## 💻 Utilizzo
+## 💻 Usage
 
-### Operazioni CLI (ops.sh)
+### CLI Operations (ops.sh)
 
-Script di utilità per gestire stack, database, scansioni e operazioni di sviluppo:
+Utility script for managing the stack, database, scans, and development operations:
 
 ```bash
 # Stack
-./scripts/ops.sh up                    # Avvia stack Docker Compose
-./scripts/ops.sh down                  # Arresta stack
+./scripts/ops.sh up                    # Start Docker Compose stack
+./scripts/ops.sh down                  # Stop stack
 ./scripts/ops.sh health                # Health check (/, /health, /ready)
-./scripts/ops.sh open                  # Apri dashboard nel browser
+./scripts/ops.sh open                  # Open dashboard in browser
 
 # Scan
-./scripts/ops.sh scan demo             # Esegui demo scan
+./scripts/ops.sh scan demo             # Run demo scan
 ./scripts/ops.sh scan local --path $PWD --name my-app
 ./scripts/ops.sh scan git --url https://github.com/org/repo --name my-repo
 ./scripts/ops.sh scan image --image nginx:latest --name nginx
 
-# Dev / CI (senza Docker)
-./scripts/ops.sh test                  # Esegui tutti i test (pytest)
-./scripts/ops.sh test dashboard        # Solo test dashboard
+# Dev / CI (without Docker)
+./scripts/ops.sh test                  # Run all tests (pytest)
+./scripts/ops.sh test dashboard        # Dashboard tests only
 ./scripts/ops.sh lint                  # flake8 + black check
-./scripts/ops.sh lint --fix            # Applica black
-./scripts/ops.sh deps-compile          # Rigenera requirements.txt pinnati
+./scripts/ops.sh lint --fix            # Apply black
+./scripts/ops.sh deps-compile          # Regenerate pinned requirements.txt
 
 # API Keys
 ./scripts/ops.sh api-key create --name ci-runner --role operator
 ./scripts/ops.sh api-key list
 ./scripts/ops.sh api-key revoke --prefix abc123
 
-# Manutenzione
+# Maintenance
 ./scripts/ops.sh backup
 ./scripts/ops.sh retention --days 30
 ./scripts/ops.sh logs dashboard
 ```
 
-### API REST
+### REST API
 
 #### Query Scanning Results
 
 ```bash
-# Lista tutti gli scan
+# List all scans
 curl http://localhost:8080/api/scans
 
-# Dettaglio scan specifico
+# Specific scan details
 curl http://localhost:8080/api/scans/{scan_id}
 
-# Findings per scan
+# Findings for a scan
 curl http://localhost:8080/api/scans/{scan_id}/findings
 ```
 
 #### Trigger Scans
 
-Endpoint per avviare scansioni tramite API o dalla UI dashboard (richiede autenticazione e permesso `SCAN_WRITE`). Il parametro `async_mode=true` (default dalla UI) fa ritornare immediatamente l'API con un ID scan, mentre la scansione prosegue in background.
+Endpoint for triggering scans via API or the dashboard UI (requires authentication and `SCAN_WRITE` permission). The `async_mode=true` parameter (default from UI) returns immediately with a scan ID, while the scan continues in the background.
 
 ```bash
-# Asincrono (consigliato) — ritorna subito, la scansione prosegue in background
+# Asynchronous (recommended) — returns immediately, scan continues in background
 curl -X POST http://localhost:8080/api/scan/trigger \
      -H "Authorization: Bearer <your_api_key>" \
      -d "target_type=local&target=/path/to/scan&name=my-local-scan&async_mode=true"
 
-# Sincrono — attende il completamento prima di rispondere (sconsigliato per scansioni lunghe)
+# Synchronous — waits for completion before responding (not recommended for long scans)
 curl -X POST http://localhost:8080/api/scan/trigger \
      -H "Authorization: Bearer <your_api_key>" \
      -d "target_type=git&target=https://github.com/pallets/flask.git&name=flask-repo&async_mode=false"
@@ -311,9 +311,9 @@ curl -X POST http://localhost:8080/api/scan/trigger \
 
 ## 🚀 Deployment
 
-### Docker Compose (Consigliato)
+### Docker Compose (Recommended)
 
-Il metodo consigliato è usare `docker-compose.yml` fornito. Configurare le variabili in `.env` e avviare con:
+The recommended method is to use the provided `docker-compose.yml`. Configure variables in `.env` and start with:
 
 ```bash
 docker compose up -d
@@ -321,54 +321,54 @@ docker compose up -d
 
 ### Systemd
 
-Per ambienti di produzione, sono forniti service e timer `systemd` per gestire lo stack e le scansioni schedulate. Copiare i file da `systemd/` in `/etc/systemd/system/` e abilitarli.
+For production environments, systemd services and timers are provided to manage the stack and scheduled scans. Copy the files from `systemd/` to `/etc/systemd/system/` and enable them.
 
 ---
 
 ## 🛡️ Hardening
 
-- **Credenziali**: Non usare le credenziali di default. Generare una `SECRET_KEY` robusta.
-- **Network**: Esporre la porta `8080` solo su interfacce di rete fidate.
-- **Docker Socket**: Se si monta il socket Docker, applicare le best practice di sicurezza per proteggerlo.
-- **HTTPS**: Usare un reverse proxy (es. Nginx, Caddy) per terminare TLS e aggiungere ulteriori header di sicurezza.
+- **Credentials**: Do not use default credentials. Generate a strong `SECRET_KEY`.
+- **Network**: Only expose port `8080` on trusted network interfaces.
+- **Docker Socket**: If mounting the Docker socket, apply security best practices to protect it.
+- **HTTPS**: Use a reverse proxy (e.g. Nginx, Caddy) to terminate TLS and add additional security headers.
 
 ---
 
-## 🛠️ Sviluppo
+## 🛠️ Development
 
-### Setup Ambiente
+### Environment Setup
 
 ```bash
-# Crea virtual environment
+# Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Installa dipendenze (dashboard + orchestrator + test)
+# Install dependencies (dashboard + orchestrator + test)
 pip install -r dashboard/requirements.txt -r dashboard/requirements-test.txt
 pip install -r orchestrator/requirements.txt -r orchestrator/requirements-test.txt
 ```
 
-### Gestione Dipendenze
+### Dependency Management
 
-Il progetto usa `pip-tools` per pinnare le dipendenze. Per aggiornare o aggiungere pacchetti:
+The project uses `pip-tools` for pinning dependencies. To update or add packages:
 
-1.  Modifica i file `.in` (`dashboard/requirements.in`, `orchestrator/requirements.in`, etc.).
-2.  Esegui lo script `ops.sh` per ricompilare i file `.txt`:
+1.  Edit the `.in` files (`dashboard/requirements.in`, `orchestrator/requirements.in`, etc.).
+2.  Run the `ops.sh` script to recompile the `.txt` files:
 
 ```bash
 ./scripts/ops.sh deps-compile
 ```
 
-### Eseguire i Test
+### Running Tests
 
 ```bash
-# Esegui tutti i 418 test
+# Run all 436 tests
 ./scripts/ops.sh test
 
-# Esegui solo i test del dashboard
+# Run only dashboard tests
 ./scripts/ops.sh test dashboard
 
-# Esegui solo i test dell'orchestratore con coverage
+# Run only orchestrator tests with coverage
 ./scripts/ops.sh test orchestrator --coverage
 ```
 
@@ -376,8 +376,8 @@ Il progetto usa `pip-tools` per pinnare le dipendenze. Per aggiornare o aggiunge
 
 ## 🤝 Contributing
 
-I contributi sono benvenuti! Si prega di aprire un issue per discutere le modifiche proposte o un Pull Request con una descrizione chiara delle modifiche.
+Contributions are welcome! Please open an issue to discuss proposed changes, or a Pull Request with a clear description of your modifications.
 
-## 📜 Licenza
+## 📜 License
 
-Questo progetto è rilasciato sotto la licenza MIT. Vedi il file [LICENSE](LICENSE) per maggiori dettagli.
+This project is released under the MIT License. See the [LICENSE](LICENSE) file for details.

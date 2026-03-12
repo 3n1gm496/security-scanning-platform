@@ -84,14 +84,7 @@ def _scans_conn_with_data(n: int = 15) -> sqlite3.Connection:
     for i in range(n):
         conn.execute(
             "INSERT INTO scans (target_name, target_type, status, policy_status, created_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                f"target-{i}",
-                "git",
-                "COMPLETED_CLEAN",
-                "PASSED",
-                f"2026-01-{i+1:02d}T00:00:00",
-                f"2026-01-{i+1:02d}T00:01:00",
-            ),
+            (f"target-{i}", "git", "COMPLETED_CLEAN", "PASSED", f"2026-01-{i+1:02d}T00:00:00", f"2026-01-{i+1:02d}T00:01:00"),
         )
     conn.commit()
     return conn

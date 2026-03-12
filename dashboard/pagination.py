@@ -74,16 +74,8 @@ class PaginationCursor:
 
         # Apply filters — only allow whitelisted column names to prevent SQL injection
         _allowed_filter_columns = {
-            "id",
-            "scan_id",
-            "severity",
-            "tool",
-            "created_at",
-            "target_name",
-            "target_type",
-            "status",
-            "category",
-            "fingerprint",
+            "id", "scan_id", "severity", "tool", "created_at", "target_name",
+            "target_type", "status", "category", "fingerprint",
         }
         if filters:
             for col, val in filters.items():

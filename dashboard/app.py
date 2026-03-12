@@ -914,7 +914,6 @@ def trigger_scan(
     # Pre-assign scan ID and start time so we can return them immediately
     # (including in async mode, before the worker thread begins).
     import uuid as _uuid_mod
-
     scan_id = str(_uuid_mod.uuid4())
     started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -923,12 +922,7 @@ def trigger_scan(
         # If the pool is at capacity, submit() still queues the task internally
         # (ThreadPoolExecutor uses an unbounded internal queue by default).
         _scan_executor.submit(run_scan, target_type, target, name, str(root_dir), scan_id, started_at)
-        return {
-            "status": "queued",
-            "scan_id": scan_id,
-            "message": "Scan queued and running in background",
-            "target_name": name,
-        }
+        return {"status": "queued", "scan_id": scan_id, "message": "Scan queued and running in background", "target_name": name}
     else:
         # Wait for scan to complete
         return run_scan(target_type, target, name, str(root_dir), scan_id, started_at)

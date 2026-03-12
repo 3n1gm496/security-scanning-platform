@@ -169,7 +169,6 @@ def test_evict_stale_buckets_removes_old_entries():
     _evict_stale_buckets.__wrapped__ = None  # ensure no timer side-effects
     # Call the cleanup logic directly (without rescheduling)
     import rate_limit as _rl
-
     cutoff = time.monotonic() - max(_rl.RATE_LIMIT_WINDOW_SECONDS, _rl.LOGIN_RATE_LIMIT_WINDOW_SECONDS)
     with _rate_lock:
         stale = [k for k, dq in _rate_buckets.items() if not dq or dq[-1] < cutoff]

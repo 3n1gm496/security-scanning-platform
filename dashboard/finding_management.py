@@ -262,9 +262,7 @@ def bulk_update_status(finding_ids: list[int], status: FindingStatus, user: str)
     with get_connection(DASHBOARD_DB_PATH) as conn:
         for finding_id in finding_ids:
             try:
-                existing = conn.execute(
-                    "SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)
-                ).fetchone()
+                existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
                 if existing:
                     conn.execute(
                         "UPDATE finding_states SET status = ?, updated_at = ? WHERE finding_id = ?",

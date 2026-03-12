@@ -35,6 +35,16 @@ async function apiFetch(url, options = {}, timeoutMs = 30000) {
   }
 }
 
+/** Like apiFetch but does not parse JSON — validates res.ok and returns the raw Response. */
+async function apiSend(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res;
+}
+
 function formatDate(iso) {
   if (!iso) return '—';
   try {
@@ -789,7 +799,7 @@ createApp({
         const fd = new FormData();
         fd.append('status', this.newFindingStatus);
         if (this.findingStatusNotes) fd.append('notes', this.findingStatusNotes);
-        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = this.newFindingStatus;
         this.findingState.updated_at = new Date().toISOString();
         this.newFindingStatus = '';
@@ -806,7 +816,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('status', 'false_positive');
-        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = 'false_positive';
         this.showToast('Finding marked as false positive');
         await this.loadFindings(true);
@@ -821,7 +831,7 @@ createApp({
         const fd = new FormData();
         fd.append('status', 'risk_accepted');
         fd.append('notes', `Justification: ${this.acceptRiskJustification} | Expiry: ${this.acceptRiskExpiry}`);
-        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = 'risk_accepted';
         this.showAcceptRiskForm = false;
         this.acceptRiskJustification = '';
@@ -838,7 +848,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('assigned_to', this.assignTo);
-        await fetch(`/api/findings/${this.selectedFinding.id}/assign`, { method: 'POST', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/assign`, { method: 'POST', body: fd });
         this.findingState.assigned_to = this.assignTo;
         this.assignTo = '';
         this.showToast('Finding assigned');
@@ -852,7 +862,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('comment', this.newComment);
-        await fetch(`/api/findings/${this.selectedFinding.id}/comment`, { method: 'POST', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/comment`, { method: 'POST', body: fd });
         this.findingComments = await apiFetch(`/api/findings/${this.selectedFinding.id}/comments`);
         this.newComment = '';
         this.showToast('Comment added');
@@ -1141,7 +1151,7 @@ createApp({
         fd.append('name', this.newKeyForm.name);
         fd.append('role', this.newKeyForm.role);
         if (this.newKeyForm.expires_days) fd.append('expires_days', this.newKeyForm.expires_days);
-        const res = await fetch('/api/keys', { method: 'POST', body: fd });
+        const res = await apiSend('/api/keys', { method: 'POST', body: fd });
         const data = await res.json();
         this.newKeyResult = data.key;
         await this.loadApiKeys();
@@ -1177,7 +1187,7 @@ createApp({
         fd.append('url', this.newWebhookForm.url);
         fd.append('events', this.newWebhookForm.events);
         if (this.newWebhookForm.secret) fd.append('secret', this.newWebhookForm.secret);
-        await fetch('/api/webhooks', { method: 'POST', body: fd });
+        await apiSend('/api/webhooks', { method: 'POST', body: fd });
         this.showCreateWebhookModal = false;
         this.newWebhookForm = { name: '', url: '', events: 'scan.completed', secret: '' };
         await this.loadWebhooks();
@@ -1191,7 +1201,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('is_active', isActive);
-        await fetch(`/api/webhooks/${id}`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/webhooks/${id}`, { method: 'PATCH', body: fd });
         await this.loadWebhooks();
       } catch (e) {
         this.showToast('Failed to toggle webhook: ' + e.message, 'error');
@@ -1224,21 +1234,35 @@ createApp({
 
     // ── Export ────────────────────────────────────────────────────────────────
 
+    _downloadBlob(res, filename) {
+      const blob = res;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+
+    _checkExportTruncation(res) {
+      const total = parseInt(res.headers.get('X-Total-Count') || '0', 10);
+      const exported = parseInt(res.headers.get('X-Exported-Count') || '0', 10);
+      if (total > exported) {
+        this.showToast(`Warning: exported ${exported} of ${total} findings. Increase the limit or apply filters to export all.`, 'error');
+      }
+    },
+
     async exportScanFindings(scanId, format) {
       try {
         const params = new URLSearchParams({ format, scan_id: scanId, limit: 1000 });
         const res = await fetch(`/api/export/findings?${params}`);
         if (!res.ok) throw new Error('Export failed');
+        this._checkExportTruncation(res);
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `scan_${scanId.substring(0, 8)}_${Date.now()}.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        this.showToast(`Export ${format.toUpperCase()} started`);
+        this._downloadBlob(blob, `scan_${scanId.substring(0, 8)}_${Date.now()}.${format}`);
+        this.showToast(`Export ${format.toUpperCase()} completed`);
       } catch (e) {
         this.showToast('Export failed: ' + e.message, 'error');
       }
@@ -1250,16 +1274,10 @@ createApp({
         if (includeAnalytics) params.set('include_analytics', true);
         const res = await fetch(`/api/export/findings?${params}`);
         if (!res.ok) throw new Error('Export failed');
+        this._checkExportTruncation(res);
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `findings_${Date.now()}.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        this.showToast(`Export ${format.toUpperCase()} started`);
+        this._downloadBlob(blob, `findings_${Date.now()}.${format}`);
+        this.showToast(`Export ${format.toUpperCase()} completed`);
       } catch (e) {
         this.showToast('Export failed: ' + e.message, 'error');
       }

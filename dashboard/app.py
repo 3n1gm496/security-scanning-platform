@@ -180,10 +180,11 @@ init_webhook_tables()
 init_finding_management_tables()
 default_key = create_default_admin_key()
 if default_key:
-    print(f"\n{'=' * 80}")
-    print(f"DEFAULT ADMIN API KEY: {default_key}")
-    print("Store this key securely! It will not be shown again.")
-    print(f"{'=' * 80}\n")
+    LOGGER.warning(
+        "security.default_admin_key_created",
+        detail="Store this key securely! It will not be shown again.",
+        api_key=default_key,
+    )
 
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
@@ -716,7 +717,8 @@ def export_findings_endpoint(
     Export findings in multiple formats.
     Supported formats: json, csv, sarif, html, pdf
     """
-    # Fetch findings
+    # Fetch findings and total count (to signal truncation to the client)
+    total = count_findings(DB_PATH, severity=severity, tool=tool, target=target, scan_id=scan_id)
     findings = list_findings(DB_PATH, limit=limit, severity=severity, tool=tool, target=target, scan_id=scan_id)
 
     # Get scan info if scan_id provided
@@ -766,9 +768,12 @@ def export_findings_endpoint(
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid format")
 
-    return Response(
-        content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Total-Count": str(total),
+        "X-Exported-Count": str(len(findings)),
+    }
+    return Response(content=content, media_type=media_type, headers=headers)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

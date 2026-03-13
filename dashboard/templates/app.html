@@ -361,7 +361,7 @@
                   <th v-if="colVisible('critical_count')" class="th-sortable" @click="sortScans('critical_count')" title="Critical findings">Critical <span class="sort-icon">{{ sortIcon('scans', 'critical_count') }}</span></th>
                   <th v-if="colVisible('high_count')" class="th-sortable" @click="sortScans('high_count')" title="High findings">High <span class="sort-icon">{{ sortIcon('scans', 'high_count') }}</span></th>
                   <th v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
-                  <th>Actions</th>
+                  <th class="th-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -514,7 +514,7 @@
                   <th v-if="colVisibleF('cve')">CVE / ID</th>
                   <th v-if="colVisibleF('file')">File</th>
                   <th v-if="colVisibleF('status')" class="th-sortable" @click="sortFindings('mgmt_status')">Status <span class="sort-icon">{{ sortIcon('findings', 'mgmt_status') }}</span></th>
-                  <th>Actions</th>
+                  <th class="th-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -798,7 +798,7 @@
           <p class="section-hint">Manage API keys for programmatic platform access. Each key has a role and specific permissions.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Prefix</th><th>Role</th><th>Created by</th><th>Created at</th><th>Expires</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Name</th><th>Prefix</th><th>Role</th><th>Created by</th><th>Created at</th><th>Expires</th><th class="th-actions">Actions</th></tr></thead>
               <tbody>
                 <tr v-if="apiKeys.length === 0"><td colspan="7" class="empty-state">No API keys</td></tr>
                 <tr v-for="key in apiKeys" :key="key.prefix">
@@ -826,7 +826,7 @@
           <p class="section-hint">Receive real-time notifications for events such as scan completion or critical findings.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>URL</th><th>Events</th><th>Active</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Name</th><th>URL</th><th>Events</th><th>Active</th><th class="th-actions">Actions</th></tr></thead>
               <tbody>
                 <tr v-if="webhooks.length === 0"><td colspan="5" class="empty-state">No webhooks configured</td></tr>
                 <tr v-for="wh in webhooks" :key="wh.id">

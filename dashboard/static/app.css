@@ -2084,6 +2084,28 @@ table.resizable-table {
   table-layout: fixed;
 }
 
+/* With table-layout:fixed, cells must clip their content to prevent overflow.
+   max-width:0 + overflow:hidden is the canonical pattern for fixed-layout tables.
+   Applied only to td: th already has white-space:nowrap and needs position:relative
+   for the resize handle, so max-width:0 would break the absolute-positioned handle. */
+table.resizable-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 0;
+}
+
+/* Actions column: fixed width, no clipping — buttons must always be fully visible.
+   Scans table has 2 buttons (~30px each + 4px gap = ~64px); 100px gives comfortable padding. */
+.th-actions {
+  width: 100px;
+  min-width: 100px;
+}
+table.resizable-table .th-actions,
+table.resizable-table td:last-child {
+  overflow: visible;
+}
+
 /* The resize handle — thin vertical bar on the right edge of each th */
 th .resize-handle {
   position: absolute;

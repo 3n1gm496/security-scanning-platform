@@ -435,9 +435,7 @@ def normalize_zap(
             cve=cwe_str,
             remediation=item.get("solution"),
             raw_reference=raw_reference,
-            fingerprint=_fingerprint(
-                "zap", target.name, item.get("alert"), item.get("url"), item.get("pluginId")
-            ),
+            fingerprint=_fingerprint("zap", target.name, item.get("alert"), item.get("url"), item.get("pluginId")),
         )
         findings.append(finding)
     return findings

@@ -723,7 +723,9 @@ th {
 .th-sortable { cursor: pointer; }
 .th-sortable:hover { color: var(--color-primary); }
 .sort-icon { opacity: 0.4; font-size: 10px; margin-left: 2px; }
-.th-check { width: 36px; padding: var(--space-2) var(--space-3); }
+.th-check { width: 48px; min-width: 48px; padding: var(--space-2) var(--space-3); }
+/* Checkbox cell must never clip the input — override the resizable-table overflow rule */
+table.resizable-table td:first-child { overflow: visible; }
 
 td {
   padding: var(--space-2) var(--space-4);

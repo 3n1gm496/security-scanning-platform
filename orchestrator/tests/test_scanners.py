@@ -128,6 +128,12 @@ def test_zap_full_scan_flow(tmp_path, monkeypatch):
         def status(self, scan_id):
             return "100"
 
+        def results(self, scan_id):
+            return ["http://example.com"]
+
+        def stop(self, scan_id, apikey=""):
+            pass
+
     class FakeAscan:
         def scan(self, url, apikey=""):
             return "2"
@@ -135,7 +141,19 @@ def test_zap_full_scan_flow(tmp_path, monkeypatch):
         def status(self, scan_id):
             return "100"
 
+        def stop(self, scan_id, apikey=""):
+            pass
+
+    class FakePscan:
+        @property
+        def records_to_scan(self):
+            return "0"
+
     class FakeCore:
+        @property
+        def version(self):
+            return "2.14.0"
+
         def alerts(self, baseurl=""):
             return [{"alert": "Missing X-Frame-Options", "risk": "Medium", "url": baseurl}]
 
@@ -144,6 +162,10 @@ def test_zap_full_scan_flow(tmp_path, monkeypatch):
             self.spider = FakeSpider()
             self.ascan = FakeAscan()
             self.core = FakeCore()
+            self.pscan = FakePscan()
+
+        def urlopen(self, url):
+            pass
 
     # Patch the zapv2 import inside scanners module
     import sys

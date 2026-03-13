@@ -634,14 +634,21 @@ html, body {
 }
 .btn-export:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
 .btn-export:active { transform: translateY(1px); }
-/* PDF + Analytics: accent teal/emerald per distinguerlo dai btn-primary indigo */
+/* Export-primary — emerald filled, si distingue da btn-primary (indigo) */
 .btn-export-primary {
-  background: #0d9488;
+  background: #059669;
   color: #fff;
-  border-color: #0d9488;
+  border-color: #059669;
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
-.btn-export-primary:hover { background: #0f766e; border-color: #0f766e; color: #fff; }
+.btn-export-primary:hover {
+  background: #047857;
+  border-color: #047857;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(5,150,105,0.25);
+}
+.btn-export-primary:active { transform: translateY(1px); }
 
 /* ── Table ────────────────────────────────────────────────── */
 
@@ -824,96 +831,134 @@ tr:last-child td { border-bottom: none; }
   color: var(--color-primary);
 }
 
-/* ── Buttons ──────────────────────────────────────────────── */
+/* ── Button Design System ─────────────────────────────────────
+   3 semantic variants × 2 sizes + specialised types.
+   Shared base: radius-sm, font-sm, inline-flex, gap-2, transition.
 
-.btn-primary {
+   Primary      = filled indigo   — CTA, submit, confirm
+   Secondary    = ghost bordered  — cancel, navigation, neutral
+   Danger       = ghost red       — destructive (delete, revoke)
+   Icon         = ghost icon-only — topbar controls, toolbar
+   Icon-sm      = bordered icon   — table row actions
+   Export       = ghost neutral   — export formats (JSON/CSV/SARIF)
+   Export-prim  = filled emerald  — PDF+Analytics (high-value export)
+   Alert        = filled red      — inline alert CTA
+   ─────────────────────────────────────────────────────────── */
+
+/* Shared base — applied via cascade */
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-export,
+.btn-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: 6px var(--space-4);
-  background: var(--color-primary);
-  color: #fff;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-size: var(--font-sm);
+  font-family: inherit;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--transition), color var(--transition),
+              border-color var(--transition), box-shadow var(--transition),
+              transform 80ms;
+}
+
+/* Primary — indigo filled */
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
   font-weight: 600;
   letter-spacing: 0.01em;
-  cursor: pointer;
-  transition: background var(--transition), box-shadow var(--transition), transform 80ms;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  line-height: 1.5;
-  white-space: nowrap;
 }
-.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); box-shadow: 0 2px 6px rgba(79,70,229,0.3); }
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  box-shadow: 0 2px 6px rgba(79,70,229,0.25);
+}
 .btn-primary:active:not(:disabled) { transform: translateY(1px); }
-.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Secondary — ghost with border */
 .btn-secondary {
-  padding: 6px var(--space-4);
   background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  line-height: 1.5;
-  white-space: nowrap;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
 }
-.btn-secondary:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
 .btn-secondary:active:not(:disabled) { transform: translateY(1px); }
-.btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Danger — red ghost */
 .btn-danger {
-  padding: 4px 10px;
   background: var(--color-danger-bg);
   color: var(--color-danger);
-  border: 1px solid rgba(220,38,38,0.15);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
+  border-color: rgba(220,38,38,0.2);
   font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition);
 }
-.btn-danger:hover { background: var(--color-danger); color: #fff; }
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+}
+.btn-danger:active:not(:disabled) { transform: translateY(1px); }
+.btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.btn-sm { padding: 5px var(--space-3); font-size: var(--font-sm); line-height: 1.5; min-height: 30px; gap: var(--space-1); }
-.filters-row > .btn-sm { align-self: flex-end; min-height: 32px; }
-.btn-block { width: 100%; text-align: center; justify-content: center; }
+/* Size modifier */
+.btn-sm {
+  padding: 4px var(--space-3);
+  font-size: var(--font-sm);
+  min-height: 28px;
+  gap: var(--space-1);
+}
+.filters-row > .btn-sm { align-self: flex-end; min-height: 30px; }
+.btn-block { width: 100%; justify-content: center; }
 
+/* Icon-only — topbar, toolbar */
 .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
-  cursor: pointer;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
+  cursor: pointer;
+  line-height: 1;
   transition: background var(--transition), color var(--transition);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .btn-icon:hover { background: var(--color-border); color: var(--color-text); }
 
+/* Icon-sm — table row actions */
 .btn-icon-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  cursor: pointer;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
   font-size: var(--font-xs);
   font-weight: 500;
-  transition: all var(--transition);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  cursor: pointer;
   line-height: 1.4;
+  transition: all var(--transition);
 }
-.btn-icon-sm:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
+.btn-icon-sm:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
 
 /* ── Alert Banner ─────────────────────────────────────────── */
 
@@ -933,20 +978,17 @@ tr:last-child td { border-bottom: none; }
   border: 1px solid rgba(220,38,38,0.2);
 }
 
+/* Alert — inline alert CTA */
 .btn-alert {
   margin-left: auto;
   padding: 4px var(--space-3);
   background: var(--color-critical);
   color: #fff;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
+  border-color: var(--color-critical);
   font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--transition);
 }
-.btn-alert:hover { background: #b91c1c; }
+.btn-alert:hover { background: #b91c1c; border-color: #b91c1c; }
+.btn-alert:active { transform: translateY(1px); }
 
 /* ── Two column grid ──────────────────────────────────────── */
 

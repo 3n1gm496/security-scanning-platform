@@ -17,6 +17,7 @@ class TargetSpec:
     repo: str | None = None
     ref: str | None = None
     image: str | None = None
+    url: str | None = None
     enabled: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -28,6 +29,8 @@ class TargetSpec:
             return self.path or ""
         if self.type == "image":
             return self.image or ""
+        if self.type == "url":
+            return self.url or ""
         return ""
 
     @classmethod
@@ -41,7 +44,7 @@ class TargetSpec:
             or "unnamed-target"
         )
         target_type = data.get("type")
-        if target_type not in {"git", "local", "image"}:
+        if target_type not in {"git", "local", "image", "url"}:
             raise ValueError(f"Unsupported target type: {target_type}")
         return cls(
             name=name,
@@ -50,6 +53,7 @@ class TargetSpec:
             repo=data.get("repo"),
             ref=data.get("ref"),
             image=data.get("image"),
+            url=data.get("url"),
             enabled=bool(data.get("enabled", True)),
             metadata=data.get("metadata") or {},
         )

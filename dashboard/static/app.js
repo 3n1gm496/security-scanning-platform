@@ -343,6 +343,10 @@ createApp({
       }
     }
 
+    // Yield to the browser so CSS custom properties are fully computed before
+    // reading them via getComputedStyle (important when dark mode is restored
+    // from localStorage before the first paint).
+    await nextTick();
     this.applyChartDefaults();
     await this.initDashboardCharts();
     if (initialPage !== 'dashboard') await this.navigate(initialPage);
@@ -429,6 +433,9 @@ createApp({
       if (page === 'compare') {
         await this.loadCompareScanList();
       }
+      // Attach resize handles to any tables that appeared after navigation
+      // (scans/findings call this themselves; other pages need it here)
+      if (!['scans', 'findings'].includes(page)) this.initResizableColumns();
     },
 
     async refreshCurrentPage() {
@@ -614,10 +621,15 @@ createApp({
               position: 'bottom',
               labels: {
                 generateLabels: (chart) => {
+                  // Explicitly include 'fontColor' in each label item so Chart.js 4
+                  // applies the correct text color regardless of labels.color fallback.
+                  const legendColor = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--chart-legend').trim() || '#374151';
                   return chart.data.labels.map((label, i) => ({
                     text: `${label}  (${chart.data.datasets[0].data[i]})`,
                     fillStyle: chart.data.datasets[0].backgroundColor[i],
                     strokeStyle: chart.data.datasets[0].backgroundColor[i],
+                    fontColor: legendColor,
                     hidden: false,
                     index: i,
                   }));
@@ -1631,10 +1643,15 @@ createApp({
         document.documentElement.removeAttribute('data-theme');
         localStorage.setItem('ssp-theme', 'light');
       }
-      this.applyChartDefaults();
-      // Rebuild visible charts so legend/tick colors update immediately
-      if (this.currentPage === 'dashboard') this.initDashboardCharts();
-      else if (this.currentPage === 'analytics') this.loadAnalytics();
+      // Wait for the browser to recalculate CSS custom properties before reading
+      // them via getComputedStyle — setAttribute is synchronous but computed styles
+      // may not be flushed until the next animation frame.
+      requestAnimationFrame(() => {
+        this.applyChartDefaults();
+        // Rebuild visible charts so legend/tick colors update immediately
+        if (this.currentPage === 'dashboard') this.initDashboardCharts();
+        else if (this.currentPage === 'analytics') this.loadAnalytics();
+      });
     },
 
   },

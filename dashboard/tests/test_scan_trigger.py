@@ -169,3 +169,63 @@ def test_trigger_scan_unauthenticated(client):
         data={"target_type": "git", "target": "https://github.com/example/repo", "name": "test"},
     )
     assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# URL target type tests
+# ---------------------------------------------------------------------------
+
+
+def test_trigger_scan_url_valid(client, admin_headers):
+    """A valid https:// URL target must pass validation and reach run_scan."""
+    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+        resp = client.post(
+            "/api/scan/trigger",
+            data={"target_type": "url", "target": "https://example.com", "name": "dast-scan"},
+            headers=admin_headers,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "completed"
+
+
+def test_trigger_scan_url_http_valid(client, admin_headers):
+    """A valid http:// URL target must also pass validation."""
+    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+        resp = client.post(
+            "/api/scan/trigger",
+            data={"target_type": "url", "target": "http://internal.example.com", "name": "dast-http"},
+            headers=admin_headers,
+        )
+    assert resp.status_code == 200
+
+
+def test_trigger_scan_url_invalid_scheme(client, admin_headers):
+    """A URL without http:// or https:// must be rejected with 400."""
+    resp = client.post(
+        "/api/scan/trigger",
+        data={"target_type": "url", "target": "ftp://example.com", "name": "bad-url"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 400
+    assert "http" in resp.text.lower()
+
+
+def test_trigger_scan_url_no_scheme(client, admin_headers):
+    """A URL without any scheme must be rejected with 400."""
+    resp = client.post(
+        "/api/scan/trigger",
+        data={"target_type": "url", "target": "example.com", "name": "no-scheme"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 400
+
+
+def test_trigger_scan_url_not_path_validated(client, admin_headers):
+    """URL targets must NOT be subject to path traversal validation."""
+    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+        resp = client.post(
+            "/api/scan/trigger",
+            data={"target_type": "url", "target": "https://example.com/path/../other", "name": "url-path"},
+            headers=admin_headers,
+        )
+    assert resp.status_code == 200

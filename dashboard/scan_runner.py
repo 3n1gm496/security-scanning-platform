@@ -69,8 +69,8 @@ def run_scan(
     """Execute the orchestrator subprocess and return a status dict.
 
     Args:
-        target_type: 'local', 'git', or 'image'
-        target: path, URL, or image reference
+        target_type: 'local', 'git', 'image', or 'url'
+        target: path, git URL, image reference, or web URL to scan
         name: display name for the target
         root_dir: repository root directory (passed as cwd and for PYTHONPATH)
         scan_id: pre-assigned UUID (generated if None)

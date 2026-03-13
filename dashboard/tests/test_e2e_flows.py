@@ -27,7 +27,6 @@ from rbac import Role, create_api_key, init_rbac_tables  # noqa: E402
 from finding_management import init_finding_management_tables  # noqa: E402
 from webhooks import init_webhook_tables  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -48,9 +47,21 @@ def full_db(isolated_db):
             "high_count, medium_count, low_count, info_count, unknown_count) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "scan-e2e", "2024-06-01T10:00:00", "2024-06-01T10:05:00",
-                "git", "e2e-repo", "https://github.com/org/e2e",
-                "COMPLETED_WITH_FINDINGS", "FAILED", 5, 2, 1, 1, 1, 0, 0,
+                "scan-e2e",
+                "2024-06-01T10:00:00",
+                "2024-06-01T10:05:00",
+                "git",
+                "e2e-repo",
+                "https://github.com/org/e2e",
+                "COMPLETED_WITH_FINDINGS",
+                "FAILED",
+                5,
+                2,
+                1,
+                1,
+                1,
+                0,
+                0,
             ),
         )
         for i, sev in enumerate(["CRITICAL", "CRITICAL", "HIGH", "MEDIUM", "LOW"]):
@@ -58,8 +69,15 @@ def full_db(isolated_db):
                 "INSERT INTO findings (scan_id, timestamp, target_type, target_name, "
                 "title, description, severity, tool, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    "scan-e2e", f"2024-06-01T10:0{i}:00", "git", "e2e-repo",
-                    f"E2E Finding {i}", f"Desc {i}", sev, "semgrep", "sast",
+                    "scan-e2e",
+                    f"2024-06-01T10:0{i}:00",
+                    "git",
+                    "e2e-repo",
+                    f"E2E Finding {i}",
+                    f"Desc {i}",
+                    sev,
+                    "semgrep",
+                    "sast",
                 ),
             )
     return db_path
@@ -91,7 +109,8 @@ class TestLoginFlow:
     def test_login_redirects_to_dashboard(self, full_db):
         client = TestClient(app)
         resp = client.post(
-            "/login", data={"username": "testuser", "password": "testpass"},
+            "/login",
+            data={"username": "testuser", "password": "testpass"},
             follow_redirects=False,
         )
         assert resp.status_code in (302, 303)

@@ -303,7 +303,8 @@ class TestWebhookCircuitBreaker:
         from webhooks import _update_webhook_stats, WEBHOOK_CIRCUIT_BREAKER_THRESHOLD
 
         wid = create_webhook(
-            name="CB Test", url="https://example.com/hook",
+            name="CB Test",
+            url="https://example.com/hook",
             events=[WebhookEvent.SCAN_COMPLETED],
         )
 
@@ -320,7 +321,8 @@ class TestWebhookCircuitBreaker:
         from webhooks import _update_webhook_stats
 
         wid = create_webhook(
-            name="Reset Test", url="https://example.com/hook",
+            name="Reset Test",
+            url="https://example.com/hook",
             events=[WebhookEvent.SCAN_COMPLETED],
         )
 

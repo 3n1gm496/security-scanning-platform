@@ -136,9 +136,7 @@ def _verify_key_hash(key: str, stored_hash: str) -> bool:
         except Exception:
             return False
     # Legacy SHA-256 fallback
-    return secrets.compare_digest(
-        hashlib.sha256(key.encode()).hexdigest(), stored_hash
-    )
+    return secrets.compare_digest(hashlib.sha256(key.encode()).hexdigest(), stored_hash)
 
 
 def create_api_key(

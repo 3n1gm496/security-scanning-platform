@@ -148,6 +148,7 @@ def test_api_key_hash_is_bcrypt():
     assert hashed.startswith("$2b$")
     # Verify round-trip
     from rbac import _verify_key_hash
+
     assert _verify_key_hash(key, hashed) is True
     assert _verify_key_hash("wrong_key", hashed) is False
 
@@ -156,6 +157,7 @@ def test_api_key_legacy_sha256_still_verified():
     """Legacy SHA-256 hashes must still verify during migration period."""
     import hashlib as _hl
     from rbac import _verify_key_hash
+
     key = "ssp_legacy_key_1234"
     legacy_hash = _hl.sha256(key.encode()).hexdigest()
     assert _verify_key_hash(key, legacy_hash) is True

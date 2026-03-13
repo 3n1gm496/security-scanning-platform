@@ -172,13 +172,11 @@ def test_clone_repo_rejects_git_scheme(tmp_path):
 
 def test_clone_repo_allows_https(monkeypatch, tmp_path):
     """https:// URLs must be accepted."""
-    monkeypatch.setattr("orchestrator.scanners.run_command",
-                        lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
+    monkeypatch.setattr("orchestrator.scanners.run_command", lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
     clone_repo("https://github.com/foo/bar.git", str(tmp_path / "repo"))
 
 
 def test_clone_repo_allows_http(monkeypatch, tmp_path):
     """http:// URLs must be accepted (some internal repos use plain HTTP)."""
-    monkeypatch.setattr("orchestrator.scanners.run_command",
-                        lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
+    monkeypatch.setattr("orchestrator.scanners.run_command", lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
     clone_repo("http://internal.corp/foo/bar.git", str(tmp_path / "repo"))

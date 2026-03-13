@@ -680,7 +680,7 @@ def export_findings_endpoint(
                 break
 
     # Export based on format
-    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if format == "json":
         content = export_to_json(findings)
         media_type = "application/json"
@@ -696,9 +696,13 @@ def export_findings_endpoint(
                 header_written = False
                 for offset in range(0, limit, batch_size):
                     batch = list_findings(
-                        DB_PATH, limit=min(batch_size, limit - offset),
-                        severity=severity, tool=tool, target=target,
-                        scan_id=scan_id, offset=offset,
+                        DB_PATH,
+                        limit=min(batch_size, limit - offset),
+                        severity=severity,
+                        tool=tool,
+                        target=target,
+                        scan_id=scan_id,
+                        offset=offset,
                     )
                     if not batch:
                         break
@@ -1476,7 +1480,7 @@ def export_audit_log(
     with get_connection(DB_PATH) as conn:
         rows = [dict(r) for r in conn.execute(query, params).fetchall()]
 
-    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if format == "json":
         content = json.dumps(rows, indent=2, default=str)
         return Response(

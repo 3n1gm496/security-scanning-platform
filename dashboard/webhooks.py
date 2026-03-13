@@ -48,8 +48,7 @@ def _check_ip_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> No
     for net in _BLOCKED_NETWORKS:
         if addr in net:
             raise ValueError(
-                f"Webhook URL targets a private/reserved address ({addr}). "
-                "Only public endpoints are allowed."
+                f"Webhook URL targets a private/reserved address ({addr}). " "Only public endpoints are allowed."
             )
 
 
@@ -336,9 +335,7 @@ def _update_webhook_stats(webhook_id: int, success: bool):
                 (webhook_id,),
             )
             # Circuit breaker: auto-disable after N consecutive failures
-            row = conn.execute(
-                "SELECT consecutive_failures FROM webhooks WHERE id = ?", (webhook_id,)
-            ).fetchone()
+            row = conn.execute("SELECT consecutive_failures FROM webhooks WHERE id = ?", (webhook_id,)).fetchone()
             if row and row["consecutive_failures"] >= WEBHOOK_CIRCUIT_BREAKER_THRESHOLD:
                 conn.execute("UPDATE webhooks SET is_active = 0 WHERE id = ?", (webhook_id,))
                 logger.warning(

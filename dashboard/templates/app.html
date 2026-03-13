@@ -294,15 +294,15 @@
         <div class="card filters-card">
           <div class="filters-row">
             <div class="filter-group">
-              <label class="filter-label">Target</label>
-              <select v-model="scansFilter.target" @change="loadScans(true)" class="filter-select">
+              <label class="filter-label" for="scans-filter-target">Target</label>
+              <select id="scans-filter-target" name="scans_target" v-model="scansFilter.target" @change="loadScans(true)" class="filter-select">
                 <option value="">All</option>
                 <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
-              <label class="filter-label">Status</label>
-              <select v-model="scansFilter.status" @change="loadScans(true)" class="filter-select">
+              <label class="filter-label" for="scans-filter-status">Status</label>
+              <select id="scans-filter-status" name="scans_status" v-model="scansFilter.status" @change="loadScans(true)" class="filter-select">
                 <option value="">All</option>
                 <option value="COMPLETED_CLEAN">Clean (no findings)</option>
                 <option value="COMPLETED_WITH_FINDINGS">With findings</option>
@@ -311,8 +311,8 @@
               </select>
             </div>
             <div class="filter-group">
-              <label class="filter-label">Policy</label>
-              <select v-model="scansFilter.policy" @change="loadScans(true)" class="filter-select">
+              <label class="filter-label" for="scans-filter-policy">Policy</label>
+              <select id="scans-filter-policy" name="scans_policy" v-model="scansFilter.policy" @change="loadScans(true)" class="filter-select">
                 <option value="">All</option>
                 <option value="PASS">PASS</option>
                 <option value="BLOCK">BLOCK</option>
@@ -416,12 +416,12 @@
         <div class="card filters-card">
           <div class="filters-row">
             <div class="filter-group filter-search">
-              <label class="filter-label">Search</label>
-              <input type="text" v-model="findingsFilter.search" @input="debouncedLoadFindings" placeholder="Title, CVE, file..." class="filter-input">
+              <label class="filter-label" for="findings-filter-search">Search</label>
+              <input id="findings-filter-search" name="findings_search" type="text" v-model="findingsFilter.search" @input="debouncedLoadFindings" placeholder="Title, CVE, file..." class="filter-input">
             </div>
             <div class="filter-group">
-              <label class="filter-label">Severity</label>
-              <select v-model="findingsFilter.severity" @change="loadFindings(true)" class="filter-select">
+              <label class="filter-label" for="findings-filter-severity">Severity</label>
+              <select id="findings-filter-severity" name="findings_severity" v-model="findingsFilter.severity" @change="loadFindings(true)" class="filter-select">
                 <option value="">All</option>
                 <option value="CRITICAL">CRITICAL</option>
                 <option value="HIGH">HIGH</option>
@@ -431,22 +431,22 @@
               </select>
             </div>
             <div class="filter-group">
-              <label class="filter-label">Tool</label>
-              <select v-model="findingsFilter.tool" @change="loadFindings(true)" class="filter-select">
+              <label class="filter-label" for="findings-filter-tool">Tool</label>
+              <select id="findings-filter-tool" name="findings_tool" v-model="findingsFilter.tool" @change="loadFindings(true)" class="filter-select">
                 <option value="">All</option>
                 <option v-for="t in availableTools" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
-              <label class="filter-label">Target</label>
-              <select v-model="findingsFilter.target" @change="loadFindings(true)" class="filter-select">
+              <label class="filter-label" for="findings-filter-target">Target</label>
+              <select id="findings-filter-target" name="findings_target" v-model="findingsFilter.target" @change="loadFindings(true)" class="filter-select">
                 <option value="">All</option>
                 <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
-              <label class="filter-label">Status</label>
-              <select v-model="findingsFilter.status" @change="loadFindings(true)" class="filter-select">
+              <label class="filter-label" for="findings-filter-status">Status</label>
+              <select id="findings-filter-status" name="findings_status" v-model="findingsFilter.status" @change="loadFindings(true)" class="filter-select">
                 <option value="">All statuses</option>
                 <option value="new">New</option>
                 <option value="acknowledged">Acknowledged</option>
@@ -472,7 +472,7 @@
             <button class="btn-export" @click="exportFindings('csv')">CSV</button>
             <button class="btn-export" @click="exportFindings('sarif')">SARIF</button>
             <button class="btn-export" @click="exportFindings('html')">HTML</button>
-            <button class="btn-export btn-export-primary" @click="exportFindings('pdf', true)">PDF + Analytics</button>
+            <button class="btn-export" @click="exportFindings('pdf', true)">PDF + Analytics</button>
           </div>
         </div>
 
@@ -482,7 +482,7 @@
             <h2>Findings <span class="count-badge">{{ findingsTotal }}</span></h2>
             <div class="bulk-actions" v-if="selectedFindings.length > 0">
               <span class="bulk-count">{{ selectedFindings.length }} selected</span>
-              <select v-model="bulkStatus" class="filter-select filter-select-sm">
+              <select id="bulk-status" name="bulk_status" v-model="bulkStatus" class="filter-select filter-select-sm">
                 <option value="">Change status...</option>
                 <option value="acknowledged">Acknowledged</option>
                 <option value="in_progress">In Progress</option>
@@ -562,7 +562,7 @@
           <div class="pagination-bar">
             <button class="btn-secondary btn-sm" @click="prevFindingsPage" :disabled="findingsPage <= 1">&#x2190; Previous</button>
             <span class="page-info">Page {{ findingsPage }} &bull; {{ findings.length }} of {{ findingsTotal }} results</span>
-            <select v-model.number="findingsPerPage" @change="onFindingsPerPageChange" class="filter-select filter-select-sm per-page-select" title="Results per page">
+            <select id="findings-per-page" name="findings_per_page" v-model.number="findingsPerPage" @change="onFindingsPerPageChange" class="filter-select filter-select-sm per-page-select" title="Results per page">
               <option :value="10">10 / page</option>
               <option :value="25">25 / page</option>
               <option :value="50">50 / page</option>
@@ -608,7 +608,7 @@
             <div class="card-header">
               <h2>Trend Risk Score</h2>
               <div class="card-actions">
-                <select v-model="analyticsDays" @change="loadAnalytics" class="filter-select filter-select-sm">
+                <select id="analytics-days" name="analytics_days" v-model="analyticsDays" @change="loadAnalytics" class="filter-select filter-select-sm">
                   <option :value="30">30 days</option>
                   <option :value="60">60 days</option>
                   <option :value="90">90 days</option>
@@ -686,8 +686,8 @@
           <div class="card-header"><h2>Select scans to compare</h2></div>
           <div class="compare-selectors">
             <div class="compare-selector-group">
-              <label class="filter-label">Scan A (baseline)</label>
-              <select v-model="compareIdA" @change="compareIdB = ''" class="filter-select">
+              <label class="filter-label" for="compare-scan-a">Scan A (baseline)</label>
+              <select id="compare-scan-a" name="compare_scan_a" v-model="compareIdA" @change="compareIdB = ''" class="filter-select">
                 <option value="">Select...</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
                   #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
@@ -696,8 +696,8 @@
             </div>
             <div class="compare-vs">VS</div>
             <div class="compare-selector-group">
-              <label class="filter-label">Scan B (comparison)</label>
-              <select v-model="compareIdB" class="filter-select" :disabled="!compareIdA">
+              <label class="filter-label" for="compare-scan-b">Scan B (comparison)</label>
+              <select id="compare-scan-b" name="compare_scan_b" v-model="compareIdB" class="filter-select" :disabled="!compareIdA">
                 <option value="">{{ compareIdA ? (compareScanListB.length ? 'Select...' : 'No scans with same target') : 'Select scan A first' }}</option>
                 <option v-for="s in compareScanListB" :key="s.id" :value="s.id">
                   #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
@@ -857,8 +857,8 @@
             <!-- Delivery -->
             <p class="settings-section-heading">Delivery</p>
             <div class="form-input-group">
-              <label class="form-label">Recipient Email</label>
-              <input type="email" v-model="notifPrefs.user_email" placeholder="security@example.com" autocomplete="email">
+              <label class="form-label" for="notif-email">Recipient Email</label>
+              <input id="notif-email" name="notif_email" type="email" v-model="notifPrefs.user_email" placeholder="security@example.com" autocomplete="email">
               <span class="form-label-hint">Notification emails will be sent to this address.</span>
             </div>
 
@@ -1032,7 +1032,7 @@
                 <span v-if="findingState.updated_at" class="text-muted" style="font-size:12px">Updated: {{ formatDate(findingState.updated_at) }}</span>
               </div>
               <div class="mgmt-actions">
-                <select v-model="newFindingStatus" class="filter-select">
+                <select id="finding-status" name="finding_status" v-model="newFindingStatus" class="filter-select">
                   <option value="">Change status...</option>
                   <option value="acknowledged">Acknowledged</option>
                   <option value="in_progress">In Progress</option>
@@ -1040,14 +1040,14 @@
                   <option value="false_positive">False Positive</option>
                   <option value="risk_accepted">Risk Accepted</option>
                 </select>
-                <textarea v-model="findingStatusNotes" placeholder="Notes (optional)..." class="comment-input" rows="2" style="margin-top:8px"></textarea>
+                <textarea id="finding-status-notes" name="finding_status_notes" v-model="findingStatusNotes" placeholder="Notes (optional)..." class="comment-input" rows="2" style="margin-top:8px"></textarea>
                 <button class="btn-primary btn-sm" @click="updateFindingStatus" :disabled="!newFindingStatus">Update status</button>
               </div>
             </div>
             <div class="detail-section">
               <h3>Assignment</h3>
               <div class="assign-row">
-                <input type="text" v-model="assignTo" placeholder="Assign to (username)..." class="filter-input" list="users-datalist">
+                <input id="assign-to" name="assign_to" type="text" v-model="assignTo" placeholder="Assign to (username)..." class="filter-input" list="users-datalist">
                 <datalist id="users-datalist">
                   <option v-for="u in availableUsers" :key="u" :value="u"></option>
                 </datalist>
@@ -1061,8 +1061,8 @@
                 <button class="btn-secondary btn-sm" @click="showAcceptRiskForm = !showAcceptRiskForm">Accept risk</button>
               </div>
               <div v-if="showAcceptRiskForm" class="accept-risk-form">
-                <textarea v-model="acceptRiskJustification" placeholder="Justification..." class="comment-input" rows="2"></textarea>
-                <input type="date" v-model="acceptRiskExpiry" class="filter-input" style="margin-top:8px">
+                <textarea id="risk-justification" name="risk_justification" v-model="acceptRiskJustification" placeholder="Justification..." class="comment-input" rows="2"></textarea>
+                <input id="risk-expiry" name="risk_expiry" type="date" v-model="acceptRiskExpiry" class="filter-input" style="margin-top:8px">
                 <button class="btn-primary btn-sm" @click="acceptRisk" :disabled="!acceptRiskJustification || !acceptRiskExpiry">Confirm</button>
               </div>
             </div>
@@ -1084,7 +1084,7 @@
             </div>
             <p v-else class="text-muted" style="padding:16px 0">No comments yet.</p>
             <div class="add-comment">
-              <textarea v-model="newComment" placeholder="Add a comment..." class="comment-input" rows="3"></textarea>
+              <textarea id="new-comment" name="new_comment" v-model="newComment" placeholder="Add a comment..." class="comment-input" rows="3"></textarea>
               <button class="btn-primary btn-sm" @click="addComment" :disabled="!newComment.trim()">Add comment</button>
             </div>
           </div>
@@ -1156,20 +1156,20 @@
         <div class="modal-body">
           <p class="modal-subtitle">Configure and start a new security scan.</p>
           <div class="form-group">
-            <label class="form-label">Scan name</label>
-            <input type="text" v-model="newScanForm.name" class="filter-input" placeholder="e.g. my-app-v2.0" autocomplete="off">
+            <label class="form-label" for="new-scan-name">Scan name</label>
+            <input id="new-scan-name" name="scan_name" type="text" v-model="newScanForm.name" class="filter-input" placeholder="e.g. my-app-v2.0" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Target type</label>
-            <select v-model="newScanForm.target_type" class="filter-select">
+            <label class="form-label" for="new-scan-target-type">Target type</label>
+            <select id="new-scan-target-type" name="scan_target_type" v-model="newScanForm.target_type" class="filter-select">
               <option value="local">Local directory</option>
               <option value="git">Git repository</option>
               <option value="image">Docker Image</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Target</label>
-            <input type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/org/repo' : newScanForm.target_type === 'image' ? 'nginx:latest' : '/data/workspaces/my-project'" autocomplete="off">
+            <label class="form-label" for="new-scan-target">Target</label>
+            <input id="new-scan-target" name="scan_target" type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/org/repo' : newScanForm.target_type === 'image' ? 'nginx:latest' : '/data/workspaces/my-project'" autocomplete="off">
             <span class="input-hint" v-if="newScanForm.target_type === 'git'">URL of the Git repository to scan</span>
             <span class="input-hint" v-else-if="newScanForm.target_type === 'image'">Docker image name and tag</span>
             <span class="input-hint" v-else>Absolute path of the directory to scan</span>
@@ -1196,20 +1196,20 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Name</label>
-            <input type="text" v-model="newKeyForm.name" class="filter-input" placeholder="e.g. ci-runner">
+            <label class="form-label" for="api-key-name">Name</label>
+            <input id="api-key-name" name="api_key_name" type="text" v-model="newKeyForm.name" class="filter-input" placeholder="e.g. ci-runner">
           </div>
           <div class="form-group">
-            <label class="form-label">Role</label>
-            <select v-model="newKeyForm.role" class="filter-select">
+            <label class="form-label" for="api-key-role">Role</label>
+            <select id="api-key-role" name="api_key_role" v-model="newKeyForm.role" class="filter-select">
               <option value="admin">Admin</option>
               <option value="operator">Operator</option>
               <option value="viewer">Viewer</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Expiry (days, optional)</label>
-            <input type="number" v-model="newKeyForm.expires_days" class="filter-input" placeholder="e.g. 90">
+            <label class="form-label" for="api-key-expiry">Expiry (days, optional)</label>
+            <input id="api-key-expiry" name="api_key_expiry" type="number" v-model="newKeyForm.expires_days" class="filter-input" placeholder="e.g. 90">
           </div>
           <div v-if="newKeyResult" class="new-key-result">
             <p>Key created. Copy it now — it will not be shown again:</p>
@@ -1238,20 +1238,20 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Name</label>
-            <input type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="e.g. slack-alerts">
+            <label class="form-label" for="webhook-name">Name</label>
+            <input id="webhook-name" name="webhook_name" type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="e.g. slack-alerts">
           </div>
           <div class="form-group">
-            <label class="form-label">URL</label>
-            <input type="url" v-model="newWebhookForm.url" class="filter-input" placeholder="https://...">
+            <label class="form-label" for="webhook-url">URL</label>
+            <input id="webhook-url" name="webhook_url" type="url" v-model="newWebhookForm.url" class="filter-input" placeholder="https://...">
           </div>
           <div class="form-group">
-            <label class="form-label">Events (comma-separated)</label>
-            <input type="text" v-model="newWebhookForm.events" class="filter-input" placeholder="scan.completed,finding.critical">
+            <label class="form-label" for="webhook-events">Events (comma-separated)</label>
+            <input id="webhook-events" name="webhook_events" type="text" v-model="newWebhookForm.events" class="filter-input" placeholder="scan.completed,finding.critical">
           </div>
           <div class="form-group">
-            <label class="form-label">Secret (optional)</label>
-            <input type="password" v-model="newWebhookForm.secret" class="filter-input">
+            <label class="form-label" for="webhook-secret">Secret (optional)</label>
+            <input id="webhook-secret" name="webhook_secret" type="password" v-model="newWebhookForm.secret" class="filter-input">
           </div>
           <div class="modal-actions">
             <button class="btn-secondary" @click="showCreateWebhookModal = false">Cancel</button>

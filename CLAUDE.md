@@ -1,317 +1,272 @@
-# Claude task: critical review of the Security Scanning Platform
+# Claude task: UI/UX bug fixing and refinement review
 
-You are a senior staff engineer, product reviewer, UX auditor, and security-tooling architect.
+You are acting as a **senior frontend + full-stack engineer** reviewing and improving this repository:
 
-Your task is to perform a **deep, evidence-based critical review** of this repository
-The goal is **not** to praise the project or produce a generic overview.  
-The goal is to act like a rigorous reviewer preparing a report for a technical lead who wants to know:
+https://github.com/3n1gm496/security-scanning-platform
 
-1. what is good,
-2. what is weak,
-3. what is broken or risky,
-4. what should be improved first,
-5. and how to remediate it in a practical way.
+The project already works, but several **UX bugs, inconsistencies, and missing capabilities** have been identified after real usage.
 
----
+Your task is to:
 
-## Primary objectives
+1. Diagnose the likely cause of each issue in the codebase
+2. Identify the relevant files
+3. Propose concrete fixes
+4. Suggest improved UX behavior where appropriate
+5. Provide patch-style or code-level suggestions where possible
 
-Analyze the project from these angles:
+Do not answer generically.  
+Base your reasoning on the repository structure and code.
 
-### 1) UI / visual design / product quality
-Review the application as a product, not just as code.
-
-Focus on:
-- overall visual coherence,
-- perceived product maturity,
-- dashboard clarity,
-- typography, spacing, hierarchy, density,
-- consistency between pages/views,
-- quality of states: loading, empty, error, success,
-- quality of navigation and discoverability,
-- modal/dialog quality,
-- responsiveness and mobile/tablet behavior,
-- accessibility issues,
-- whether it feels like a polished product or more like an internal tool / MVP.
-
-### 2) Functionality / UX flows
-Analyze whether the app’s flows make sense for a real user.
-
-Focus on:
-- scan creation / management flow,
-- findings browsing and triage flow,
-- filtering, sorting, pagination,
-- comparison flow,
-- settings flow,
-- auth / roles / session behavior,
-- error handling and user feedback,
-- places where the UI likely gives misleading feedback,
-- potential dead ends, confusing states, or brittle interactions.
-
-### 3) Bugs, defects, and implementation risks
-Find concrete issues, not vague possibilities.
-
-Look for:
-- logic bugs,
-- error handling bugs,
-- inconsistent API usage,
-- state management problems,
-- race conditions,
-- brittle async behavior,
-- risky fallbacks,
-- bad assumptions,
-- incorrect labels or misleading metrics,
-- config drift,
-- maintainability problems,
-- architectural duplication,
-- security-adjacent implementation issues,
-- performance and scalability risks.
-
-### 4) Improvement proposals
-For every important weakness, propose improvements that are:
-- concrete,
-- prioritized,
-- realistic,
-- and proportional to the project’s likely maturity.
-
-### 5) Remediation plan
-Produce a phased remediation plan:
-- immediate fixes,
-- short-term stabilization,
-- medium-term refactor,
-- long-term hardening / polish.
+Write the answer in **Italian**.
 
 ---
 
-## Non-negotiable review rules
+# Issues to investigate and fix
 
-### Be evidence-based
-Every important claim must reference specific evidence from the repository:
-- file paths,
-- functions,
-- templates,
-- components,
-- routes,
-- config,
-- snippets of behavior derived from code structure.
+## 1 — Scan progress bar still visible after scan completed
 
-Do **not** make broad claims without grounding them in the codebase.
+Observed behavior:
 
-### Separate facts from inference
-Use this distinction clearly:
-- **Fact:** directly visible in code / structure / config.
-- **Inference:** likely impact or behavior based on those facts.
+- A scan was executed and completed successfully.
+- After returning to the **Dashboard**, the UI still shows the **scan progress/loading bar** as if the scan were still running.
 
-Label uncertainty explicitly.
+Your tasks:
 
-### Prefer concrete issues over generic critique
-Bad:
-- “The UI could be improved.”
-- “There may be security issues.”
-- “The architecture is not ideal.”
+1. Identify where scan status is fetched and displayed in the dashboard.
+2. Determine why the UI may keep showing "running" state.
+3. Investigate possible causes:
+   - stale cached data
+   - polling logic not refreshing correctly
+   - status mapping mismatch
+   - scan completion not updating frontend state
+4. Propose a fix.
 
-Good:
-- “The app appears to maintain two parallel UI paradigms (`app.html` SPA and separate server-rendered pages like `scans.html` / `findings.html`), which increases the risk of visual and behavioral drift.”
-- “A fallback is described for charts, but chart initialization appears to assume the chart library is loaded, which may break startup when the CDN is unavailable.”
-
-### Do not be polite at the expense of truth
-Be fair, but sharp.
-Call out weak engineering, immature UX, misleading behavior, and risky design choices clearly.
-
-### Do not invent runtime evidence
-If you cannot run the app, say that the review is based on **static analysis** of the repository and identify where runtime validation is still needed.
-
-### Prioritize
-Do not dump an unranked list.
-Rank issues by severity and business impact.
+Provide:
+- likely root cause
+- files involved
+- recommended code change.
 
 ---
 
-## Required output structure
+# 2 — Problems in the "Scans" tab
 
-Produce the output in **Italian**.
+Several UI/UX issues exist in the **Scans tab**.
 
-Use exactly this structure:
+### 2.1 Button styling inconsistency
 
-# 1. Executive summary
-A concise but strong assessment:
-- what this project is,
-- current maturity level,
-- where it is strongest,
-- where it is weakest,
-- whether it feels production-ready, MVP-like, or internal-tool quality.
+Buttons:
 
-# 2. Scorecard
-Give a score from **1 to 10** for each dimension:
-- UI / visual quality
-- UX / usability
-- Functional completeness
-- Robustness / reliability
-- Architecture / maintainability
-- Security posture of implementation
-- Production readiness
+- `Reset`
+- `+ New Scan`
 
-For each score, add 2–4 lines of justification.
+Problems:
 
-# 3. What works well
-List the main strengths.
-Be specific and evidence-based.
+- Different dimensions compared to other buttons in the app
+- Different color palette
+- Visual inconsistency with rest of UI
 
-# 4. Critical issues
-Create a table with columns:
+Tasks:
 
-| Severity | Area | Issue | Evidence | User/Business Impact | Recommended Fix |
-
-Severity must be one of:
-- Critical
-- High
-- Medium
-- Low
-
-This section should focus on the most important issues first.
-
-# 5. Detailed findings by area
-
-Use these subsections:
-
-## 5.1 UI / visual design
-## 5.2 UX / workflows
-## 5.3 Functional bugs and broken assumptions
-## 5.4 Frontend engineering quality
-## 5.5 Backend / orchestration risks
-## 5.6 Security / auth / trust boundaries
-## 5.7 Configuration / deployment / operability
-## 5.8 Maintainability / technical debt
-
-For each subsection:
-- identify concrete problems,
-- cite repo evidence,
-- explain why it matters,
-- propose a better approach.
-
-# 6. Top 10 bugs / risks to fix first
-A ranked list from 1 to 10.
-Each item must include:
-- issue title,
-- severity,
-- where it appears,
-- why it matters,
-- fastest reasonable fix.
-
-# 7. Remediation plan
-Split into phases:
-
-## Phase 0 — Immediate fixes (next 24–72h)
-## Phase 1 — Stabilization (next 1–2 weeks)
-## Phase 2 — Consolidation / refactor
-## Phase 3 — Product polish / hardening
-
-For each phase include:
-- objective,
-- tasks,
-- expected impact,
-- dependencies / blockers.
-
-# 8. Suggested GitHub issues
-Write 10 issue titles with short descriptions, ready to be turned into backlog items.
-
-# 9. Final verdict
-A blunt final assessment:
-- what category of product this currently feels like,
-- what prevents it from feeling production-grade,
-- what one or two decisions would improve it the most.
+- Identify the button styling source
+- Explain why they differ
+- Propose consistent styling aligned with the rest of the UI
+- Suggest reusable button classes if missing
 
 ---
 
-## Review methodology
+### 2.2 Column label problem
 
-Inspect at least these areas if present:
-- README and deployment instructions
-- frontend templates / SPA files / CSS / JS
-- backend app entrypoints
-- auth and session handling
-- routing
-- API integration patterns
-- scan runner / subprocess orchestration
-- DB access layer
-- config and environment variable handling
-- Docker / compose files
-- static assets and third-party dependencies
+In the scans table:
 
-Where relevant, look for mismatches between:
-- what the README promises,
-- what the UI implies,
-- and what the code actually does.
+- The column **Critical** appears as **"crit"**
+
+Tasks:
+
+- Identify where column headers are defined
+- Fix the label
+- Ensure consistent naming with other severity columns
 
 ---
 
-## Special attention points
+### 2.3 Sorting problems
 
-Pay extra attention to these classes of problems:
+Sorting by **Findings** does not work.
 
-### UI / product
-- duplicated UI paradigms,
-- inconsistent page styling,
-- dense dashboards with weak hierarchy,
-- poor empty/error/loading states,
-- lack of mobile responsiveness,
-- accessibility problems,
-- admin-template feel vs polished product feel.
+Additionally, the following columns **should be sortable but currently are not**:
 
-### Functionality
-- false success states,
-- missing error propagation,
-- triage actions that may fail silently,
-- weak state synchronization,
-- confusing filtering or labeling,
-- workflows that likely break under real usage.
+- type
+- status
+- policy
+- high
 
-### Architecture
-- duplicated logic,
-- fragile coupling,
-- hardcoded paths,
-- config inconsistencies,
-- poor separation of concerns,
-- partial migrations,
-- “legacy + new UI living together” issues.
+Tasks:
 
-### Async / orchestration
-- unbounded queues,
-- hidden backlog problems,
-- subprocess exit-code handling,
-- stale status reporting,
-- weak cancellation / retries / timeout handling.
-
-### Security-adjacent product credibility
-This is a security scanning platform.  
-Be especially critical of implementation choices that reduce trust, such as:
-- overly permissive CSP,
-- fragile CDN dependencies,
-- admin assumptions,
-- unclear RBAC boundaries,
-- insecure defaults,
-- inconsistent auth semantics.
+1. Identify how sorting is implemented in the table
+2. Explain why "findings" sorting is broken
+3. Implement sortable behavior for the additional columns
+4. Ensure sorting is:
+   - stable
+   - consistent with numeric vs text values
 
 ---
 
-## Style requirements
+# 3 — Findings tab improvements
 
-- Write in Italian.
-- Be direct, precise, and senior-level.
-- Avoid filler.
-- Avoid generic compliments.
-- Prefer concrete repository evidence over abstract advice.
-- Use markdown.
-- Keep the tone professional but unsparing.
-- When a claim is inferred rather than directly proven, say so clearly.
+## 3.1 Remediation RAW link not clickable
+
+Inside **Finding details**, the field:
+
+Remediation (raw)
+
+is not clickable.
+
+Tasks:
+
+- Find where remediation text is rendered
+- Convert URLs into clickable links
+- Ensure long URLs wrap properly
+- Avoid XSS issues when rendering links
 
 ---
 
-## Final instruction
+## 3.2 Findings pagination size
 
-Do a **real critical review**, not a summary.
+Currently the findings table does not allow choosing **how many findings per page**.
 
-I want the kind of output a strong principal engineer would give after inspecting the repository with the intent of deciding:
-- whether to adopt it,
-- whether to refactor it,
-- and what to fix first before trusting it in production.
+Add:
+
+- a page size selector (example: 10 / 25 / 50 / 100)
+- persistent user preference if possible
+
+Explain:
+
+- where pagination logic lives
+- how to add configurable page size cleanly
+
+---
+
+## 3.3 Export/download ignores filters
+
+When exporting findings:
+
+- the download **exports all findings**
+- it **ignores the currently active filters**
+
+Desired behavior:
+
+The download must respect:
+
+- severity filters
+- status filters
+- search filters
+- pagination filters if applicable
+
+Tasks:
+
+- locate export implementation
+- ensure export uses current filtered dataset
+- propose backend vs frontend implementation if needed
+
+---
+
+## 3.4 Broken CVE links
+
+Often clicking a link in column **CVE / ID** leads to an NVD error:
+
+Invalid Parameters  
+cveId: must match "(cve|CVE)-[0-9]{4}-[0-9]{4,}$"
+
+This suggests malformed CVE values.
+
+Tasks:
+
+1. Identify where the CVE link is constructed
+2. Detect possible causes:
+   - malformed CVE values
+   - missing prefix
+   - truncated strings
+3. Implement validation before generating NVD link
+4. Ensure correct format:
+
+CVE-YYYY-NNNN
+
+5. Provide fallback behavior if the CVE is invalid.
+
+---
+
+# 4 — New chart near "Tool Effectiveness"
+
+In the dashboard there is already a chart:
+
+Tool Effectiveness
+
+Add another chart **next to it**.
+
+Tasks:
+
+1. Identify the dashboard chart layout
+2. Propose a **useful complementary chart**
+
+Examples could include:
+
+- Findings by severity
+- Scan success vs failure rate
+- Findings trend by scanner
+- Risk distribution
+
+Explain:
+
+- why this chart adds value
+- where to insert it
+- required data source
+- implementation approach
+
+---
+
+# 5 — Dark theme issue with "Trend Risk Score"
+
+In **dark mode**, the chart:
+
+Trend Risk Score
+
+is hard to read.
+
+Likely issues:
+
+- low contrast
+- axis colors
+- grid visibility
+- line colors
+
+Tasks:
+
+1. Identify chart configuration
+2. Fix dark theme styling:
+   - axis labels
+   - grid lines
+   - line colors
+   - tooltip colors
+3. Ensure both themes render correctly.
+
+---
+
+# Output format
+
+Respond with this structure:
+
+## 1. Root cause analysis
+For each problem explain why it happens.
+
+## 2. Files involved
+List relevant files in the repo.
+
+## 3. Recommended fixes
+Provide concrete solutions.
+
+## 4. Code-level suggestions
+Where possible provide patch-style or example code.
+
+## 5. UX improvements
+Suggest better UX behavior where applicable.
+
+Focus on **practical improvements**, not theory.

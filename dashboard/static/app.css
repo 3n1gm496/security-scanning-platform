@@ -1796,6 +1796,88 @@ code {
   }
 }
 
+/* ── Utility classes (extracted from inline styles) ─────────────────────────── */
+
+.u-flex           { display: flex; }
+.u-inline-flex    { display: inline-flex; }
+.u-items-center   { align-items: center; }
+.u-flex-shrink-0  { flex-shrink: 0; }
+.u-gap-4          { gap: 4px; }
+.u-gap-8          { gap: 8px; }
+.u-gap-12         { gap: 12px; }
+.u-mr-4           { margin-right: 4px; }
+.u-mr-6           { margin-right: 6px; }
+.u-mt-8           { margin-top: 8px; }
+.u-mb-8           { margin-bottom: 8px; }
+.u-mb-16          { margin-bottom: 16px; }
+.u-text-xs        { font-size: 11px; }
+.u-text-sm        { font-size: 12px; }
+.u-text-base      { font-size: 13px; }
+.u-text-lg        { font-size: 20px; }
+.u-text-center    { text-align: center; }
+.u-text-muted     { color: var(--color-text-secondary); }
+.u-opacity-20     { opacity: 0.2; }
+.u-max-w-360      { max-width: 360px; }
+.u-inline-block   { display: inline-block; }
+
+.alert-running {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.chart-unavailable {
+  border-left: 4px solid #f59e0b;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.col-toggle-pad { padding: 10px 20px 0; }
+
+.section-hint {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  padding: 12px 20px 0;
+}
+
+.modal-subtitle {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 16px;
+}
+
+.input-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* ── Layout: KPI grid, chart grid, compare grid ────────────────────────────── */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--space-4);
+}
+
+.compare-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.compare-summary-card {
+  text-align: center;
+  padding: var(--space-4);
+}
+
 /* Print styles */
 @media print {
   .sidebar, .topbar-slim, .toast-container, .modal-overlay { display: none !important; }

@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 
+import bcrypt
+
 from db import get_connection
 
 # Database path
@@ -118,8 +120,23 @@ def generate_api_key() -> tuple[str, str]:
 
 
 def hash_api_key(key: str) -> str:
-    """Hash an API key using SHA-256."""
-    return hashlib.sha256(key.encode()).hexdigest()
+    """Hash an API key using bcrypt (brute-force resistant)."""
+    return bcrypt.hashpw(key.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_key_hash(key: str, stored_hash: str) -> bool:
+    """Verify a key against a stored hash.
+
+    Supports both bcrypt (new) and SHA-256 (legacy) hashes for backward
+    compatibility during the migration period.
+    """
+    if stored_hash.startswith("$2b$") or stored_hash.startswith("$2a$"):
+        try:
+            return bcrypt.checkpw(key.encode(), stored_hash.encode())
+        except Exception:
+            return False
+    # Legacy SHA-256 fallback
+    return secrets.compare_digest(hashlib.sha256(key.encode()).hexdigest(), stored_hash)
 
 
 def create_api_key(
@@ -153,31 +170,36 @@ def verify_api_key(key: str) -> Optional[dict]:
     """
     Verify an API key and return its details.
     Returns None if key is invalid, expired, or inactive.
+
+    Uses the key prefix (first 12 chars) as a fast DB filter, then verifies
+    the full key against the stored bcrypt (or legacy SHA-256) hash.
     """
-    key_hash = hash_api_key(key)
+    prefix = key[:12] if len(key) >= 12 else key
 
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT * FROM api_keys WHERE key_hash = ? AND is_active = 1",
-            (key_hash,),
-        ).fetchone()
+        rows = conn.execute(
+            "SELECT * FROM api_keys WHERE key_prefix = ? AND is_active = 1",
+            (prefix,),
+        ).fetchall()
 
-        if not row:
-            return None
+        for row in rows:
+            if not _verify_key_hash(key, row["key_hash"]):
+                continue
 
-        # Check expiration
-        if row["expires_at"]:
-            expires_at = datetime.fromisoformat(row["expires_at"])
-            if datetime.now(timezone.utc) > expires_at:
-                return None
+            # Check expiration
+            if row["expires_at"]:
+                expires_at = datetime.fromisoformat(row["expires_at"])
+                if datetime.now(timezone.utc) > expires_at:
+                    return None
 
-        # Update last_used_at
-        conn.execute(
-            "UPDATE api_keys SET last_used_at = ? WHERE id = ?",
-            (datetime.now(timezone.utc).isoformat(), row["id"]),
-        )
+            # Update last_used_at
+            conn.execute(
+                "UPDATE api_keys SET last_used_at = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), row["id"]),
+            )
+            return dict(row)
 
-    return dict(row)
+    return None
 
 
 def has_permission(role: Role, permission: Permission) -> bool:

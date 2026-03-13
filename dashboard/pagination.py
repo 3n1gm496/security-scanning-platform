@@ -258,6 +258,33 @@ class FindingsPaginator:
                 """
         params.append(self.per_page + 1)
 
+        # Total count query (same filters, no cursor/LIMIT)
+        count_params: list[Any] = []
+        if search:
+            count_params.extend([f"%{search}%"] * 4)
+        if severity_filter:
+            count_params.extend(severity_filter)
+        if tool_filter:
+            count_params.extend(tool_filter)
+        if scan_id is not None:
+            count_params.append(scan_id)
+        if use_status_join:
+            count_params.append(status_filter)
+        # Rebuild WHERE without cursor clause
+        count_clauses = list(where_clauses)
+        if cursor:
+            count_clauses = count_clauses[:-1]
+        count_where = " AND ".join(count_clauses)
+        if use_status_join:
+            count_query = f"""
+                SELECT COUNT(*) AS total FROM findings f
+                LEFT JOIN finding_states fs ON fs.finding_id = f.id
+                WHERE {count_where}
+                """
+        else:
+            count_query = f"SELECT COUNT(*) AS total FROM findings WHERE {count_where}"
+        total_count = conn.execute(count_query, count_params).fetchone()["total"]
+
         rows = conn.execute(query, params).fetchall()
         items = [dict(row) for row in rows]
 
@@ -269,12 +296,20 @@ class FindingsPaginator:
         if has_next and items:
             next_cursor = self._encode_cursor(str(items[-1][safe_sort_by]))
 
+        # Prev cursor: encode the first item's sort key for backward navigation
+        prev_cursor = None
+        if cursor and items:
+            prev_cursor = self._encode_cursor(str(items[0][safe_sort_by]))
+
         return {
             "items": items,
             "pagination": {
                 "count": len(items),
+                "total_count": total_count,
                 "has_next": has_next,
+                "has_prev": cursor is not None,
                 "next_cursor": next_cursor,
+                "prev_cursor": prev_cursor,
                 "per_page": self.per_page,
             },
         }

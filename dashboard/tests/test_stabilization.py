@@ -160,74 +160,18 @@ def auth_client(db_with_findings):
     return client
 
 
-def test_findings_page_default_pagination(auth_client):
-    """GET /findings returns pagination context with sensible defaults."""
-    resp = auth_client.get("/findings")
-    assert resp.status_code == 200
-    html = resp.text
-    # Pagination context values should be present
-    assert "Page 1 of" in html
-    assert "result" in html  # "12 results" or "1 result"
+def test_findings_redirects_to_spa(auth_client):
+    """GET /findings now redirects to the SPA at /#findings."""
+    resp = auth_client.get("/findings", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/#findings"
 
 
-def test_findings_page_respects_page_param(auth_client):
-    """GET /findings?per_page=5&page=2 returns page 2."""
-    resp = auth_client.get("/findings?per_page=5&page=2")
-    assert resp.status_code == 200
-    html = resp.text
-    assert "Page 2 of 3" in html
-
-
-def test_findings_page_clamped_page(auth_client):
-    """page beyond total_pages is clamped to last page."""
-    resp = auth_client.get("/findings?per_page=5&page=999")
-    assert resp.status_code == 200
-    html = resp.text
-    assert "Page 3 of 3" in html
-
-
-def test_findings_page_per_page_cap(auth_client):
-    """per_page is capped at FINDINGS_MAX_PAGE_SIZE (200)."""
-    resp = auth_client.get("/findings?per_page=99999")
-    assert resp.status_code == 200
-    # Should not blow up; total is 12 so all fit in one page
-    html = resp.text
-    assert "Page 1 of 1" in html
-
-
-def test_findings_page_empty_state(auth_client):
-    """Filter that matches nothing shows empty state."""
-    resp = auth_client.get("/findings?severity=INFO")
-    assert resp.status_code == 200
-    assert "No findings match" in resp.text
-
-
-def test_findings_page_pagination_prev_next(auth_client):
-    """Prev/Next links appear correctly on middle page."""
-    resp = auth_client.get("/findings?per_page=5&page=2")
-    assert resp.status_code == 200
-    html = resp.text
-    # Both Prev and Next links should be active (not disabled)
-    assert "&#8592; Previous</a>" in html
-    assert "Next &#8594;</a>" in html
-
-
-def test_findings_page_first_page_no_prev(auth_client):
-    """First page shows disabled Prev."""
-    resp = auth_client.get("/findings?per_page=5&page=1")
-    assert resp.status_code == 200
-    html = resp.text
-    # Disabled prev is a <span>, not an <a>
-    assert "&#8592; Previous</span>" in html
-    assert "Next &#8594;</a>" in html
-
-
-def test_findings_page_last_page_no_next(auth_client):
-    """Last page shows disabled Next."""
-    resp = auth_client.get("/findings?per_page=5&page=3")
-    assert resp.status_code == 200
-    html = resp.text
-    assert "Next &#8594;</span>" in html
+def test_scans_redirects_to_spa(auth_client):
+    """GET /scans now redirects to the SPA at /#scans."""
+    resp = auth_client.get("/scans", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/#scans"
 
 
 # ---------------------------------------------------------------------------
@@ -244,11 +188,54 @@ def test_index_html_not_served(auth_client):
     assert "vue" in resp.text.lower() or "app" in resp.text.lower()
 
 
-def test_findings_template_is_english(auth_client):
-    """findings.html must not contain Italian text."""
-    resp = auth_client.get("/findings")
+# ---------------------------------------------------------------------------
+# Phase 2: status-counts endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_status_counts_endpoint(auth_client):
+    """GET /api/findings/status-counts returns a dict of status -> count."""
+    resp = auth_client.get("/api/findings/status-counts")
     assert resp.status_code == 200
-    html = resp.text
-    # Key Italian words that must no longer appear
-    for italian_word in ["Filtra", "Tutte", "Tutti", "Categoria", "Titolo", "Scansioni", "Versione"]:
-        assert italian_word not in html, f"Italian word '{italian_word}' found in findings.html"
+    data = resp.json()
+    assert isinstance(data, dict)
+    # With 12 findings and no triage, all should be 'new'
+    assert data.get("new", 0) == 12
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: TTL cache
+# ---------------------------------------------------------------------------
+
+
+def test_ttl_cache_returns_cached_value():
+    """_cached should return same result within TTL window."""
+    from app import _cached, _ttl_cache
+
+    call_count = 0
+
+    def expensive():
+        nonlocal call_count
+        call_count += 1
+        return {"result": call_count}
+
+    # Clear any previous cache entry
+    _ttl_cache.pop("test_ttl", None)
+
+    r1 = _cached("test_ttl", expensive, ttl=60)
+    r2 = _cached("test_ttl", expensive, ttl=60)
+    assert r1 == r2
+    assert call_count == 1  # Only called once
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: streaming CSV export (large limit)
+# ---------------------------------------------------------------------------
+
+
+def test_export_csv_small(auth_client):
+    """Small CSV export returns standard Response with X-Exported-Count."""
+    resp = auth_client.get("/api/export/findings?format=csv&limit=100")
+    assert resp.status_code == 200
+    assert resp.headers.get("content-type", "").startswith("text/csv")
+    assert "X-Exported-Count" in resp.headers

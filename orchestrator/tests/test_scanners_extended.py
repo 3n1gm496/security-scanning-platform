@@ -73,12 +73,11 @@ def test_load_json_list(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_semgrep_not_found_skips(tmp_path, monkeypatch):
+def test_semgrep_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
-    res = run_semgrep("/tmp", str(output), configs=["auto"])
-    assert res["exit_code"] == 0
-    assert output.exists()
+    with pytest.raises(ScannerError, match="semgrep not found"):
+        run_semgrep("/tmp", str(output), configs=["auto"])
 
 
 def test_semgrep_success(tmp_path, monkeypatch):
@@ -158,12 +157,11 @@ def test_semgrep_includes_configs_in_command(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_trivy_fs_not_found_skips(tmp_path, monkeypatch):
+def test_trivy_fs_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
-    res = run_trivy_fs("/tmp", str(output), severities=[])
-    assert res["exit_code"] == 0
-    assert output.exists()
+    with pytest.raises(ScannerError, match="trivy not found"):
+        run_trivy_fs("/tmp", str(output), severities=[])
 
 
 def test_trivy_fs_success(tmp_path, monkeypatch):
@@ -228,12 +226,11 @@ def test_trivy_fs_empty_output_fallback(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_trivy_image_not_found_skips(tmp_path, monkeypatch):
+def test_trivy_image_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
-    res = run_trivy_image("nginx:latest", str(output), severities=[])
-    assert res["exit_code"] == 0
-    assert output.exists()
+    with pytest.raises(ScannerError, match="trivy not found"):
+        run_trivy_image("nginx:latest", str(output), severities=[])
 
 
 def test_trivy_image_success(tmp_path, monkeypatch):
@@ -281,12 +278,11 @@ def test_trivy_image_fatal_error_raises(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_gitleaks_not_found_skips(tmp_path, monkeypatch):
+def test_gitleaks_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
-    res = run_gitleaks("/tmp", str(output))
-    assert res["exit_code"] == 0
-    assert output.exists()
+    with pytest.raises(ScannerError, match="gitleaks not found"):
+        run_gitleaks("/tmp", str(output))
 
 
 def test_gitleaks_success_no_findings(tmp_path, monkeypatch):
@@ -370,12 +366,11 @@ def test_gitleaks_git_mode(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_checkov_not_found_skips(tmp_path, monkeypatch):
+def test_checkov_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
-    res = run_checkov("/tmp", str(output))
-    assert res["exit_code"] == 0
-    assert output.exists()
+    with pytest.raises(ScannerError, match="checkov not found"):
+        run_checkov("/tmp", str(output))
 
 
 def test_checkov_success(tmp_path, monkeypatch):
@@ -458,12 +453,11 @@ def test_checkov_command_flags(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_syft_not_found_skips(tmp_path, monkeypatch):
+def test_syft_not_found_raises(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     output = tmp_path / "out.json"
-    res = run_syft("nginx:latest", str(output))
-    assert res["exit_code"] == 0
-    assert output.exists()
+    with pytest.raises(ScannerError, match="syft not found"):
+        run_syft("nginx:latest", str(output))
 
 
 def test_syft_success(tmp_path, monkeypatch):

@@ -5,6 +5,22 @@
 
 const { createApp, ref, reactive, computed, onMounted, nextTick, watch } = Vue;
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO', 'UNKNOWN'];
+
+const SEVERITY_COLORS = {
+  CRITICAL: '#dc2626', HIGH: '#f97316', MEDIUM: '#f59e0b',
+  LOW: '#3b82f6', INFO: '#6b7280', UNKNOWN: '#9ca3af',
+};
+
+const STATUS_LABELS = ['New', 'Acknowledged', 'In Progress', 'Resolved', 'False Positive', 'Risk Accepted'];
+const STATUS_KEYS   = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
+const STATUS_COLORS = ['#6b7280', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899'];
+
+const OWASP_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#14b8a6', '#3b82f6', '#8b5cf6'];
+const RISK_COLORS  = ['#10b981', '#f59e0b', '#f97316', '#dc2626'];
+
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 function debounce(fn, delay) {
@@ -33,6 +49,16 @@ async function apiFetch(url, options = {}, timeoutMs = 30000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Like apiFetch but does not parse JSON — validates res.ok and returns the raw Response. */
+async function apiSend(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res;
 }
 
 function formatDate(iso) {
@@ -219,11 +245,20 @@ createApp({
    async mounted() {
     this.debouncedLoadFindings = debounce(() => this.loadFindings(true), 400);
 
-    // ── URL Routing: read initial page from URL hash
+    // ── URL Routing: read initial page + filter params from URL hash
     const validPages = ['dashboard', 'scans', 'findings', 'analytics', 'settings', 'compare'];
-    const hashPage = window.location.hash.replace('#', '');
+    const rawHash = window.location.hash.replace('#', '');
+    const [hashPage, hashQuery] = rawHash.split('?');
     const initialPage = validPages.includes(hashPage) ? hashPage : 'dashboard';
     if (initialPage !== 'dashboard') this.currentPage = initialPage;
+
+    // Apply filter params from hash (e.g. #findings?severity=HIGH&tool=semgrep)
+    if (hashQuery && initialPage === 'findings') {
+      const hp = new URLSearchParams(hashQuery);
+      for (const key of ['search', 'severity', 'tool', 'target', 'status', 'scan_id']) {
+        if (hp.has(key)) this.findingsFilter[key] = hp.get(key);
+      }
+    }
     history.replaceState({ page: initialPage }, '', '#' + initialPage);
 
     // ── History API: back/forward button support
@@ -247,13 +282,31 @@ createApp({
       document.documentElement.setAttribute('data-theme', 'dark');
     }
 
-    // ── Minimal keyboard: Escape to close modals
+    // ── Keyboard: Escape to close modals + Tab focus trap
     this._keyHandler = (e) => {
       if (e.key === 'Escape') {
         this.showFindingModal = false;
         this.showScanModal = false;
         this.selectedFinding = null;
         this.selectedScan = null;
+        this.showCreateKeyModal = false;
+        this.showCreateWebhookModal = false;
+      }
+      // Focus trap: keep Tab within the active modal
+      if (e.key === 'Tab') {
+        const overlay = document.querySelector('.modal-overlay[role="dialog"]');
+        if (!overlay) return;
+        const focusable = overlay.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
       }
     };
     document.addEventListener('keydown', this._keyHandler);
@@ -285,6 +338,18 @@ createApp({
   },
 
   methods: {
+    // ── Modal accessibility ───────────────────────────────────────────────────
+
+    async focusModal() {
+      await nextTick();
+      const overlay = document.querySelector('.modal-overlay[role="dialog"]');
+      if (!overlay) return;
+      const first = overlay.querySelector(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (first) first.focus();
+    },
+
     // ── Chart theme helpers ────────────────────────────────────────────────────
 
     applyChartDefaults() {
@@ -293,7 +358,7 @@ createApp({
       Chart.defaults.borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
     },
 
-    // ── Toggle colonne ───────────────────────────────────────────────────────────────────────────────────
+    // ── Toggle columns ───────────────────────────────────────────────────────────────────────────────────
 
     colVisible(key) {
       const col = this.scanColumns.find(c => c.key === key);
@@ -411,8 +476,8 @@ createApp({
       const canvas = this.$refs.remediationChart;
       if (!canvas) return;
       if (this.charts.remediation) this.charts.remediation.destroy();
-      const labels = ['New', 'Acknowledged', 'In Progress', 'Resolved', 'False Positive', 'Risk Accepted'];
-      const colors = ['#6b7280', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899'];
+      const labels = STATUS_LABELS;
+      const colors = STATUS_COLORS;
       this.charts.remediation = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -438,13 +503,11 @@ createApp({
           },
         },
       });
-      // Load real data from the API, then hide empty status categories
-      const statusKeys = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
-      Promise.all(statusKeys.map(s =>
-        apiFetch(`/api/findings/paginated?status=${s}&per_page=1`)
-          .then(r => r.pagination ? r.pagination.count : 0)
-          .catch(() => 0)
-      )).then(counts => {
+      // Load real data from the single status-counts endpoint
+      apiFetch('/api/findings/status-counts').then(statusMap => {
+        const counts = STATUS_KEYS.map(s => statusMap[s] || 0);
+        return counts;
+      }).catch(() => STATUS_KEYS.map(() => 0)).then(counts => {
         if (!this.charts.remediation) return;
         // Filter out categories with zero findings to reduce visual noise
         const nonZeroIdx = counts.map((c, i) => c > 0 ? i : -1).filter(i => i >= 0);
@@ -465,15 +528,9 @@ createApp({
       if (!canvas) return;
       if (this.charts.severity) this.charts.severity.destroy();
       const data = this.severityBreakdown;
-      // Fixed order for readability: most to least severe
-      const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO', 'UNKNOWN'];
-      const colorMap = {
-        CRITICAL: '#dc2626', HIGH: '#f97316', MEDIUM: '#f59e0b',
-        LOW: '#3b82f6', INFO: '#6b7280', UNKNOWN: '#9ca3af',
-      };
-      const labels = order.filter(k => data[k] !== undefined && data[k] > 0);
+      const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
-      const colors = labels.map(k => colorMap[k] || '#9ca3af');
+      const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
       this.charts.severity = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -548,10 +605,10 @@ createApp({
         data: {
           labels,
           datasets: [
-            { label: 'Critical', data: scans.map(s => s.critical_count || 0), backgroundColor: '#dc2626', borderRadius: 3 },
-            { label: 'High', data: scans.map(s => s.high_count || 0), backgroundColor: '#f97316', borderRadius: 3 },
-            { label: 'Medium', data: scans.map(s => s.medium_count || 0), backgroundColor: '#f59e0b', borderRadius: 3 },
-            { label: 'Low', data: scans.map(s => s.low_count || 0), backgroundColor: '#3b82f6', borderRadius: 3 },
+            { label: 'Critical', data: scans.map(s => s.critical_count || 0), backgroundColor: SEVERITY_COLORS.CRITICAL, borderRadius: 3 },
+            { label: 'High', data: scans.map(s => s.high_count || 0), backgroundColor: SEVERITY_COLORS.HIGH, borderRadius: 3 },
+            { label: 'Medium', data: scans.map(s => s.medium_count || 0), backgroundColor: SEVERITY_COLORS.MEDIUM, borderRadius: 3 },
+            { label: 'Low', data: scans.map(s => s.low_count || 0), backgroundColor: SEVERITY_COLORS.LOW, borderRadius: 3 },
           ],
         },
         options: {
@@ -659,6 +716,7 @@ createApp({
 
     openScanDetail(scan) {
       this.selectedScan = scan;
+      this.focusModal();
     },
 
     viewScanFindings(scan) {
@@ -669,6 +727,17 @@ createApp({
     },
 
     // ── Findings ──────────────────────────────────────────────────────────────
+
+    _syncFindingsHash() {
+      const f = this.findingsFilter;
+      const hp = new URLSearchParams();
+      for (const key of ['search', 'severity', 'tool', 'target', 'status', 'scan_id']) {
+        if (f[key]) hp.set(key, f[key]);
+      }
+      const qs = hp.toString();
+      const hash = '#findings' + (qs ? '?' + qs : '');
+      history.replaceState({ page: 'findings' }, '', hash);
+    },
 
     async loadFindings(reset = false) {
       if (reset) {
@@ -695,6 +764,7 @@ createApp({
         const pag = result.pagination || {};
         this.findingsTotal = pag.count || this.findings.length;
         this.findingsCursor = pag.next_cursor || null;
+        if (this.currentPage === 'findings') this._syncFindingsHash();
       } catch (e) {
         this.showToast('Failed to load findings: ' + e.message, 'error');
       } finally {
@@ -750,6 +820,7 @@ createApp({
 
     async openFindingDetail(finding) {
       this.selectedFinding = finding;
+      this.focusModal();
       this.findingModalTab = 'info';
       this.newFindingStatus = '';
       this.findingStatusNotes = '';
@@ -789,7 +860,7 @@ createApp({
         const fd = new FormData();
         fd.append('status', this.newFindingStatus);
         if (this.findingStatusNotes) fd.append('notes', this.findingStatusNotes);
-        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = this.newFindingStatus;
         this.findingState.updated_at = new Date().toISOString();
         this.newFindingStatus = '';
@@ -806,7 +877,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('status', 'false_positive');
-        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = 'false_positive';
         this.showToast('Finding marked as false positive');
         await this.loadFindings(true);
@@ -821,7 +892,7 @@ createApp({
         const fd = new FormData();
         fd.append('status', 'risk_accepted');
         fd.append('notes', `Justification: ${this.acceptRiskJustification} | Expiry: ${this.acceptRiskExpiry}`);
-        await fetch(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/status`, { method: 'PATCH', body: fd });
         this.findingState.status = 'risk_accepted';
         this.showAcceptRiskForm = false;
         this.acceptRiskJustification = '';
@@ -838,7 +909,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('assigned_to', this.assignTo);
-        await fetch(`/api/findings/${this.selectedFinding.id}/assign`, { method: 'POST', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/assign`, { method: 'POST', body: fd });
         this.findingState.assigned_to = this.assignTo;
         this.assignTo = '';
         this.showToast('Finding assigned');
@@ -852,7 +923,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('comment', this.newComment);
-        await fetch(`/api/findings/${this.selectedFinding.id}/comment`, { method: 'POST', body: fd });
+        await apiSend(`/api/findings/${this.selectedFinding.id}/comment`, { method: 'POST', body: fd });
         this.findingComments = await apiFetch(`/api/findings/${this.selectedFinding.id}/comments`);
         this.newComment = '';
         this.showToast('Comment added');
@@ -898,9 +969,9 @@ createApp({
         data: {
           labels: tools.map(t => t.tool),
           datasets: [
-            { label: 'Critical', data: tools.map(t => t.critical_count || 0), backgroundColor: '#dc2626', borderRadius: 4 },
-            { label: 'High', data: tools.map(t => t.high_count || 0), backgroundColor: '#f97316', borderRadius: 4 },
-            { label: 'Medium', data: tools.map(t => t.medium_count || 0), backgroundColor: '#f59e0b', borderRadius: 4 },
+            { label: 'Critical', data: tools.map(t => t.critical_count || 0), backgroundColor: SEVERITY_COLORS.CRITICAL, borderRadius: 4 },
+            { label: 'High', data: tools.map(t => t.high_count || 0), backgroundColor: SEVERITY_COLORS.HIGH, borderRadius: 4 },
+            { label: 'Medium', data: tools.map(t => t.medium_count || 0), backgroundColor: SEVERITY_COLORS.MEDIUM, borderRadius: 4 },
           ],
         },
         options: {
@@ -925,7 +996,7 @@ createApp({
           labels: Object.keys(dist),
           datasets: [{
             label: 'Findings', data: Object.values(dist),
-            backgroundColor: ['#10b981', '#f59e0b', '#f97316', '#dc2626'],
+            backgroundColor: RISK_COLORS,
             borderRadius: 6,
           }],
         },
@@ -948,7 +1019,7 @@ createApp({
           labels: owasp.map(o => o.category.split(' - ')[0]),
           datasets: [{
             data: owasp.map(o => o.count),
-            backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#14b8a6', '#3b82f6', '#8b5cf6'],
+            backgroundColor: OWASP_COLORS,
             borderWidth: 2, borderColor: '#fff',
           }],
         },
@@ -1034,8 +1105,8 @@ createApp({
       this.compareResult = null;
       try {
         const result = await apiFetch(`/api/scans/compare?scan_id_1=${this.compareIdA}&scan_id_2=${this.compareIdB}`);
-        // Normalizza la risposta API: l'API restituisce { scan_1, scan_2, diff: { new_count, ... } }
-        // Il template si aspetta { summary: { new, resolved, unchanged }, new_findings, resolved_findings }
+        // Normalize API response: the API returns { scan_1, scan_2, diff: { new_count, ... } }
+        // The template expects { summary: { new, resolved, unchanged }, new_findings, resolved_findings }
         if (result && result.diff) {
           this.compareResult = {
             scan_1: result.scan_1,
@@ -1141,7 +1212,7 @@ createApp({
         fd.append('name', this.newKeyForm.name);
         fd.append('role', this.newKeyForm.role);
         if (this.newKeyForm.expires_days) fd.append('expires_days', this.newKeyForm.expires_days);
-        const res = await fetch('/api/keys', { method: 'POST', body: fd });
+        const res = await apiSend('/api/keys', { method: 'POST', body: fd });
         const data = await res.json();
         this.newKeyResult = data.key;
         await this.loadApiKeys();
@@ -1177,7 +1248,7 @@ createApp({
         fd.append('url', this.newWebhookForm.url);
         fd.append('events', this.newWebhookForm.events);
         if (this.newWebhookForm.secret) fd.append('secret', this.newWebhookForm.secret);
-        await fetch('/api/webhooks', { method: 'POST', body: fd });
+        await apiSend('/api/webhooks', { method: 'POST', body: fd });
         this.showCreateWebhookModal = false;
         this.newWebhookForm = { name: '', url: '', events: 'scan.completed', secret: '' };
         await this.loadWebhooks();
@@ -1191,7 +1262,7 @@ createApp({
       try {
         const fd = new FormData();
         fd.append('is_active', isActive);
-        await fetch(`/api/webhooks/${id}`, { method: 'PATCH', body: fd });
+        await apiSend(`/api/webhooks/${id}`, { method: 'PATCH', body: fd });
         await this.loadWebhooks();
       } catch (e) {
         this.showToast('Failed to toggle webhook: ' + e.message, 'error');
@@ -1224,21 +1295,35 @@ createApp({
 
     // ── Export ────────────────────────────────────────────────────────────────
 
+    _downloadBlob(res, filename) {
+      const blob = res;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+
+    _checkExportTruncation(res) {
+      const total = parseInt(res.headers.get('X-Total-Count') || '0', 10);
+      const exported = parseInt(res.headers.get('X-Exported-Count') || '0', 10);
+      if (total > exported) {
+        this.showToast(`Warning: exported ${exported} of ${total} findings. Increase the limit or apply filters to export all.`, 'error');
+      }
+    },
+
     async exportScanFindings(scanId, format) {
       try {
         const params = new URLSearchParams({ format, scan_id: scanId, limit: 1000 });
         const res = await fetch(`/api/export/findings?${params}`);
         if (!res.ok) throw new Error('Export failed');
+        this._checkExportTruncation(res);
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `scan_${scanId.substring(0, 8)}_${Date.now()}.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        this.showToast(`Export ${format.toUpperCase()} started`);
+        this._downloadBlob(blob, `scan_${scanId.substring(0, 8)}_${Date.now()}.${format}`);
+        this.showToast(`Export ${format.toUpperCase()} completed`);
       } catch (e) {
         this.showToast('Export failed: ' + e.message, 'error');
       }
@@ -1250,16 +1335,10 @@ createApp({
         if (includeAnalytics) params.set('include_analytics', true);
         const res = await fetch(`/api/export/findings?${params}`);
         if (!res.ok) throw new Error('Export failed');
+        this._checkExportTruncation(res);
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `findings_${Date.now()}.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        this.showToast(`Export ${format.toUpperCase()} started`);
+        this._downloadBlob(blob, `findings_${Date.now()}.${format}`);
+        this.showToast(`Export ${format.toUpperCase()} completed`);
       } catch (e) {
         this.showToast('Export failed: ' + e.message, 'error');
       }

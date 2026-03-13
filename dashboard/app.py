@@ -10,9 +10,11 @@ import io
 import subprocess
 import json
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from threading import Lock
 
 from logging_config import configure_logging, get_logger
 
@@ -20,7 +22,7 @@ configure_logging()
 LOGGER = get_logger(__name__)
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -34,7 +36,6 @@ from db import (
     fetch_kpis,
     list_findings,
     list_scans,
-    parse_artifacts,
     recent_failed_scans,
     scans_trend,
     severity_breakdown,
@@ -103,6 +104,29 @@ from pagination import FindingsPaginator, ScansPaginator
 from charting import ChartingEngine
 from notifications import EmailNotificationEngine, NotificationPreferencesManager
 from metrics import get_metrics
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TTL cache for analytics queries — avoids re-querying on every dashboard load
+# ──────────────────────────────────────────────────────────────────────────────
+
+_ttl_cache: dict[str, tuple[float, object]] = {}
+_ttl_lock = Lock()
+ANALYTICS_CACHE_TTL = int(os.getenv("ANALYTICS_CACHE_TTL_SECONDS", "60"))
+
+
+def _cached(key: str, fn, ttl: int = ANALYTICS_CACHE_TTL):
+    """Return cached result or call fn() and store for ttl seconds."""
+    now = time.monotonic()
+    with _ttl_lock:
+        if key in _ttl_cache:
+            expires, value = _ttl_cache[key]
+            if now < expires:
+                return value
+    result = fn()
+    with _ttl_lock:
+        _ttl_cache[key] = (now + ttl, result)
+    return result
+
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -180,10 +204,11 @@ init_webhook_tables()
 init_finding_management_tables()
 default_key = create_default_admin_key()
 if default_key:
-    print(f"\n{'=' * 80}")
-    print(f"DEFAULT ADMIN API KEY: {default_key}")
-    print("Store this key securely! It will not be shown again.")
-    print(f"{'=' * 80}\n")
+    LOGGER.warning(
+        "security.default_admin_key_created",
+        detail="Store this key securely! It will not be shown again.",
+        api_key=default_key,
+    )
 
 # Add monitoring endpoints
 app.include_router(monitoring_router, prefix="/api")
@@ -339,95 +364,16 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
     return templates.TemplateResponse(request, "app.html", context)
 
 
-@app.get("/scans", response_class=HTMLResponse)
-def scans_page(
-    request: Request,
-    target: str | None = None,
-    status_value: str | None = Query(default=None, alias="status"),
-    policy_status: str | None = None,
-    user: str = Depends(get_current_user),
-) -> HTMLResponse:
-    scans = list_scans(DB_PATH, 200, target=target, status=status_value, policy_status=policy_status)
-    for scan in scans:
-        scan["artifacts"] = parse_artifacts(scan)
-    return templates.TemplateResponse(
-        request,
-        "scans.html",
-        {
-            "user": user,
-            "scans": scans,
-            "targets": distinct_targets(DB_PATH),
-            "selected_target": target,
-            "selected_status": status_value,
-            "selected_policy_status": policy_status,
-        },
-    )
+@app.get("/scans")
+def scans_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
+    """Deprecated SSR route — redirect to SPA."""
+    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#scans"})
 
 
-_FINDINGS_PAGE_SIZE = 50
-_FINDINGS_MAX_PAGE_SIZE = 200
-
-
-@app.get("/findings", response_class=HTMLResponse)
-def findings_page(
-    request: Request,
-    severity: str | None = None,
-    tool: str | None = None,
-    target: str | None = None,
-    scan_id: str | None = None,
-    category: str | None = None,
-    page: int = 1,
-    per_page: int = _FINDINGS_PAGE_SIZE,
-    user: str = Depends(get_current_user),
-) -> HTMLResponse:
-    page = max(1, page)
-    per_page = max(1, min(per_page, _FINDINGS_MAX_PAGE_SIZE))
-    offset = (page - 1) * per_page
-
-    filter_kwargs = dict(severity=severity, tool=tool, target=target, scan_id=scan_id, category=category)
-    total = count_findings(DB_PATH, **filter_kwargs)
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    page = min(page, total_pages)
-    offset = (page - 1) * per_page
-
-    findings = list_findings(DB_PATH, per_page, offset=offset, **filter_kwargs)
-
-    for finding in findings:
-        raw_remediation = (finding.get("remediation") or "").strip()
-        if raw_remediation:
-            finding["remediation_display"] = raw_remediation
-            continue
-
-        try:
-            remediation_guide = RemediationEngine.generate_remediation(finding)
-        except Exception as _rem_err:
-            LOGGER.warning("remediation.guide_failed", finding_id=finding.get("id"), error=str(_rem_err))
-            remediation_guide = {}
-        steps = remediation_guide.get("steps") or []
-        if steps:
-            finding["remediation_display"] = steps[0]
-        else:
-            finding["remediation_display"] = remediation_guide.get("title", "-")
-
-    return templates.TemplateResponse(
-        request,
-        "findings.html",
-        {
-            "user": user,
-            "findings": findings,
-            "tools": distinct_tools(DB_PATH),
-            "targets": distinct_targets(DB_PATH),
-            "selected_severity": severity,
-            "selected_tool": tool,
-            "selected_target": target,
-            "selected_scan_id": scan_id,
-            "selected_category": category,
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": total_pages,
-        },
-    )
+@app.get("/findings")
+def findings_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
+    """Deprecated SSR route — redirect to SPA."""
+    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#findings"})
 
 
 @app.get("/api/kpi")
@@ -651,7 +597,10 @@ def create_new_webhook(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid event type: {event_str}")
 
-    webhook_id = create_webhook(name, url, event_list, secret)
+    try:
+        webhook_id = create_webhook(name, url, event_list, secret)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     log_audit(
         action="webhook.create",
@@ -704,7 +653,7 @@ def toggle_webhook_endpoint(
 @app.get("/api/export/findings", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def export_findings_endpoint(
     format: str = Query(..., pattern="^(json|csv|sarif|html|pdf)$"),
-    limit: int = Query(1000, ge=1, le=10000),
+    limit: int = Query(1000, ge=1, le=50000),
     severity: str | None = None,
     tool: str | None = None,
     target: str | None = None,
@@ -716,7 +665,8 @@ def export_findings_endpoint(
     Export findings in multiple formats.
     Supported formats: json, csv, sarif, html, pdf
     """
-    # Fetch findings
+    # Fetch findings and total count (to signal truncation to the client)
+    total = count_findings(DB_PATH, severity=severity, tool=tool, target=target, scan_id=scan_id)
     findings = list_findings(DB_PATH, limit=limit, severity=severity, tool=tool, target=target, scan_id=scan_id)
 
     # Get scan info if scan_id provided
@@ -730,25 +680,69 @@ def export_findings_endpoint(
                 break
 
     # Export based on format
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if format == "json":
         content = export_to_json(findings)
         media_type = "application/json"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+        filename = f"findings_{ts}.json"
 
     elif format == "csv":
+        # Stream CSV in batches for large exports to limit memory usage
+        if total > 1000:
+            filename = f"findings_{ts}.csv"
+            batch_size = 1000
+
+            def _csv_stream():
+                header_written = False
+                for offset in range(0, limit, batch_size):
+                    batch = list_findings(
+                        DB_PATH,
+                        limit=min(batch_size, limit - offset),
+                        severity=severity,
+                        tool=tool,
+                        target=target,
+                        scan_id=scan_id,
+                        offset=offset,
+                    )
+                    if not batch:
+                        break
+                    if not header_written:
+                        all_fields = sorted({k for row in batch for k in row})
+                        buf = io.StringIO()
+                        w = csv.DictWriter(buf, fieldnames=all_fields)
+                        w.writeheader()
+                        yield buf.getvalue()
+                        header_written = True
+                    else:
+                        all_fields = sorted({k for row in batch for k in row})
+                    buf = io.StringIO()
+                    w = csv.DictWriter(buf, fieldnames=all_fields)
+                    for row in batch:
+                        w.writerow(row)
+                    yield buf.getvalue()
+
+            return StreamingResponse(
+                _csv_stream(),
+                media_type="text/csv",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "X-Total-Count": str(total),
+                },
+            )
+
         content = export_to_csv(findings)
         media_type = "text/csv"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"findings_{ts}.csv"
 
     elif format == "sarif":
         content = export_to_sarif(findings)
         media_type = "application/json"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.sarif"
+        filename = f"findings_{ts}.sarif"
 
     elif format == "html":
         content = export_to_html(findings, scan_info)
         media_type = "text/html"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"
+        filename = f"findings_{ts}.html"
 
     elif format == "pdf":
         # Gather analytics data if requested
@@ -761,14 +755,17 @@ def export_findings_endpoint(
 
         content = export_to_pdf(findings, scan_info, analytics_data)
         media_type = "application/pdf"
-        filename = f"findings_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"findings_{ts}.pdf"
 
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid format")
 
-    return Response(
-        content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Total-Count": str(total),
+        "X-Exported-Count": str(len(findings)),
+    }
+    return Response(content=content, media_type=media_type, headers=headers)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -779,31 +776,31 @@ def export_findings_endpoint(
 @app.get("/api/analytics/risk-distribution", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_risk_distribution(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get risk score distribution across all findings."""
-    return get_risk_distribution(DB_PATH)
+    return _cached("risk_distribution", lambda: get_risk_distribution(DB_PATH))
 
 
 @app.get("/api/analytics/compliance", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_compliance(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get OWASP Top 10 and CWE compliance mapping."""
-    return get_compliance_summary(DB_PATH)
+    return _cached("compliance", lambda: get_compliance_summary(DB_PATH))
 
 
 @app.get("/api/analytics/trends", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_trends(days: int = Query(90, ge=7, le=365), auth: AuthContext = Depends(require_auth)) -> dict:
     """Get detailed trend analysis with risk scoring over time."""
-    return get_trend_analysis(DB_PATH, days=days)
+    return _cached(f"trends_{days}", lambda: get_trend_analysis(DB_PATH, days=days))
 
 
 @app.get("/api/analytics/target-risk", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_target_risk(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """Get targets ranked by aggregated risk score."""
-    return get_target_risk_ranking(DB_PATH)
+    return _cached("target_risk", lambda: get_target_risk_ranking(DB_PATH))
 
 
 @app.get("/api/analytics/tool-effectiveness", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_tool_effectiveness(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """Analyze tool effectiveness by findings and risk detection."""
-    return get_tool_effectiveness(DB_PATH)
+    return _cached("tool_effectiveness", lambda: get_tool_effectiveness(DB_PATH))
 
 
 @app.get(
@@ -944,6 +941,19 @@ def api_get_finding_state(finding_id: int, auth: AuthContext = Depends(require_a
     if not state:
         return {"finding_id": finding_id, "status": "new", "assigned_to": None}
     return state
+
+
+@app.get("/api/findings/status-counts")
+def api_findings_status_counts(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Return finding counts grouped by triage status in a single query."""
+    with get_connection(DB_PATH) as conn:
+        rows = conn.execute("""
+            SELECT COALESCE(fs.status, 'new') AS status, COUNT(*) AS count
+            FROM findings f
+            LEFT JOIN finding_states fs ON fs.finding_id = f.id
+            GROUP BY COALESCE(fs.status, 'new')
+        """).fetchall()
+    return {row["status"]: row["count"] for row in rows}
 
 
 @app.patch(
@@ -1449,6 +1459,49 @@ def get_audit_log(
     with get_connection(DB_PATH) as conn:
         rows = conn.execute(query, params).fetchall()
     return {"items": [dict(r) for r in rows], "count": len(rows)}
+
+
+@app.get("/api/audit/export", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
+def export_audit_log(
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    limit: int = Query(5000, ge=1, le=50000),
+    action: str | None = Query(None),
+    auth: AuthContext = Depends(require_auth),
+) -> Response:
+    """Export audit log as CSV or JSON (admin only)."""
+    query = "SELECT * FROM audit_log"
+    params: list = []
+    if action:
+        query += " WHERE action = ?"
+        params.append(action)
+    query += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+
+    with get_connection(DB_PATH) as conn:
+        rows = [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    if format == "json":
+        content = json.dumps(rows, indent=2, default=str)
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="audit_{ts}.json"'},
+        )
+
+    # CSV export
+    buf = io.StringIO()
+    if rows:
+        fieldnames = list(rows[0].keys())
+        w = csv.DictWriter(buf, fieldnames=fieldnames)
+        w.writeheader()
+        for row in rows:
+            w.writerow(row)
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="audit_{ts}.csv"'},
+    )
 
 
 @app.get("/api/users", dependencies=[Depends(require_auth)])

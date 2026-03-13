@@ -34,19 +34,19 @@ def db_setup(isolated_db):
 
 
 def test_init_rbac_tables(db_setup):
-    """Test che le tabelle RBAC siano create correttamente."""
+    """Test that RBAC tables are created correctly."""
     conn = sqlite3.connect(os.environ["DASHBOARD_DB_PATH"])
     cursor = conn.cursor()
 
-    # Verifica tabella api_keys
+    # Verify api_keys table
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='api_keys'")
     assert cursor.fetchone() is not None
 
-    # Verifica tabella users
+    # Verify users table
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
     assert cursor.fetchone() is not None
 
-    # Verifica tabella audit_log
+    # Verify audit_log table
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'")
     assert cursor.fetchone() is not None
 
@@ -54,14 +54,14 @@ def test_init_rbac_tables(db_setup):
 
 
 def test_create_and_verify_api_key(db_setup):
-    """Test creazione e verifica API key."""
+    """Test creating and verifying an API key."""
     full_key, prefix = create_api_key(name="Test Key", role=Role.ADMIN, created_by="test_user")
 
     assert full_key.startswith("ssp_")
     assert len(full_key) == 68  # ssp_ + 64 hex chars
     assert prefix == full_key[:12]
 
-    # Verifica la key
+    # Verify the key
     key_info = verify_api_key(full_key)
     assert key_info is not None
     assert key_info["name"] == "Test Key"
@@ -70,16 +70,16 @@ def test_create_and_verify_api_key(db_setup):
 
 
 def test_verify_invalid_api_key(db_setup):
-    """Test che chiavi invalide ritornino None."""
+    """Test that invalid keys return None."""
     invalid_key = "ssp_invalid_key_0000000000000000000000000000000000000000000000000000000000000000"
     key_info = verify_api_key(invalid_key)
     assert key_info is None
 
 
 def test_api_key_expiration(db_setup):
-    """Test che le chiavi scadute non siano valide."""
+    """Test that expired keys are not valid."""
     full_key, prefix = create_api_key(
-        name="Expiring Key", role=Role.VIEWER, expires_days=-1, created_by="test_user"  # Già scaduta
+        name="Expiring Key", role=Role.VIEWER, expires_days=-1, created_by="test_user"  # Already expired
     )
 
     key_info = verify_api_key(full_key)
@@ -140,33 +140,48 @@ def test_permissions():
     assert not has_permission(Role.VIEWER, Permission.USER_MANAGE)
 
 
-def test_api_key_hash_consistency():
-    """Test che l'hash sia consistente."""
-    key = "ssp_test_key_0000000000000000000000000000000000000000000000000000000000000000"
-    hash1 = hash_api_key(key)
-    hash2 = hash_api_key(key)
-    assert hash1 == hash2
-    assert len(hash1) == 64  # SHA-256
+def test_api_key_hash_is_bcrypt():
+    """API key hashing must produce a bcrypt hash verifiable by _verify_key_hash."""
+    key = "ssp_abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678"
+    hashed = hash_api_key(key)
+    # bcrypt hashes start with $2b$
+    assert hashed.startswith("$2b$")
+    # Verify round-trip
+    from rbac import _verify_key_hash
+
+    assert _verify_key_hash(key, hashed) is True
+    assert _verify_key_hash("wrong_key", hashed) is False
+
+
+def test_api_key_legacy_sha256_still_verified():
+    """Legacy SHA-256 hashes must still verify during migration period."""
+    import hashlib as _hl
+    from rbac import _verify_key_hash
+
+    key = "ssp_legacy_key_1234"
+    legacy_hash = _hl.sha256(key.encode()).hexdigest()
+    assert _verify_key_hash(key, legacy_hash) is True
+    assert _verify_key_hash("wrong", legacy_hash) is False
 
 
 def test_api_key_last_used_update(db_setup):
-    """Test che last_used_at sia aggiornato."""
+    """Test that last_used_at is updated on verification."""
     import time
 
     full_key, prefix = create_api_key("Usage Test", Role.VIEWER, created_by="test")
 
-    # Prima verifica
+    # First verification
     key_info1 = verify_api_key(full_key)
     assert key_info1 is not None
 
-    # Aspetta un attimo
+    # Wait briefly
     time.sleep(0.1)
 
-    # Seconda verifica
+    # Second verification
     key_info2 = verify_api_key(full_key)
     last_used2 = key_info2["last_used_at"]
 
-    # last_used_at dovrebbe essere presente
+    # last_used_at should be present
     assert last_used2 is not None
 
 

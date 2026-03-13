@@ -20,20 +20,18 @@ def disable_commands(monkeypatch):
 
 
 def test_bandit_not_found(tmp_path, monkeypatch):
-    # when binary missing, wrapper should still return success and generate empty file
+    # when binary missing, wrapper must raise ScannerError instead of silently succeeding
     output = tmp_path / "out.json"
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
-    res = run_bandit("/tmp", str(output))
-    assert res["exit_code"] == 0
-    assert output.read_text() == '{"results": []}'
+    with pytest.raises(ScannerError, match="bandit not found"):
+        run_bandit("/tmp", str(output))
 
 
 def test_nuclei_not_found(tmp_path, monkeypatch):
     output = tmp_path / "out.json"
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
-    res = run_nuclei("/tmp", str(output))
-    assert res["exit_code"] == 0
-    assert json.loads(output.read_text()) == []
+    with pytest.raises(ScannerError, match="nuclei not found"):
+        run_nuclei("/tmp", str(output))
 
 
 def test_nuclei_command_format_and_templates(tmp_path, monkeypatch):
@@ -75,17 +73,15 @@ def test_nuclei_command_format_and_templates(tmp_path, monkeypatch):
 def test_grype_not_found(tmp_path, monkeypatch):
     output = tmp_path / "out.json"
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
-    res = run_grype("foo", str(output))
-    assert res["exit_code"] == 0
-    assert json.loads(output.read_text()) == {"matches": []}
+    with pytest.raises(ScannerError, match="grype not found"):
+        run_grype("foo", str(output))
 
 
 def test_zap_not_found(tmp_path, monkeypatch):
     output = tmp_path / "out.json"
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
-    res = run_owasp_zap("http://example.com", str(output))
-    assert res["exit_code"] == 0
-    assert json.loads(output.read_text()) == []
+    with pytest.raises(ScannerError, match="zap-cli not found"):
+        run_owasp_zap("http://example.com", str(output))
 
 
 def test_clone_repo_env_and_command(monkeypatch, tmp_path):
@@ -154,3 +150,33 @@ def test_clone_repo_failure(monkeypatch, tmp_path):
     with pytest.raises(ScannerError) as excinfo:
         clone_repo("https://github.com/githubtraining/hellogitworld.git", str(tmp_path / "repo"))
     assert "git clone failed" in str(excinfo.value)
+
+
+def test_clone_repo_rejects_file_scheme(tmp_path):
+    """file:// URLs must be rejected to prevent SSRF / local file access."""
+    with pytest.raises(ScannerError, match="Unsupported URL scheme"):
+        clone_repo("file:///etc/passwd", str(tmp_path / "repo"))
+
+
+def test_clone_repo_rejects_ssh_scheme(tmp_path):
+    """ssh:// URLs must be rejected."""
+    with pytest.raises(ScannerError, match="Unsupported URL scheme"):
+        clone_repo("ssh://git@github.com/foo/bar.git", str(tmp_path / "repo"))
+
+
+def test_clone_repo_rejects_git_scheme(tmp_path):
+    """git:// URLs must be rejected (unencrypted protocol)."""
+    with pytest.raises(ScannerError, match="Unsupported URL scheme"):
+        clone_repo("git://github.com/foo/bar.git", str(tmp_path / "repo"))
+
+
+def test_clone_repo_allows_https(monkeypatch, tmp_path):
+    """https:// URLs must be accepted."""
+    monkeypatch.setattr("orchestrator.scanners.run_command", lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
+    clone_repo("https://github.com/foo/bar.git", str(tmp_path / "repo"))
+
+
+def test_clone_repo_allows_http(monkeypatch, tmp_path):
+    """http:// URLs must be accepted (some internal repos use plain HTTP)."""
+    monkeypatch.setattr("orchestrator.scanners.run_command", lambda cmd, cwd=None, timeout=None, env=None: (0, "", ""))
+    clone_repo("http://internal.corp/foo/bar.git", str(tmp_path / "repo"))

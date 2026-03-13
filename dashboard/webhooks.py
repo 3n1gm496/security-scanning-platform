@@ -8,6 +8,7 @@ import hmac
 import ipaddress
 import json
 import os
+import socket
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -24,6 +25,7 @@ from db_adapter import is_postgres
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 WEBHOOK_RETRY_COUNT = int(os.getenv("WEBHOOK_RETRY_COUNT", "3"))
+WEBHOOK_CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("WEBHOOK_CIRCUIT_BREAKER_THRESHOLD", "5"))
 
 # ---------------------------------------------------------------------------
 # SSRF protection — blocked IP ranges
@@ -41,15 +43,25 @@ _BLOCKED_NETWORKS = [
 ]
 
 
-def validate_webhook_url(url: str) -> None:
+def _check_ip_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
+    """Raise ValueError if addr is in a private/reserved range."""
+    for net in _BLOCKED_NETWORKS:
+        if addr in net:
+            raise ValueError(
+                f"Webhook URL targets a private/reserved address ({addr}). " "Only public endpoints are allowed."
+            )
+
+
+def validate_webhook_url(url: str, *, resolve_dns: bool = True) -> None:
     """Validate a webhook URL to prevent SSRF attacks.
 
     Raises ``ValueError`` with a descriptive message if the URL is unsafe.
     Checks:
     - Scheme must be http or https.
-    - If the hostname resolves to a literal IP, it must not be in a private/
-      reserved range.  (DNS-rebinding is not mitigated here — add a
-      per-request DNS pre-resolution step for high-security environments.)
+    - If the hostname is a literal IP, it must not be in a private/reserved range.
+    - If the hostname is a domain name and ``resolve_dns`` is True, resolve it
+      and verify that none of the resolved IPs are in a blocked range (DNS-rebinding
+      mitigation).
     """
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
@@ -59,18 +71,25 @@ def validate_webhook_url(url: str) -> None:
     if not hostname:
         raise ValueError("Webhook URL must include a hostname")
 
-    # If the hostname is a literal IP address, check it against blocked ranges.
+    # If the hostname is a literal IP address, check it directly.
     try:
         addr = ipaddress.ip_address(hostname)
-        for net in _BLOCKED_NETWORKS:
-            if addr in net:
-                raise ValueError(
-                    f"Webhook URL targets a private/reserved address ({addr}). " "Only public endpoints are allowed."
-                )
+        _check_ip_blocked(addr)
+        return  # literal IP, validated
     except ValueError as exc:
-        # Re-raise if it is our own SSRF error, otherwise hostname is a domain name — allowed.
         if "private/reserved" in str(exc):
             raise
+        # Not a literal IP — hostname is a domain name, fall through to DNS check.
+
+    # DNS-rebinding mitigation: resolve the hostname and check all IPs.
+    if resolve_dns:
+        try:
+            results = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+            for _family, _type, _proto, _canonname, sockaddr in results:
+                addr = ipaddress.ip_address(sockaddr[0])
+                _check_ip_blocked(addr)
+        except socket.gaierror:
+            pass  # DNS resolution failed — allow (will fail at delivery time)
 
 
 logger = get_logger(__name__)
@@ -99,9 +118,16 @@ def init_webhook_tables():
                 created_at TEXT NOT NULL,
                 last_triggered_at TEXT,
                 success_count INTEGER DEFAULT 0,
-                failure_count INTEGER DEFAULT 0
+                failure_count INTEGER DEFAULT 0,
+                consecutive_failures INTEGER DEFAULT 0
             )
         """)
+
+        # Migrate: add column if missing (safe for SQLite)
+        try:
+            conn.execute("SELECT consecutive_failures FROM webhooks LIMIT 0")
+        except Exception:
+            conn.execute("ALTER TABLE webhooks ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS webhook_deliveries (
@@ -146,7 +172,7 @@ def list_webhooks() -> list[dict]:
     with get_connection(DASHBOARD_DB_PATH) as conn:
         rows = conn.execute("""
             SELECT id, name, url, events, is_active, created_at, last_triggered_at,
-                   success_count, failure_count
+                   success_count, failure_count, consecutive_failures
             FROM webhooks
             ORDER BY created_at DESC
         """).fetchall()
@@ -284,23 +310,39 @@ def _log_delivery(
 
 
 def _update_webhook_stats(webhook_id: int, success: bool):
-    """Update webhook statistics."""
+    """Update webhook statistics and trip circuit breaker on repeated failures."""
+    now = datetime.now(timezone.utc).isoformat()
     with get_connection(DASHBOARD_DB_PATH) as conn:
         if success:
             conn.execute(
                 """
                 UPDATE webhooks
                 SET success_count = success_count + 1,
+                    consecutive_failures = 0,
                     last_triggered_at = ?
                 WHERE id = ?
                 """,
-                (datetime.now(timezone.utc).isoformat(), webhook_id),
+                (now, webhook_id),
             )
         else:
             conn.execute(
-                "UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = ?",
+                """
+                UPDATE webhooks
+                SET failure_count = failure_count + 1,
+                    consecutive_failures = consecutive_failures + 1
+                WHERE id = ?
+                """,
                 (webhook_id,),
             )
+            # Circuit breaker: auto-disable after N consecutive failures
+            row = conn.execute("SELECT consecutive_failures FROM webhooks WHERE id = ?", (webhook_id,)).fetchone()
+            if row and row["consecutive_failures"] >= WEBHOOK_CIRCUIT_BREAKER_THRESHOLD:
+                conn.execute("UPDATE webhooks SET is_active = 0 WHERE id = ?", (webhook_id,))
+                logger.warning(
+                    "webhook.circuit_breaker_tripped",
+                    webhook_id=webhook_id,
+                    consecutive_failures=row["consecutive_failures"],
+                )
 
 
 async def notify_scan_completed(scan_id: int, scan_data: dict):

@@ -412,7 +412,7 @@ def run_grype(target_value: str, output_path: str) -> dict[str, Any]:
 def run_owasp_zap(
     target_url: str,
     output_path: str,
-    zap_api_url: str = "http://localhost:8080",
+    zap_api_url: str = "http://localhost:8090",
     zap_api_key: str = "",
     spider_timeout: int = 120,
     scan_timeout: int = 600,
@@ -441,29 +441,86 @@ def run_owasp_zap(
     except ImportError as exc:
         raise ScannerError("python-owasp-zap-v2.4 is not installed — run: pip install python-owasp-zap-v2.4") from exc
 
-    LOGGER.info("Connecting to ZAP at %s", zap_api_url)
+    import time
+
+    LOGGER.info("Connecting to ZAP at %s (api_key=%s)", zap_api_url, "***" if zap_api_key else "<empty>")
     zap = ZAPv2(apikey=zap_api_key, proxies={"http": zap_api_url, "https": zap_api_url})
+
+    # Verify ZAP is reachable before starting the scan
+    try:
+        version = zap.core.version
+        LOGGER.info("ZAP version: %s", version)
+    except Exception as exc:
+        raise ScannerError(
+            f"Cannot connect to ZAP at {zap_api_url} — is ZAP running? Error: {exc}"
+        ) from exc
+
+    # --- Open URL in ZAP first (seed the site tree) ---
+    LOGGER.info("ZAP: opening target URL %s", target_url)
+    zap.urlopen(target_url)
+    time.sleep(2)
 
     # --- Spider phase ---
     LOGGER.info("ZAP spider starting for %s", target_url)
     spider_id = zap.spider.scan(target_url, apikey=zap_api_key)
-    import time
+    LOGGER.info("ZAP spider ID: %s", spider_id)
+
+    # spider.scan() returns the scan ID as a string; non-numeric = error
+    try:
+        int(spider_id)
+    except (ValueError, TypeError):
+        raise ScannerError(f"ZAP spider failed to start: {spider_id}")
 
     deadline = time.monotonic() + spider_timeout
-    while int(zap.spider.status(spider_id)) < 100:
+    while True:
+        status_val = zap.spider.status(spider_id)
+        LOGGER.debug("ZAP spider progress: %s%%", status_val)
+        try:
+            if int(status_val) >= 100:
+                break
+        except (ValueError, TypeError):
+            LOGGER.warning("ZAP spider returned unexpected status: %s", status_val)
+            break
         if time.monotonic() > deadline:
             LOGGER.warning("ZAP spider timed out after %ds — proceeding with partial results", spider_timeout)
+            zap.spider.stop(spider_id, apikey=zap_api_key)
             break
         time.sleep(2)
-    LOGGER.info("ZAP spider complete")
+
+    spider_results = zap.spider.results(spider_id)
+    LOGGER.info("ZAP spider complete — discovered %d URLs", len(spider_results) if isinstance(spider_results, list) else 0)
+
+    # --- Passive scan wait (let ZAP process spidered pages) ---
+    pscan_deadline = time.monotonic() + 30
+    while int(zap.pscan.records_to_scan) > 0:
+        if time.monotonic() > pscan_deadline:
+            LOGGER.info("ZAP passive scan still has %s records — proceeding", zap.pscan.records_to_scan)
+            break
+        time.sleep(1)
 
     # --- Active scan phase ---
     LOGGER.info("ZAP active scan starting for %s", target_url)
-    scan_id = zap.ascan.scan(target_url, apikey=zap_api_key)
+    scan_id_str = zap.ascan.scan(target_url, apikey=zap_api_key)
+    LOGGER.info("ZAP active scan ID: %s", scan_id_str)
+
+    try:
+        int(scan_id_str)
+    except (ValueError, TypeError):
+        raise ScannerError(f"ZAP active scan failed to start: {scan_id_str}")
+
     deadline = time.monotonic() + scan_timeout
-    while int(zap.ascan.status(scan_id)) < 100:
+    while True:
+        status_val = zap.ascan.status(scan_id_str)
+        LOGGER.debug("ZAP active scan progress: %s%%", status_val)
+        try:
+            if int(status_val) >= 100:
+                break
+        except (ValueError, TypeError):
+            LOGGER.warning("ZAP active scan returned unexpected status: %s", status_val)
+            break
         if time.monotonic() > deadline:
             LOGGER.warning("ZAP active scan timed out after %ds — proceeding with partial results", scan_timeout)
+            zap.ascan.stop(scan_id_str, apikey=zap_api_key)
             break
         time.sleep(5)
     LOGGER.info("ZAP active scan complete")

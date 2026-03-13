@@ -488,7 +488,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
                 lambda output_path, _cfg=_zap_cfg: run_owasp_zap(
                     target_input,
                     output_path,
-                    zap_api_url=_cfg.get("api_url", "http://localhost:8080"),
+                    zap_api_url=_cfg.get("api_url", "http://localhost:8090"),
                     zap_api_key=_cfg.get("api_key", ""),
                     spider_timeout=int(_cfg.get("spider_timeout", 120)),
                     scan_timeout=int(_cfg.get("scan_timeout", 600)),

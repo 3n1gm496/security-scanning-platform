@@ -329,6 +329,17 @@ def normalize_nuclei(
     for item in raw:
         severity = _severity(item.get("severity"), "MEDIUM")
         info = item.get("info", {})
+
+        # Nuclei uses "matcher-name" to distinguish sub-findings within a single
+        # template (e.g. each missing security header has a different matcher-name).
+        # Include it in the title so findings are distinguishable in the UI.
+        matcher_name = item.get("matcher-name") or ""
+        base_title = info.get("name") or item.get("templateId") or item.get("template-id") or "Nuclei finding"
+        title = f"{base_title}: {matcher_name}" if matcher_name else base_title
+
+        # "matched-at" provides the URL/location that matched; use as file fallback
+        matched_file = item.get("matched", {}).get("file") or item.get("matched-at") or item.get("host")
+
         finding = Finding(
             scan_id=scan_id,
             timestamp=utc_now_iso(),
@@ -337,9 +348,9 @@ def normalize_nuclei(
             tool="nuclei",
             category=_nuclei_category(info),
             severity=severity,
-            title=info.get("name") or item.get("templateId") or "Nuclei finding",
+            title=title,
             description=info.get("description") or "",
-            file=_rel_path(base_path, item.get("matched", {}).get("file")),
+            file=_rel_path(base_path, matched_file),
             line=item.get("matched", {}).get("line"),
             package=None,
             version=None,
@@ -347,7 +358,12 @@ def normalize_nuclei(
             remediation=info.get("reference"),
             raw_reference=raw_reference,
             fingerprint=_fingerprint(
-                "nuclei", target.name, item.get("templateId"), item.get("matched", {}).get("line")
+                "nuclei",
+                target.name,
+                item.get("templateId") or item.get("template-id"),
+                matcher_name,
+                item.get("matched-at") or item.get("matched", {}).get("file"),
+                item.get("matched", {}).get("line"),
             ),
         )
         findings.append(finding)
@@ -391,9 +407,17 @@ def normalize_zap(
     scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
 ) -> list[Finding]:
     findings: list[Finding] = []
-    # zap-cli returns a list of alerts
+    # ZAP REST API returns a list of alert dicts.  The key fields are:
+    #   alert   — short name of the finding
+    #   risk    — "High" / "Medium" / "Low" / "Informational"
+    #   url     — the affected URL
+    #   description / solution / reference — details
+    #   cweid / wascid / pluginId — IDs for cross-referencing
     for item in raw:
         severity = _severity(item.get("risk"), "MEDIUM")
+        # Extract CWE if available (ZAP includes cweid as a string)
+        cwe_id = item.get("cweid")
+        cwe_str = f"CWE-{cwe_id}" if cwe_id and str(cwe_id) not in ("", "0", "-1") else None
         finding = Finding(
             scan_id=scan_id,
             timestamp=utc_now_iso(),
@@ -402,16 +426,18 @@ def normalize_zap(
             tool="zap",
             category="dast",
             severity=severity,
-            title=item.get("alert") or "ZAP alert",
+            title=item.get("alert") or item.get("name") or "ZAP alert",
             description=item.get("description") or item.get("url") or "",
             file=item.get("url"),
             line=None,
             package=None,
             version=None,
-            cve=None,
+            cve=cwe_str,
             remediation=item.get("solution"),
             raw_reference=raw_reference,
-            fingerprint=_fingerprint("zap", target.name, item.get("alert"), item.get("url")),
+            fingerprint=_fingerprint(
+                "zap", target.name, item.get("alert"), item.get("url"), item.get("pluginId")
+            ),
         )
         findings.append(finding)
     return findings

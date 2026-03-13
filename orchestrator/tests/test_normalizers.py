@@ -98,6 +98,34 @@ def test_normalize_nuclei_no_tags():
     assert findings[0].category == "vulnerability"
 
 
+def test_normalize_nuclei_matcher_name():
+    """matcher-name should be appended to the title for sub-findings."""
+    raw = [
+        {
+            "templateId": "http-missing-security-headers",
+            "template-id": "http-missing-security-headers",
+            "severity": "info",
+            "info": {"name": "HTTP Missing Security Headers", "description": "desc", "tags": ["misconfig"]},
+            "matcher-name": "strict-transport-security",
+            "matched-at": "https://example.com",
+        },
+        {
+            "templateId": "http-missing-security-headers",
+            "template-id": "http-missing-security-headers",
+            "severity": "info",
+            "info": {"name": "HTTP Missing Security Headers", "description": "desc", "tags": ["misconfig"]},
+            "matcher-name": "x-frame-options",
+            "matched-at": "https://example.com",
+        },
+    ]
+    findings = normalize_nuclei("s", TARGET, raw, "ref")
+    assert len(findings) == 2
+    assert findings[0].title == "HTTP Missing Security Headers: strict-transport-security"
+    assert findings[1].title == "HTTP Missing Security Headers: x-frame-options"
+    # Fingerprints should be different despite same templateId
+    assert findings[0].fingerprint != findings[1].fingerprint
+
+
 def test_normalize_grype_empty():
     findings = normalize_grype("s", TARGET, {"matches": []}, "ref")
     assert findings == []
@@ -137,6 +165,35 @@ def test_normalize_zap_example():
     assert len(findings) == 1
     assert findings[0].tool == "zap"
     assert findings[0].severity == "HIGH"
+
+
+def test_normalize_zap_cwe():
+    """ZAP alerts with cweid should populate the cve field as CWE-NNN."""
+    raw = [
+        {
+            "alert": "SQL Injection",
+            "risk": "High",
+            "url": "http://example.com/login",
+            "description": "sql injection",
+            "solution": "parameterize queries",
+            "cweid": "89",
+            "pluginId": "40018",
+        }
+    ]
+    findings = normalize_zap("s", TARGET, raw, "ref")
+    assert len(findings) == 1
+    assert findings[0].cve == "CWE-89"
+
+
+def test_normalize_zap_no_cwe():
+    """ZAP alerts without cweid or with cweid=0 should have cve=None."""
+    raw = [
+        {"alert": "Info", "risk": "Low", "url": "http://x.com", "cweid": "0"},
+        {"alert": "Info2", "risk": "Low", "url": "http://x.com"},
+    ]
+    findings = normalize_zap("s", TARGET, raw, "ref")
+    assert findings[0].cve is None
+    assert findings[1].cve is None
 
 
 # sanity check existing semgrep still works

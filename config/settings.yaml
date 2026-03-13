@@ -84,7 +84,7 @@ scanners:
   # `python-owasp-zap-v2.4` client library (installed in the Docker image).
   owasp_zap:
     enabled: false  # set to true once a ZAP instance is running
-    api_url: "http://localhost:8080"  # ZAP REST API base URL
+    api_url: "http://localhost:8090"  # ZAP REST API base URL (matches docker-compose port)
     api_key: ""  # ZAP API key (set via ZAP -config api.key=...)
     spider_timeout: 120  # seconds to wait for the spider phase
     scan_timeout: 600  # seconds to wait for the active scan phase

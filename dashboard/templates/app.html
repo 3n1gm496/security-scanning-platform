@@ -680,7 +680,7 @@
           <div class="compare-selectors">
             <div class="compare-selector-group">
               <label class="filter-label">Scan A (baseline)</label>
-              <select v-model="compareIdA" class="filter-select">
+              <select v-model="compareIdA" @change="compareIdB = ''" class="filter-select">
                 <option value="">Select...</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
                   #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
@@ -690,9 +690,9 @@
             <div class="compare-vs">VS</div>
             <div class="compare-selector-group">
               <label class="filter-label">Scan B (comparison)</label>
-              <select v-model="compareIdB" class="filter-select">
-                <option value="">Select...</option>
-                <option v-for="s in compareScanList" :key="s.id" :value="s.id">
+              <select v-model="compareIdB" class="filter-select" :disabled="!compareIdA">
+                <option value="">{{ compareIdA ? (compareScanListB.length ? 'Select...' : 'No scans with same target') : 'Select scan A first' }}</option>
+                <option v-for="s in compareScanListB" :key="s.id" :value="s.id">
                   #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
                 </option>
               </select>

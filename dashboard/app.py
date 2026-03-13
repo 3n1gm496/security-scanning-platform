@@ -1326,7 +1326,7 @@ def api_get_scan(
     scan_id: int,
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
-    """Get a single scan by ID with its findings summary."""
+    """Get a single scan by ID with its findings summary and per-tool execution results."""
     with get_connection(DB_PATH) as conn:
         scan = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
         if not scan:
@@ -1342,6 +1342,15 @@ def api_get_scan(
             (scan_id,),
         ).fetchall()
         scan_dict["tool_breakdown"] = {r["tool"]: r["count"] for r in rows}
+        # Deserialize per-tool execution results from tools_json
+        raw_tools = scan_dict.get("tools_json")
+        if raw_tools:
+            try:
+                scan_dict["tool_results"] = json.loads(raw_tools)
+            except (json.JSONDecodeError, TypeError):
+                scan_dict["tool_results"] = []
+        else:
+            scan_dict["tool_results"] = []
     return scan_dict
 
 

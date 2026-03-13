@@ -92,17 +92,26 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 
 ## Supported Scanners
 
-| Scanner | Type | Languages/Targets | Output |
-|---------|------|-------------------|--------|
-| **Semgrep** | SAST | Multi-language | SARIF / JSON |
-| **Bandit** | SAST | Python | JSON |
-| **Nuclei** | Pattern/CVE | Web/Network | JSON |
-| **Trivy** | Container/SCA | Images, Repos | JSON |
-| **Grype** | SBOM Vuln | SBOM files | JSON |
-| **Gitleaks** | Secrets | Git repos | JSON |
-| **Checkov** | IaC | Terraform, K8s, Docker | JSON |
-| **Syft** | SBOM Gen | Multiple | JSON |
-| **OWASP ZAP** | DAST | Web apps | JSON |
+| Scanner | Type | Compatible Target Types | Output |
+|---------|------|------------------------|--------|
+| **Semgrep** | SAST | `git`, `local` | SARIF / JSON |
+| **Bandit** | SAST | `git`, `local` | JSON |
+| **Checkov** | IaC | `git`, `local` | JSON |
+| **Gitleaks** | Secrets | `git`, `local` | JSON |
+| **Trivy** | Container/SCA | `git`, `local` (fs mode) · `image` (image mode) | JSON |
+| **Grype** | SBOM Vuln | `git`, `local`, `image` | JSON |
+| **Syft** | SBOM Gen | `git`, `local`, `image` | JSON |
+| **Nuclei** | Pattern/CVE | `git`, `local`, `url` | JSON |
+| **OWASP ZAP** | DAST | `url` | JSON |
+
+> **Compatibility matrix** — The orchestrator uses a centralized compatibility matrix
+> (`orchestrator/compatibility.py`) as the single source of truth for scanner–target routing.
+> Scanners not compatible with the requested target type are automatically skipped;
+> scanners whose binary is missing at runtime are also skipped (preflight check) and
+> reported in the per-tool execution results visible in the scan detail modal.
+>
+> **URL target type** — Pass `target_type=url` with a `target` value of `https://…` to
+> run DAST tools (Nuclei, OWASP ZAP) against a live web endpoint without cloning any repository.
 
 ---
 

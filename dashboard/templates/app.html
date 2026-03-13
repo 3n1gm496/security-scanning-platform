@@ -1111,7 +1111,7 @@
                 <h3>Scan Details</h3>
                 <div class="detail-row"><span class="detail-key">Scan ID</span><span class="detail-val"><code>{{ selectedScan.id }}</code></span></div>
                 <div class="detail-row"><span class="detail-key">Type</span><span class="detail-val">{{ selectedScan.target_type }}</span></div>
-                <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status ? selectedScan.policy_status.toUpperCase() : '—' }}</span></span></div>
+                <div class="detail-row"><span class="detail-key">Policy</span><span class="detail-val"><span class="badge" :class="policyBadgeClass(selectedScan.policy_status)">{{ selectedScan.policy_status ? selectedScan.policy_status.toUpperCase() : '\u2014' }}</span></span></div>
                 <div class="detail-row"><span class="detail-key">Total Findings</span><span class="detail-val"><strong>{{ selectedScan.findings_count }}</strong></span></div>
                 <div class="detail-row"><span class="detail-key">Critical</span><span class="detail-val"><span class="sev-pill sev-critical" v-if="selectedScan.critical_count > 0">{{ selectedScan.critical_count }}</span><span v-else>0</span></span></div>
                 <div class="detail-row"><span class="detail-key">High</span><span class="detail-val"><span class="sev-pill sev-high" v-if="selectedScan.high_count > 0">{{ selectedScan.high_count }}</span><span v-else>0</span></span></div>
@@ -1139,6 +1139,37 @@
                 </div>
               </div>
             </div>
+          </div>
+          <!-- Per-tool execution results -->
+          <div class="detail-section" v-if="selectedScan.tool_results && selectedScan.tool_results.length">
+            <h3>Tool Execution</h3>
+            <table class="resizable-table" style="width:100%;font-size:0.85rem">
+              <thead>
+                <tr>
+                  <th>Tool</th>
+                  <th>Status</th>
+                  <th>Findings</th>
+                  <th>Cache</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="tr in selectedScan.tool_results" :key="tr.tool">
+                  <td><span class="badge badge-neutral">{{ tr.tool }}</span></td>
+                  <td>
+                    <span v-if="tr.success" class="sev-pill" style="background:var(--color-success,#22c55e);color:#fff">&#10003; OK</span>
+                    <span v-else class="sev-pill sev-critical">&#10007; Failed</span>
+                  </td>
+                  <td>{{ tr.finding_count }}</td>
+                  <td><span v-if="tr.cache_hit" class="badge badge-neutral" title="Result served from cache">cached</span><span v-else>&#8212;</span></td>
+                  <td class="cell-wrap" :title="tr.error || tr.stderr || ''">
+                    <span v-if="tr.error" style="color:var(--color-danger,#ef4444)">{{ tr.error }}</span>
+                    <span v-else-if="tr.cache_hit" style="opacity:0.6">cache hit</span>
+                    <span v-else>&#8212;</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

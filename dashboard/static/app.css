@@ -733,6 +733,7 @@ tr:last-child td { border-bottom: none; }
 }
 
 .page-info { font-size: var(--font-sm); color: var(--color-text-secondary); }
+.per-page-select { width: auto; min-width: 95px; padding: 4px 8px; font-size: var(--font-sm); }
 
 /* ── Badges ───────────────────────────────────────────────── */
 
@@ -860,7 +861,8 @@ tr:last-child td { border-bottom: none; }
 }
 .btn-danger:hover { background: var(--color-danger); color: #fff; }
 
-.btn-sm { padding: 4px var(--space-3); font-size: var(--font-sm); }
+.btn-sm { padding: 6px var(--space-3); font-size: var(--font-sm); line-height: 1.4; }
+.filters-row > .btn-sm { align-self: flex-end; min-height: 34px; }
 .btn-block { width: 100%; text-align: center; justify-content: center; }
 
 .btn-icon {

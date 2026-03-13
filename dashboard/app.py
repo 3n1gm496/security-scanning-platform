@@ -597,7 +597,10 @@ def create_new_webhook(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid event type: {event_str}")
 
-    webhook_id = create_webhook(name, url, event_list, secret)
+    try:
+        webhook_id = create_webhook(name, url, event_list, secret)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     log_audit(
         action="webhook.create",
@@ -1452,6 +1455,49 @@ def get_audit_log(
     with get_connection(DB_PATH) as conn:
         rows = conn.execute(query, params).fetchall()
     return {"items": [dict(r) for r in rows], "count": len(rows)}
+
+
+@app.get("/api/audit/export", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
+def export_audit_log(
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    limit: int = Query(5000, ge=1, le=50000),
+    action: str | None = Query(None),
+    auth: AuthContext = Depends(require_auth),
+) -> Response:
+    """Export audit log as CSV or JSON (admin only)."""
+    query = "SELECT * FROM audit_log"
+    params: list = []
+    if action:
+        query += " WHERE action = ?"
+        params.append(action)
+    query += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+
+    with get_connection(DB_PATH) as conn:
+        rows = [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    if format == "json":
+        content = json.dumps(rows, indent=2, default=str)
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="audit_{ts}.json"'},
+        )
+
+    # CSV export
+    buf = io.StringIO()
+    if rows:
+        fieldnames = list(rows[0].keys())
+        w = csv.DictWriter(buf, fieldnames=fieldnames)
+        w.writeheader()
+        for row in rows:
+            w.writerow(row)
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="audit_{ts}.csv"'},
+    )
 
 
 @app.get("/api/users", dependencies=[Depends(require_auth)])

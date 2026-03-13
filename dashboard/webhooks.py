@@ -8,6 +8,7 @@ import hmac
 import ipaddress
 import json
 import os
+import socket
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -42,15 +43,26 @@ _BLOCKED_NETWORKS = [
 ]
 
 
-def validate_webhook_url(url: str) -> None:
+def _check_ip_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
+    """Raise ValueError if addr is in a private/reserved range."""
+    for net in _BLOCKED_NETWORKS:
+        if addr in net:
+            raise ValueError(
+                f"Webhook URL targets a private/reserved address ({addr}). "
+                "Only public endpoints are allowed."
+            )
+
+
+def validate_webhook_url(url: str, *, resolve_dns: bool = True) -> None:
     """Validate a webhook URL to prevent SSRF attacks.
 
     Raises ``ValueError`` with a descriptive message if the URL is unsafe.
     Checks:
     - Scheme must be http or https.
-    - If the hostname resolves to a literal IP, it must not be in a private/
-      reserved range.  (DNS-rebinding is not mitigated here — add a
-      per-request DNS pre-resolution step for high-security environments.)
+    - If the hostname is a literal IP, it must not be in a private/reserved range.
+    - If the hostname is a domain name and ``resolve_dns`` is True, resolve it
+      and verify that none of the resolved IPs are in a blocked range (DNS-rebinding
+      mitigation).
     """
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
@@ -60,18 +72,25 @@ def validate_webhook_url(url: str) -> None:
     if not hostname:
         raise ValueError("Webhook URL must include a hostname")
 
-    # If the hostname is a literal IP address, check it against blocked ranges.
+    # If the hostname is a literal IP address, check it directly.
     try:
         addr = ipaddress.ip_address(hostname)
-        for net in _BLOCKED_NETWORKS:
-            if addr in net:
-                raise ValueError(
-                    f"Webhook URL targets a private/reserved address ({addr}). " "Only public endpoints are allowed."
-                )
+        _check_ip_blocked(addr)
+        return  # literal IP, validated
     except ValueError as exc:
-        # Re-raise if it is our own SSRF error, otherwise hostname is a domain name — allowed.
         if "private/reserved" in str(exc):
             raise
+        # Not a literal IP — hostname is a domain name, fall through to DNS check.
+
+    # DNS-rebinding mitigation: resolve the hostname and check all IPs.
+    if resolve_dns:
+        try:
+            results = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+            for _family, _type, _proto, _canonname, sockaddr in results:
+                addr = ipaddress.ip_address(sockaddr[0])
+                _check_ip_blocked(addr)
+        except socket.gaierror:
+            pass  # DNS resolution failed — allow (will fail at delivery time)
 
 
 logger = get_logger(__name__)

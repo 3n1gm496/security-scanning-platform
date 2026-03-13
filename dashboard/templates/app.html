@@ -354,12 +354,12 @@
                   </th>
                   <th v-if="colVisible('id')" class="th-sortable" @click="sortScans('id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
                   <th v-if="colVisible('target_name')" class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
-                  <th v-if="colVisible('target_type')">Type</th>
-                  <th v-if="colVisible('status')">Status</th>
-                  <th v-if="colVisible('policy_status')">Policy</th>
+                  <th v-if="colVisible('target_type')" class="th-sortable" @click="sortScans('target_type')">Type <span class="sort-icon">{{ sortIcon('scans', 'target_type') }}</span></th>
+                  <th v-if="colVisible('status')" class="th-sortable" @click="sortScans('status')">Status <span class="sort-icon">{{ sortIcon('scans', 'status') }}</span></th>
+                  <th v-if="colVisible('policy_status')" class="th-sortable" @click="sortScans('policy_status')">Policy <span class="sort-icon">{{ sortIcon('scans', 'policy_status') }}</span></th>
                   <th v-if="colVisible('findings_count')" class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
-                  <th v-if="colVisible('critical_count')" title="Critical findings">Crit</th>
-                  <th v-if="colVisible('high_count')" title="High findings">High</th>
+                  <th v-if="colVisible('critical_count')" class="th-sortable" @click="sortScans('critical_count')" title="Critical findings">Critical <span class="sort-icon">{{ sortIcon('scans', 'critical_count') }}</span></th>
+                  <th v-if="colVisible('high_count')" class="th-sortable" @click="sortScans('high_count')" title="High findings">High <span class="sort-icon">{{ sortIcon('scans', 'high_count') }}</span></th>
                   <th v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
                   <th>Actions</th>
                 </tr>
@@ -531,7 +531,8 @@
                   <td @click="openFindingDetail(finding)" class="cell-wrap">{{ finding.target_name }}</td>
                   <td @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title">{{ finding.title }}</td>
                   <td @click="openFindingDetail(finding)" class="cell-nowrap">
-                    <a v-if="finding.cve" :href="'https://nvd.nist.gov/vuln/detail/' + finding.cve" target="_blank" class="cve-link" @click.stop>{{ finding.cve }}</a>
+                    <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" class="cve-link" @click.stop>{{ finding.cve }}</a>
+                    <span v-else-if="finding.cve" class="text-muted" :title="finding.cve">{{ finding.cve }}</span>
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td @click="openFindingDetail(finding)" class="cell-wrap">
@@ -553,7 +554,13 @@
           <!-- Pagination -->
           <div class="pagination-bar">
             <button class="btn-secondary btn-sm" @click="prevFindingsPage" :disabled="findingsPage <= 1">&#x2190; Previous</button>
-            <span class="page-info">Page {{ findingsPage }} &bull; {{ findings.length }} results</span>
+            <span class="page-info">Page {{ findingsPage }} &bull; {{ findings.length }} of {{ findingsTotal }} results</span>
+            <select v-model.number="findingsPerPage" @change="onFindingsPerPageChange" class="filter-select filter-select-sm per-page-select" title="Results per page">
+              <option :value="10">10 / page</option>
+              <option :value="25">25 / page</option>
+              <option :value="50">50 / page</option>
+              <option :value="100">100 / page</option>
+            </select>
             <button class="btn-secondary btn-sm" @click="nextFindingsPage" :disabled="!findingsCursor">Next &#x2192;</button>
           </div>
         </div>
@@ -585,6 +592,10 @@
           <div class="card chart-card">
             <div class="card-header"><h2>Tool Effectiveness</h2></div>
             <div class="chart-container"><canvas ref="toolEffChart"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <div class="card-header"><h2>Findings by Severity</h2></div>
+            <div class="chart-container"><canvas ref="severityDistChart"></canvas></div>
           </div>
           <div class="card chart-card chart-card-full">
             <div class="card-header">
@@ -935,7 +946,10 @@
                   <div class="detail-row"><span class="detail-key">Target</span><span class="detail-val">{{ selectedFinding.target_name }}</span></div>
                   <div class="detail-row" v-if="selectedFinding.cve">
                     <span class="detail-key">CVE</span>
-                    <span class="detail-val"><a :href="'https://nvd.nist.gov/vuln/detail/' + selectedFinding.cve" target="_blank" class="cve-link">{{ selectedFinding.cve }}</a></span>
+                    <span class="detail-val">
+                      <a v-if="isValidCve(selectedFinding.cve)" :href="cveUrl(selectedFinding.cve)" target="_blank" class="cve-link">{{ selectedFinding.cve }}</a>
+                      <span v-else>{{ selectedFinding.cve }}</span>
+                    </span>
                   </div>
                   <div class="detail-row" v-if="selectedFinding.file">
                     <span class="detail-key">File</span>
@@ -962,7 +976,7 @@
                 </div>
                 <div class="detail-section" v-if="selectedFinding.remediation">
                   <h3>Remediation (raw)</h3>
-                  <p class="detail-text remediation-text">{{ selectedFinding.remediation }}</p>
+                  <p class="detail-text remediation-text" v-html="linkifyText(selectedFinding.remediation)"></p>
                 </div>
               </div>
             </div>

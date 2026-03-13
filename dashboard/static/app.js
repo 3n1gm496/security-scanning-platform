@@ -198,6 +198,7 @@ createApp({
       newScanForm: { name: '', target: '', target_type: 'local' },
       scanPollingInterval: null,
       hasRunningScans: false,
+      findingsPerPage: parseInt(localStorage.getItem('ssp-findings-per-page') || '50', 10),
 
       // ── Finding modal tabs
       findingModalTab: 'info',
@@ -329,6 +330,16 @@ createApp({
     await this.initDashboardCharts();
     if (initialPage !== 'dashboard') await this.navigate(initialPage);
     this.startAutoRefresh();
+
+    // Check for running scans on mount — resume polling if any are active
+    try {
+      const result = await apiFetch('/api/scans/paginated?per_page=10&sort_by=created_at&sort_order=DESC');
+      const items = result.items || [];
+      const runningScans = items.filter(s => s.status === 'RUNNING');
+      if (runningScans.length > 0) {
+        this.startScanPolling(runningScans[0].created_at);
+      }
+    } catch (_) {}
   },
   beforeUnmount() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
@@ -442,6 +453,7 @@ createApp({
             this.hasRunningScans = false;
             this.stopScanPolling();
             try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
+            if (this.currentPage === 'dashboard') this.initDashboardCharts();
           }
         } catch (e) {
           console.debug('[scanPolling] poll failed:', e.message);
@@ -748,7 +760,7 @@ createApp({
       }
       this.findingsLoading = true;
       try {
-        const params = new URLSearchParams({ per_page: 50 });
+        const params = new URLSearchParams({ per_page: this.findingsPerPage });
         if (this.findingsFilter.search) params.set('search', this.findingsFilter.search);
         if (this.findingsFilter.severity) params.set('severity', this.findingsFilter.severity);
         if (this.findingsFilter.tool) params.set('tool', this.findingsFilter.tool);
@@ -788,6 +800,11 @@ createApp({
 
     resetFindingsFilter() {
       this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '', scan_id: '' };
+      this.loadFindings(true);
+    },
+
+    onFindingsPerPageChange() {
+      localStorage.setItem('ssp-findings-per-page', String(this.findingsPerPage));
       this.loadFindings(true);
     },
 
@@ -951,6 +968,7 @@ createApp({
           this.buildOwaspChart();
           this.buildAnalyticsTrendChart();
           this.buildToolEffChart();
+          this.buildSeverityDistChart();
         }
       } catch (e) {
         this.showToast('Failed to load analytics: ' + e.message, 'error');
@@ -978,8 +996,37 @@ createApp({
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
           scales: {
-            x: { stacked: true, grid: { display: false } },
-            y: { stacked: true, beginAtZero: true, grid: { color: '#f3f4f6' } },
+            x: { stacked: true, grid: { display: false }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
+            y: { stacked: true, beginAtZero: true, grid: { color: this.darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
+          },
+        },
+      });
+    },
+
+    buildSeverityDistChart() {
+      const canvas = this.$refs.severityDistChart;
+      if (!canvas || !this.analyticsData.riskDistribution) return;
+      if (this.charts.severityDist) this.charts.severityDist.destroy();
+      // Use the risk distribution data to build a severity breakdown doughnut
+      const dist = this.analyticsData.riskDistribution.distribution;
+      const labels = Object.keys(dist);
+      const data = Object.values(dist);
+      const bgColors = labels.map(l => SEVERITY_COLORS[l.toUpperCase()] || '#9ca3af');
+      this.charts.severityDist = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: bgColors,
+            borderWidth: 2,
+            borderColor: this.darkMode ? '#1f2937' : '#fff',
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
           },
         },
       });
@@ -1003,7 +1050,10 @@ createApp({
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } },
+          scales: {
+            y: { beginAtZero: true, grid: { color: this.darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
+            x: { grid: { display: false }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
+          },
         },
       });
     },
@@ -1020,7 +1070,7 @@ createApp({
           datasets: [{
             data: owasp.map(o => o.count),
             backgroundColor: OWASP_COLORS,
-            borderWidth: 2, borderColor: '#fff',
+            borderWidth: 2, borderColor: this.darkMode ? '#1f2937' : '#fff',
           }],
         },
         options: {
@@ -1035,6 +1085,9 @@ createApp({
       if (!canvas || !this.analyticsData.trends) return;
       if (this.charts.analyticsTrend) this.charts.analyticsTrend.destroy();
       const trendData = this.analyticsData.trends.trend;
+      const dark = this.darkMode;
+      const gridColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+      const tickColor = dark ? '#9ca3af' : '#6b7280';
       this.charts.analyticsTrend = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
@@ -1042,22 +1095,43 @@ createApp({
           datasets: [
             {
               label: 'Avg Risk', data: trendData.map(t => t.average_risk),
-              borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)',
-              tension: 0.3, fill: true,
+              borderColor: dark ? '#818cf8' : '#4f46e5',
+              backgroundColor: dark ? 'rgba(129,140,248,0.12)' : 'rgba(79,70,229,0.08)',
+              tension: 0.3, fill: true, borderWidth: 2,
             },
             {
               label: 'Max Risk', data: trendData.map(t => t.max_risk),
-              borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.04)',
-              tension: 0.3, fill: false, borderDash: [4, 4],
+              borderColor: dark ? '#f87171' : '#ef4444',
+              backgroundColor: dark ? 'rgba(248,113,113,0.08)' : 'rgba(239,68,68,0.04)',
+              tension: 0.3, fill: false, borderDash: [4, 4], borderWidth: 2,
             },
           ],
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom' } },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: tickColor, font: { size: 11 } },
+            },
+            tooltip: {
+              backgroundColor: dark ? '#374151' : '#fff',
+              titleColor: dark ? '#f3f4f6' : '#111827',
+              bodyColor: dark ? '#d1d5db' : '#374151',
+              borderColor: dark ? '#4b5563' : '#e5e7eb',
+              borderWidth: 1,
+            },
+          },
           scales: {
-            y: { beginAtZero: true, max: 100, grid: { color: '#f3f4f6' } },
-            x: { grid: { display: false } },
+            y: {
+              beginAtZero: true, max: 100,
+              grid: { color: gridColor },
+              ticks: { color: tickColor, font: { size: 11 } },
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: tickColor, font: { size: 11 } },
+            },
           },
         },
       });
@@ -1331,8 +1405,16 @@ createApp({
 
     async exportFindings(format, includeAnalytics = false) {
       try {
-        const params = new URLSearchParams({ format, limit: 1000 });
+        const params = new URLSearchParams({ format, limit: 5000 });
         if (includeAnalytics) params.set('include_analytics', true);
+        // Pass current filters to export
+        const f = this.findingsFilter;
+        if (f.severity) params.set('severity', f.severity);
+        if (f.tool) params.set('tool', f.tool);
+        if (f.status) params.set('status', f.status);
+        if (f.target) params.set('target', f.target);
+        if (f.search) params.set('search', f.search);
+        if (f.scan_id) params.set('scan_id', f.scan_id);
         const res = await fetch(`/api/export/findings?${params}`);
         if (!res.ok) throw new Error('Export failed');
         this._checkExportTruncation(res);
@@ -1381,6 +1463,25 @@ createApp({
         UNKNOWN: 'badge-neutral',
       };
       return map[normalized] || 'badge-neutral';
+    },
+
+    linkifyText(text) {
+      if (!text) return '';
+      // Escape HTML to prevent XSS, then convert URLs to clickable links
+      const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return escaped.replace(
+        /(https?:\/\/[^\s<>"')\]]+)/g,
+        '<a href="$1" target="_blank" rel="noopener noreferrer" class="cve-link">$1</a>'
+      );
+    },
+
+    isValidCve(cve) {
+      return /^CVE-\d{4}-\d{4,}$/i.test(cve);
+    },
+
+    cveUrl(cve) {
+      if (this.isValidCve(cve)) return 'https://nvd.nist.gov/vuln/detail/' + cve;
+      return null;
     },
 
     copyToClipboard(text) {

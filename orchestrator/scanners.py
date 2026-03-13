@@ -311,42 +311,87 @@ def run_bandit(target_path: str, output_path: str) -> dict[str, Any]:
     return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
 
 
+# Default DAST templates used when scanning a URL target and no explicit templates are configured.
+# These cover the most impactful HTTP security checks without requiring a full template update.
+_NUCLEI_DAST_DEFAULT_TEMPLATES: list[str] = [
+    "http/misconfiguration/",
+    "http/exposures/",
+    "http/technologies/",
+    "http/cves/",
+    "http/vulnerabilities/",
+    "http/exposed-panels/",
+    "http/default-logins/",
+    "ssl/",
+    "dns/",
+]
+
+# Default SAST/filesystem templates used when scanning a git/local target.
+_NUCLEI_SAST_DEFAULT_TEMPLATES: list[str] = [
+    "http/misconfiguration/",
+    "http/exposures/",
+    "http/cves/",
+    "http/vulnerabilities/",
+]
+
+
 def run_nuclei(
     target_path: str,
     output_path: str,
     templates: list[str] | None = None,
     severity: str | None = None,
     tags: str | None = None,
+    target_type: str = "local",
 ) -> dict[str, Any]:
-    """Run *nuclei* templates against a filesystem/URL.
+    """Run *nuclei* templates against a filesystem/URL target.
 
     The CLI changed between major versions; modern releases (v2+) no longer support a
     ``-json`` flag.  Instead results must be asked for with ``-json-export`` (or the
     shorthand ``-je``) and we explicitly pass ``-target``.
 
+    Template selection logic:
+    - If ``templates`` is explicitly provided (non-empty list), use those.
+    - If ``target_type == 'url'`` and no templates are configured, inject the full
+      DAST template set (``_NUCLEI_DAST_DEFAULT_TEMPLATES``) for maximum coverage.
+    - If ``target_type`` is filesystem-based and no templates are configured, inject
+      the SAST template set (``_NUCLEI_SAST_DEFAULT_TEMPLATES``).
+
     Severity and tags can be used to filter templates for faster scans:
     - severity: comma-separated list (e.g. "critical,high") to limit results
     - tags: comma-separated list (e.g. "xss,sqli,auth") to include only specific types
-
-    If the binary is missing we fall back to a no-op scan that still produces a
-    syntactically valid JSON file.
     """
     if not command_exists("nuclei"):
         raise ScannerError("nuclei not found in PATH — install it or disable the scanner in settings.yaml")
 
-    # build command using the current CLI flags from nuclei v2+
-    command = ["nuclei", "-json-export", output_path, "-target", target_path]
+    # Resolve effective template list
+    effective_templates: list[str] = []
     if templates:
-        command.extend(["-t"] + templates)
+        effective_templates = list(templates)
+    elif target_type == "url":
+        effective_templates = _NUCLEI_DAST_DEFAULT_TEMPLATES
+        LOGGER.info(
+            "nuclei: no templates configured for URL target — injecting default DAST templates: %s",
+            effective_templates,
+        )
+    else:
+        effective_templates = _NUCLEI_SAST_DEFAULT_TEMPLATES
+        LOGGER.info(
+            "nuclei: no templates configured for %s target — injecting default SAST templates: %s",
+            target_type,
+            effective_templates,
+        )
+
+    # Build command using the current CLI flags from nuclei v2+
+    command = ["nuclei", "-json-export", output_path, "-target", target_path]
+    command.extend(["-t"] + effective_templates)
     if severity:
         command.extend(["-s", severity])
     if tags:
         command.extend(["-tags", tags])
-
+    # Disable update checks in CI/automated environments to avoid delays
+    command.extend(["-no-update-check"])
     code, stdout, stderr = run_command(command, timeout=3600)
     if code not in (0, 1):
         raise ScannerError(f"nuclei failed: {stderr or stdout}")
-
     # ensure a file exists even if nuclei produced nothing
     ensure_json_file(output_path, [])
     return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
@@ -363,19 +408,70 @@ def run_grype(target_value: str, output_path: str) -> dict[str, Any]:
     return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
 
 
-def run_owasp_zap(target_url: str, output_path: str) -> dict[str, Any]:
-    """Simple wrapper that expects the ZAP CLI executable.
-    It launches a quick scan against the provided URL.
+def run_owasp_zap(
+    target_url: str,
+    output_path: str,
+    zap_api_url: str = "http://localhost:8080",
+    zap_api_key: str = "",
+    spider_timeout: int = 120,
+    scan_timeout: int = 600,
+) -> dict[str, Any]:
+    """Run an OWASP ZAP active scan against a URL target via the ZAP REST API.
+
+    This implementation uses the ``python-owasp-zap-v2.4`` client library to
+    communicate with a running ZAP instance (e.g. the ``owasp/zap2docker-stable``
+    Docker image).  The scan flow is:
+
+    1. Spider the target URL to discover pages.
+    2. Run an active scan against all discovered URLs.
+    3. Retrieve all alerts and write them to ``output_path`` as a JSON list.
+
+    ZAP must be reachable at ``zap_api_url`` before calling this function.
+    The recommended way to start ZAP is via Docker Compose:
+
+        docker run -d -u zap -p 8080:8080 owasp/zap2docker-stable \\
+            zap.sh -daemon -host 0.0.0.0 -port 8080 \\
+            -config api.addrs.addr.name=.* \\
+            -config api.addrs.addr.regex=true \\
+            -config api.key=<your-api-key>
     """
-    if not command_exists("zap-cli"):
-        raise ScannerError("zap-cli not found in PATH — install it or disable the scanner in settings.yaml")
-    command = ["zap-cli", "quick-scan", "--json", target_url]
-    code, stdout, stderr = run_command(command, timeout=7200)
-    # zap-cli writes JSON to stdout
-    if code not in (0, 1):
-        raise ScannerError(f"owasp zap scan failed: {stderr or stdout}")
-    Path(output_path).write_text(stdout or "[]", encoding="utf-8")
-    return {"exit_code": code, "stdout_path": output_path, "stderr": stderr}
+    try:
+        from zapv2 import ZAPv2  # type: ignore[import]
+    except ImportError as exc:
+        raise ScannerError("python-owasp-zap-v2.4 is not installed — run: pip install python-owasp-zap-v2.4") from exc
+
+    LOGGER.info("Connecting to ZAP at %s", zap_api_url)
+    zap = ZAPv2(apikey=zap_api_key, proxies={"http": zap_api_url, "https": zap_api_url})
+
+    # --- Spider phase ---
+    LOGGER.info("ZAP spider starting for %s", target_url)
+    spider_id = zap.spider.scan(target_url, apikey=zap_api_key)
+    import time
+
+    deadline = time.monotonic() + spider_timeout
+    while int(zap.spider.status(spider_id)) < 100:
+        if time.monotonic() > deadline:
+            LOGGER.warning("ZAP spider timed out after %ds — proceeding with partial results", spider_timeout)
+            break
+        time.sleep(2)
+    LOGGER.info("ZAP spider complete")
+
+    # --- Active scan phase ---
+    LOGGER.info("ZAP active scan starting for %s", target_url)
+    scan_id = zap.ascan.scan(target_url, apikey=zap_api_key)
+    deadline = time.monotonic() + scan_timeout
+    while int(zap.ascan.status(scan_id)) < 100:
+        if time.monotonic() > deadline:
+            LOGGER.warning("ZAP active scan timed out after %ds — proceeding with partial results", scan_timeout)
+            break
+        time.sleep(5)
+    LOGGER.info("ZAP active scan complete")
+
+    # --- Collect alerts ---
+    alerts = zap.core.alerts(baseurl=target_url)
+    LOGGER.info("ZAP found %d alerts for %s", len(alerts), target_url)
+    Path(output_path).write_text(json.dumps(alerts, ensure_ascii=False), encoding="utf-8")
+    return {"exit_code": 0, "stdout_path": output_path, "stderr": ""}
 
 
 def load_json(path: str) -> dict[str, Any] | list[Any]:

@@ -47,20 +47,33 @@ def test_nuclei_command_format_and_templates(tmp_path, monkeypatch):
 
     monkeypatch.setattr("orchestrator.scanners.run_command", fake_run_command)
 
-    # without templates/severity/tags
-    res = run_nuclei("/tmp", str(output))
+    # without templates/severity/tags — should auto-inject SAST defaults for local target
+    res = run_nuclei("/tmp", str(output), target_type="local")
     assert res["exit_code"] == 0
     assert seen, "run_command should have been called"
     assert "-json-export" in seen[0]
     assert "-target" in seen[0]
     assert str(output) in seen[0]
+    # auto-inject: -t must be present with at least one default template
+    assert "-t" in seen[0]
+    assert any("http/" in t for t in seen[0])
 
-    # with templates specified
+    # URL target — should auto-inject DAST defaults (more templates than SAST)
     seen.clear()
-    res = run_nuclei("/tmp", str(output), templates=["foo.yaml", "bar/"])
+    res = run_nuclei("https://example.com", str(output), target_type="url")
+    assert res["exit_code"] == 0
+    assert "-t" in seen[0]
+    # DAST defaults include ssl/ and dns/ which are not in SAST defaults
+    assert any("ssl/" in t or "dns/" in t for t in seen[0])
+
+    # with explicit templates — should override auto-inject
+    seen.clear()
+    res = run_nuclei("/tmp", str(output), templates=["foo.yaml", "bar/"], target_type="url")
     assert res["exit_code"] == 0
     assert "-t" in seen[0]
     assert "foo.yaml" in seen[0] and "bar/" in seen[0]
+    # explicit templates should NOT include auto-inject defaults
+    assert "ssl/" not in seen[0]
 
     # with severity and tags
     seen.clear()
@@ -68,6 +81,11 @@ def test_nuclei_command_format_and_templates(tmp_path, monkeypatch):
     assert res["exit_code"] == 0
     assert "-s" in seen[0] and "critical,high" in seen[0]
     assert "-tags" in seen[0] and "xss,sqli" in seen[0]
+
+    # -no-update-check must always be present
+    seen.clear()
+    run_nuclei("/tmp", str(output))
+    assert "-no-update-check" in seen[0]
 
 
 def test_grype_not_found(tmp_path, monkeypatch):
@@ -77,11 +95,69 @@ def test_grype_not_found(tmp_path, monkeypatch):
         run_grype("foo", str(output))
 
 
-def test_zap_not_found(tmp_path, monkeypatch):
+def test_zap_missing_library(tmp_path, monkeypatch):
+    """run_owasp_zap must raise ScannerError when python-owasp-zap-v2.4 is not installed."""
     output = tmp_path / "out.json"
-    monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
-    with pytest.raises(ScannerError, match="zap-cli not found"):
+
+    # Simulate missing zapv2 library by making the import fail
+    import builtins
+
+    real_import = builtins.__import__
+
+    def mock_import(name, *args, **kwargs):
+        if name == "zapv2":
+            raise ImportError("No module named 'zapv2'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", mock_import)
+    with pytest.raises(ScannerError, match="python-owasp-zap-v2.4 is not installed"):
         run_owasp_zap("http://example.com", str(output))
+
+
+def test_zap_full_scan_flow(tmp_path, monkeypatch):
+    """run_owasp_zap must spider, active-scan and collect alerts via ZAP REST API."""
+    import json as _json
+
+    output = tmp_path / "out.json"
+
+    # Build a minimal ZAPv2 mock
+    class FakeSpider:
+        def scan(self, url, apikey=""):
+            return "1"
+
+        def status(self, scan_id):
+            return "100"
+
+    class FakeAscan:
+        def scan(self, url, apikey=""):
+            return "2"
+
+        def status(self, scan_id):
+            return "100"
+
+    class FakeCore:
+        def alerts(self, baseurl=""):
+            return [{"alert": "Missing X-Frame-Options", "risk": "Medium", "url": baseurl}]
+
+    class FakeZAP:
+        def __init__(self, **kwargs):
+            self.spider = FakeSpider()
+            self.ascan = FakeAscan()
+            self.core = FakeCore()
+
+    # Patch the zapv2 import inside scanners module
+    import sys
+    import types
+
+    fake_module = types.ModuleType("zapv2")
+    fake_module.ZAPv2 = FakeZAP
+    monkeypatch.setitem(sys.modules, "zapv2", fake_module)
+
+    res = run_owasp_zap("http://example.com", str(output))
+    assert res["exit_code"] == 0
+    alerts = _json.loads(output.read_text())
+    assert len(alerts) == 1
+    assert alerts[0]["alert"] == "Missing X-Frame-Options"
 
 
 def test_clone_repo_env_and_command(monkeypatch, tmp_path):

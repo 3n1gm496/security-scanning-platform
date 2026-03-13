@@ -44,9 +44,22 @@ scanners:
   # Nuclei vulnerability scanner
   # Binary installed in Docker image; for bare-metal install see:
   # https://github.com/projectdiscovery/nuclei/releases
+  #
+  # Template selection:
+  #   - Leave `templates` empty ([]) to use the built-in defaults:
+  #       * URL targets  → http/misconfiguration/, http/exposures/, http/technologies/,
+  #                         http/cves/, http/vulnerabilities/, http/exposed-panels/,
+  #                         http/default-logins/, ssl/, dns/
+  #       * Git/local    → http/misconfiguration/, http/exposures/, http/cves/,
+  #                         http/vulnerabilities/
+  #   - Provide explicit paths to restrict or expand the template set, e.g.:
+  #       templates:
+  #         - http/misconfiguration/
+  #         - http/cves/
+  #         - /path/to/custom-templates/
   nuclei:
     enabled: true
-    templates: []  # populate with your nuclei rules directory if available
+    templates: []  # empty = auto-select defaults based on target type (see above)
     severity: "critical,high,medium"
     tags: ""  # comma-separated tags to include; empty = all (e.g. "xss,sqli,auth")
 
@@ -56,9 +69,25 @@ scanners:
   grype:
     enabled: true
 
-  # DAST using OWASP ZAP (requires zap-cli and ZAP binary)
+  # DAST using OWASP ZAP (requires a running ZAP instance)
+  #
+  # ZAP must be started separately before enabling this scanner.
+  # Recommended setup via Docker:
+  #
+  #   docker run -d -u zap -p 8080:8080 --name zap owasp/zap2docker-stable \
+  #     zap.sh -daemon -host 0.0.0.0 -port 8080 \
+  #     -config api.addrs.addr.name=.* \
+  #     -config api.addrs.addr.regex=true \
+  #     -config api.key=changeme
+  #
+  # The scanner communicates with ZAP via its REST API using the
+  # `python-owasp-zap-v2.4` client library (installed in the Docker image).
   owasp_zap:
-    enabled: false  # disabled by default: requires separate ZAP server setup
+    enabled: false  # set to true once a ZAP instance is running
+    api_url: "http://localhost:8080"  # ZAP REST API base URL
+    api_key: ""  # ZAP API key (set via ZAP -config api.key=...)
+    spider_timeout: 120  # seconds to wait for the spider phase
+    scan_timeout: 600  # seconds to wait for the active scan phase
 
 policy:
   block_on_severities:

@@ -80,13 +80,23 @@ RUN NUCLEI_VERSION_PLAIN="${NUCLEI_VERSION#v}" && \
     nuclei -version \
     || echo "WARNING: nuclei install failed — tool will be skipped at runtime"
 
+# Install python-owasp-zap-v2.4 client library for ZAP REST API integration.
+# This is a lightweight Python client; the actual ZAP server is expected to run
+# as a separate container (see config/settings.yaml for setup instructions).
+RUN pip install --no-cache-dir python-owasp-zap-v2.4
+
 COPY . /app/orchestrator
 
 WORKDIR /app/orchestrator
 RUN pip install -e . && \
     chown -R scanuser:scanuser /app
 
+# Pre-download nuclei templates so the first scan does not need internet access.
+# Templates are stored in /home/scanuser/.local/share/nuclei-templates (nuclei v3 default).
+# The -no-update-check flag in run_nuclei() prevents stale-template warnings at runtime.
 USER scanuser
+RUN nuclei -update-templates -no-update-check 2>&1 | tail -5 \
+    || echo "WARNING: nuclei template update failed — templates will be downloaded on first scan"
 
 ENTRYPOINT ["python", "-m", "orchestrator.main"]
 CMD ["--help"]

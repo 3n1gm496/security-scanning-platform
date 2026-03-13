@@ -388,22 +388,26 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
                 cache_context={"mode": "bandit", **_git_ctx},
             )
         elif tool == "nuclei":
+            _nuclei_cfg = settings["scanners"]["nuclei"]
+            _nuclei_ttype = target.type
             execute_tool(
                 "nuclei",
-                lambda output_path: run_nuclei(
+                lambda output_path, _cfg=_nuclei_cfg, _tt=_nuclei_ttype: run_nuclei(
                     target_input,
                     output_path,
-                    settings["scanners"]["nuclei"].get("templates"),
-                    settings["scanners"]["nuclei"].get("severity"),
-                    settings["scanners"]["nuclei"].get("tags"),
+                    _cfg.get("templates") or [],
+                    _cfg.get("severity"),
+                    _cfg.get("tags"),
+                    target_type=_tt,
                 ),
                 lambda raw_payload, output_path, **_: normalize_nuclei(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),
                 cache_context={
-                    "templates": settings["scanners"]["nuclei"].get("templates"),
-                    "severity": settings["scanners"]["nuclei"].get("severity"),
-                    "tags": settings["scanners"]["nuclei"].get("tags"),
+                    "templates": _nuclei_cfg.get("templates"),
+                    "severity": _nuclei_cfg.get("severity"),
+                    "tags": _nuclei_cfg.get("tags"),
+                    "target_type": target.type,
                     **_git_ctx,
                 },
             )
@@ -471,9 +475,17 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
                 cache_context={"mode": "grype", **_git_ctx},
             )
         elif tool == "zap":
+            _zap_cfg = settings["scanners"].get("owasp_zap", {})
             execute_tool(
                 "zap",
-                lambda output_path: run_owasp_zap(target_input, output_path),
+                lambda output_path, _cfg=_zap_cfg: run_owasp_zap(
+                    target_input,
+                    output_path,
+                    zap_api_url=_cfg.get("api_url", "http://localhost:8080"),
+                    zap_api_key=_cfg.get("api_key", ""),
+                    spider_timeout=int(_cfg.get("spider_timeout", 120)),
+                    scan_timeout=int(_cfg.get("scan_timeout", 600)),
+                ),
                 lambda raw_payload, output_path, **_: normalize_zap(
                     scan_id, target, raw_payload, output_path, base_path=target_input
                 ),

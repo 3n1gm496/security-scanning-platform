@@ -92,10 +92,10 @@ RUN pip install -e . && \
     chown -R scanuser:scanuser /app
 
 # Pre-download nuclei templates so the first scan does not need internet access.
-# Templates are stored in /home/scanuser/.local/share/nuclei-templates (nuclei v3 default).
-# The -no-update-check flag in run_nuclei() prevents stale-template warnings at runtime.
+# Templates are stored in ~/nuclei-templates (nuclei v3 default path).
+# run_nuclei() always passes -duc (disable-update-check) to suppress update warnings at runtime.
 USER scanuser
-RUN nuclei -update-templates -no-update-check 2>&1 | tail -5 \
+RUN nuclei -ut -duc 2>&1 | tail -5 \
     || echo "WARNING: nuclei template update failed — templates will be downloaded on first scan"
 
 ENTRYPOINT ["python", "-m", "orchestrator.main"]

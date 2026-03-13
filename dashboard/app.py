@@ -274,7 +274,7 @@ async def security_middleware(request: Request, call_next):
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
-        "connect-src 'self'; "
+        "connect-src 'self' https://cdn.jsdelivr.net; "
         "frame-ancestors 'none';"
     )
     # HSTS: only sent over HTTPS; max-age 1 year

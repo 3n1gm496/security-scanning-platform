@@ -636,8 +636,8 @@ createApp({
             },
           },
           scales: {
-            x: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0 } },
-            y: { grid: { display: false }, ticks: { font: { weight: '600' } } },
+            x: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0, color: this.cssVar('--chart-tick') } },
+            y: { grid: { display: false }, ticks: { font: { weight: '600' }, color: this.cssVar('--chart-tick') } },
           },
         },
       });

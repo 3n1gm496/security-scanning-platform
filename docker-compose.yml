@@ -23,6 +23,39 @@ services:
     restart: unless-stopped
     profiles: ["postgres"]
 
+  # -------------------------------------------------------------------------
+  # OWASP ZAP — DAST scanner (always started, used by the orchestrator)
+  #
+  # The orchestrator auto-enables ZAP when ZAP_API_URL is set in its
+  # environment. The default api_key is "zap-api-key" — override via
+  # ZAP_API_KEY in .env for production deployments.
+  # -------------------------------------------------------------------------
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: security-zap
+    user: zap
+    command: >
+      zap.sh -daemon
+      -host 0.0.0.0
+      -port 8090
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.key=${ZAP_API_KEY:-zap-api-key}
+      -config connection.timeoutInSecs=60
+    ports:
+      - "${ZAP_PORT:-8090}:8090"
+    environment:
+      - JAVA_OPTS=-Xmx512m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8090/JSON/core/view/version/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    volumes:
+      - zap_data:/home/zap/.ZAP
+
   orchestrator:
     build:
       context: ./orchestrator
@@ -36,6 +69,9 @@ services:
       WORKSPACE_DIR: ${WORKSPACE_DIR:-/data/workspaces}
       TRIVY_CACHE_DIR: ${TRIVY_CACHE_DIR:-/data/cache/trivy}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # ZAP integration — auto-enables owasp_zap scanner when set
+      ZAP_API_URL: ${ZAP_API_URL:-http://zap:8090}
+      ZAP_API_KEY: ${ZAP_API_KEY:-zap-api-key}
     volumes:
       - ./data:/data
       - ./config:/app/config:ro
@@ -48,6 +84,9 @@ services:
       start_period: 10s
     depends_on:
       postgres:
+        condition: service_healthy
+        required: false
+      zap:
         condition: service_healthy
         required: false
     restart: "no"
@@ -85,3 +124,4 @@ services:
 
 volumes:
   postgres_data:
+  zap_data:

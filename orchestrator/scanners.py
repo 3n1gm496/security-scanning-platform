@@ -387,8 +387,9 @@ def run_nuclei(
         command.extend(["-s", severity])
     if tags:
         command.extend(["-tags", tags])
-    # Disable update checks in CI/automated environments to avoid delays
-    command.extend(["-no-update-check"])
+    # Disable automatic update checks in CI/automated environments to avoid delays
+    # (nuclei v3 flag: -duc / -disable-update-check)
+    command.extend(["-duc"])
     code, stdout, stderr = run_command(command, timeout=3600)
     if code not in (0, 1):
         raise ScannerError(f"nuclei failed: {stderr or stdout}")

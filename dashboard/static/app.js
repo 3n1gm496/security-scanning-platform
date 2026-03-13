@@ -381,9 +381,14 @@ createApp({
     // ── Chart theme helpers ────────────────────────────────────────────────────
 
     applyChartDefaults() {
-      const dark = this.darkMode;
-      Chart.defaults.color = dark ? '#9ca3af' : '#6b7280';
-      Chart.defaults.borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+      const s = getComputedStyle(document.documentElement);
+      Chart.defaults.color = s.getPropertyValue('--chart-tick').trim() || '#6b7280';
+      Chart.defaults.borderColor = s.getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,0.06)';
+    },
+
+    // Read a CSS variable from :root — used by all chart builders for consistent theming
+    cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     },
 
     // ── Toggle columns ───────────────────────────────────────────────────────────────────────────────────
@@ -540,7 +545,7 @@ createApp({
           },
           scales: {
             x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-            y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { precision: 0 } },
+            y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0 } },
           },
         },
       });
@@ -621,7 +626,7 @@ createApp({
                 padding: 12,
                 usePointStyle: true,
                 pointStyle: 'rectRounded',
-                color: this.darkMode ? '#cbd5e1' : '#374151',
+                color: this.cssVar('--chart-legend'),
               },
             },
             tooltip: {
@@ -631,7 +636,7 @@ createApp({
             },
           },
           scales: {
-            x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { precision: 0 } },
+            x: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0 } },
             y: { grid: { display: false }, ticks: { font: { weight: '600' } } },
           },
         },
@@ -649,12 +654,12 @@ createApp({
         type: 'bar',
         data: {
           labels,
-          datasets: [{ label: 'Findings', data: values, backgroundColor: '#4f46e5', borderRadius: 6 }],
+          datasets: [{ label: 'Findings', data: values, backgroundColor: this.cssVar('--color-primary'), borderRadius: 6 }],
         },
         options: {
           responsive: true, maintainAspectRatio: false, indexAxis: 'y',
           plugins: { legend: { display: false } },
-          scales: { x: { beginAtZero: true, grid: { color: '#f3f4f6' } }, y: { grid: { display: false } } },
+          scales: { x: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') } }, y: { grid: { display: false } } },
         },
       });
     },
@@ -714,7 +719,7 @@ createApp({
             y: {
               stacked: true,
               beginAtZero: true,
-              grid: { color: this.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
+              grid: { color: this.cssVar('--chart-grid') },
               ticks: { precision: 0, font: { size: 11 } },
               title: { display: true, text: 'Findings', font: { size: 10 } },
             },
@@ -1062,8 +1067,8 @@ createApp({
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
           scales: {
-            x: { stacked: true, grid: { display: false }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
-            y: { stacked: true, beginAtZero: true, grid: { color: this.darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
+            x: { stacked: true, grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },
+            y: { stacked: true, beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { color: this.cssVar('--chart-tick') } },
           },
         },
       });
@@ -1081,7 +1086,6 @@ createApp({
       // Map risk score buckets to their colours: low risk = green, high risk = red
       const RISK_BUCKET_COLORS = { '0-25': '#10b981', '25-50': '#f59e0b', '50-75': '#f97316', '75-100': '#dc2626' };
       const bgColors = labels.map(l => RISK_BUCKET_COLORS[l] || '#9ca3af');
-      const legendColor = this.darkMode ? '#cbd5e1' : '#374151';
       this.charts.severityDist = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
@@ -1090,7 +1094,7 @@ createApp({
             data,
             backgroundColor: bgColors,
             borderWidth: 2,
-            borderColor: this.darkMode ? '#1e293b' : '#fff',
+            borderColor: this.cssVar('--chart-border'),
           }],
         },
         options: {
@@ -1101,7 +1105,7 @@ createApp({
               labels: {
                 boxWidth: 12,
                 font: { size: 11 },
-                color: legendColor,
+                color: this.cssVar('--chart-legend'),
                 padding: 12,
               },
             },
@@ -1129,8 +1133,8 @@ createApp({
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
-            y: { beginAtZero: true, grid: { color: this.darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
-            x: { grid: { display: false }, ticks: { color: this.darkMode ? '#9ca3af' : '#6b7280' } },
+            y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { color: this.cssVar('--chart-tick') } },
+            x: { grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },
           },
         },
       });
@@ -1148,7 +1152,7 @@ createApp({
           datasets: [{
             data: owasp.map(o => o.count),
             backgroundColor: OWASP_COLORS,
-            borderWidth: 2, borderColor: this.darkMode ? '#1f2937' : '#fff',
+            borderWidth: 2, borderColor: this.cssVar('--chart-border'),
           }],
         },
         options: {
@@ -1163,9 +1167,10 @@ createApp({
       if (!canvas || !this.analyticsData.trends) return;
       if (this.charts.analyticsTrend) this.charts.analyticsTrend.destroy();
       const trendData = this.analyticsData.trends.trend;
-      const dark = this.darkMode;
-      const gridColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-      const tickColor = dark ? '#9ca3af' : '#6b7280';
+      const gridColor = this.cssVar('--chart-grid');
+      const tickColor = this.cssVar('--chart-tick');
+      const primaryColor = this.cssVar('--color-primary');
+      const dangerColor = this.cssVar('--color-danger');
       this.charts.analyticsTrend = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
@@ -1173,14 +1178,14 @@ createApp({
           datasets: [
             {
               label: 'Avg Risk', data: trendData.map(t => t.average_risk),
-              borderColor: dark ? '#818cf8' : '#4f46e5',
-              backgroundColor: dark ? 'rgba(129,140,248,0.12)' : 'rgba(79,70,229,0.08)',
+              borderColor: primaryColor,
+              backgroundColor: primaryColor + '18',
               tension: 0.3, fill: true, borderWidth: 2,
             },
             {
               label: 'Max Risk', data: trendData.map(t => t.max_risk),
-              borderColor: dark ? '#f87171' : '#ef4444',
-              backgroundColor: dark ? 'rgba(248,113,113,0.08)' : 'rgba(239,68,68,0.04)',
+              borderColor: dangerColor,
+              backgroundColor: dangerColor + '10',
               tension: 0.3, fill: false, borderDash: [4, 4], borderWidth: 2,
             },
           ],
@@ -1190,13 +1195,13 @@ createApp({
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: tickColor, font: { size: 11 } },
+              labels: { color: this.cssVar('--chart-legend'), font: { size: 11 } },
             },
             tooltip: {
-              backgroundColor: dark ? '#374151' : '#fff',
-              titleColor: dark ? '#f3f4f6' : '#111827',
-              bodyColor: dark ? '#d1d5db' : '#374151',
-              borderColor: dark ? '#4b5563' : '#e5e7eb',
+              backgroundColor: this.cssVar('--chart-tooltip-bg'),
+              titleColor: this.cssVar('--chart-tooltip-title'),
+              bodyColor: this.cssVar('--chart-tooltip-body'),
+              borderColor: this.cssVar('--chart-tooltip-border'),
               borderWidth: 1,
             },
           },

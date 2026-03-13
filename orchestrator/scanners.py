@@ -451,9 +451,7 @@ def run_owasp_zap(
         version = zap.core.version
         LOGGER.info("ZAP version: %s", version)
     except Exception as exc:
-        raise ScannerError(
-            f"Cannot connect to ZAP at {zap_api_url} — is ZAP running? Error: {exc}"
-        ) from exc
+        raise ScannerError(f"Cannot connect to ZAP at {zap_api_url} — is ZAP running? Error: {exc}") from exc
 
     # --- Open URL in ZAP first (seed the site tree) ---
     LOGGER.info("ZAP: opening target URL %s", target_url)
@@ -488,7 +486,9 @@ def run_owasp_zap(
         time.sleep(2)
 
     spider_results = zap.spider.results(spider_id)
-    LOGGER.info("ZAP spider complete — discovered %d URLs", len(spider_results) if isinstance(spider_results, list) else 0)
+    LOGGER.info(
+        "ZAP spider complete — discovered %d URLs", len(spider_results) if isinstance(spider_results, list) else 0
+    )
 
     # --- Passive scan wait (let ZAP process spidered pages) ---
     pscan_deadline = time.monotonic() + 30

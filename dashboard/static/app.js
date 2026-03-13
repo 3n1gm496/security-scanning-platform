@@ -185,9 +185,10 @@ createApp({
       },
 
       // ── Compare page
-      compareIdA: '',
-      compareIdB: '',
-      compareScanList: [],
+        compareIdA: '',
+        compareIdB: '',
+        compareScanList: [],
+        // compareScanListB is a computed property — see computed section below
       compareResult: null,
       compareLoading: false,
       selectedScans: [],
@@ -240,6 +241,13 @@ createApp({
     },
     allSelected() {
       return this.findings.length > 0 && this.selectedFindings.length === this.findings.length;
+    },
+    // Scan B list: only scans with the same target_name as scan A (excluding scan A itself)
+    compareScanListB() {
+      if (!this.compareIdA) return this.compareScanList;
+      const scanA = this.compareScanList.find(s => s.id === this.compareIdA);
+      if (!scanA) return this.compareScanList;
+      return this.compareScanList.filter(s => s.id !== this.compareIdA && s.target_name === scanA.target_name);
     },
   },
 
@@ -1040,11 +1048,15 @@ createApp({
       const canvas = this.$refs.severityDistChart;
       if (!canvas || !this.analyticsData.riskDistribution) return;
       if (this.charts.severityDist) this.charts.severityDist.destroy();
-      // Use the risk distribution data to build a severity breakdown doughnut
+      // riskDistribution.distribution has keys like '0-25', '25-50', '50-75', '75-100'
+      // which map to RISK_COLORS (green → red) not SEVERITY_COLORS.
       const dist = this.analyticsData.riskDistribution.distribution;
       const labels = Object.keys(dist);
       const data = Object.values(dist);
-      const bgColors = labels.map(l => SEVERITY_COLORS[l.toUpperCase()] || '#9ca3af');
+      // Map risk score buckets to their colours: low risk = green, high risk = red
+      const RISK_BUCKET_COLORS = { '0-25': '#10b981', '25-50': '#f59e0b', '50-75': '#f97316', '75-100': '#dc2626' };
+      const bgColors = labels.map(l => RISK_BUCKET_COLORS[l] || '#9ca3af');
+      const legendColor = this.darkMode ? '#cbd5e1' : '#374151';
       this.charts.severityDist = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
@@ -1053,13 +1065,21 @@ createApp({
             data,
             backgroundColor: bgColors,
             borderWidth: 2,
-            borderColor: this.darkMode ? '#1f2937' : '#fff',
+            borderColor: this.darkMode ? '#1e293b' : '#fff',
           }],
         },
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+            legend: {
+              position: 'bottom',
+              labels: {
+                boxWidth: 12,
+                font: { size: 11 },
+                color: legendColor,
+                padding: 12,
+              },
+            },
           },
         },
       });

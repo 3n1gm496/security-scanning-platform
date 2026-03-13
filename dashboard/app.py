@@ -870,22 +870,31 @@ def trigger_scan(
     """Trigger a new security scan (admin/operator only).
 
     Args:
-        target_type: 'local', 'git', or 'image'
-        target: path, URL, or image reference
+        target_type: 'local', 'git', 'image', or 'url'
+        target: path, git URL, image reference, or web URL to scan
         name: display name for the target
         async_mode: if true, return immediately with job_id; if false, wait for completion
     """
     # Validate inputs
-    if target_type not in ["local", "git", "image"]:
+    _VALID_TARGET_TYPES = {"local", "git", "image", "url"}
+    if target_type not in _VALID_TARGET_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="target_type must be 'local', 'git', or 'image'",
+            detail=f"target_type must be one of: {', '.join(sorted(_VALID_TARGET_TYPES))}",
         )
 
     if not target or not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target and name are required")
 
     root_dir = Path(__file__).parent.parent.absolute()
+
+    # URL format validation: ensure the target starts with http:// or https://.
+    if target_type == "url":
+        if not (target.startswith("http://") or target.startswith("https://")):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="URL target must start with http:// or https://",
+            )
 
     # Path traversal protection: for local targets, ensure the resolved path
     # stays within the allowed workspace directory (/data/workspaces).

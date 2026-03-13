@@ -1196,13 +1196,15 @@
               <option value="local">Local directory</option>
               <option value="git">Git repository</option>
               <option value="image">Docker Image</option>
+              <option value="url">Web URL (DAST)</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label" for="new-scan-target">Target</label>
-            <input id="new-scan-target" name="scan_target" type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/org/repo' : newScanForm.target_type === 'image' ? 'nginx:latest' : '/data/workspaces/my-project'" autocomplete="off">
+            <input id="new-scan-target" name="scan_target" type="text" v-model="newScanForm.target" class="filter-input" :placeholder="newScanForm.target_type === 'git' ? 'https://github.com/org/repo' : newScanForm.target_type === 'image' ? 'nginx:latest' : newScanForm.target_type === 'url' ? 'https://example.com' : '/data/workspaces/my-project'" autocomplete="off">
             <span class="input-hint" v-if="newScanForm.target_type === 'git'">URL of the Git repository to scan</span>
             <span class="input-hint" v-else-if="newScanForm.target_type === 'image'">Docker image name and tag</span>
+            <span class="input-hint" v-else-if="newScanForm.target_type === 'url'">Web URL to scan with nuclei and OWASP ZAP</span>
             <span class="input-hint" v-else>Absolute path of the directory to scan</span>
           </div>
           <div class="modal-actions">

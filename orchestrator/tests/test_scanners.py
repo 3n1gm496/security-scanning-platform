@@ -82,10 +82,10 @@ def test_nuclei_command_format_and_templates(tmp_path, monkeypatch):
     assert "-s" in seen[0] and "critical,high" in seen[0]
     assert "-tags" in seen[0] and "xss,sqli" in seen[0]
 
-    # -no-update-check must always be present
+    # -duc (disable-update-check) must always be present
     seen.clear()
     run_nuclei("/tmp", str(output))
-    assert "-no-update-check" in seen[0]
+    assert "-duc" in seen[0]
 
 
 def test_grype_not_found(tmp_path, monkeypatch):

@@ -94,7 +94,14 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["scanners"].setdefault("bandit", {"enabled": False})
     settings["scanners"].setdefault("nuclei", {"enabled": False, "templates": []})
     settings["scanners"].setdefault("grype", {"enabled": False})
-    settings["scanners"].setdefault("owasp_zap", {"enabled": False})
+    # Environment variable overrides for ZAP (useful in docker-compose)
+    # ZAP_API_URL auto-enables the scanner; ZAP_API_KEY sets the API key.
+    _zap = settings["scanners"].setdefault("owasp_zap", {"enabled": False})
+    if os.getenv("ZAP_API_URL"):
+        _zap["api_url"] = os.getenv("ZAP_API_URL")
+        _zap["enabled"] = True  # auto-enable when ZAP URL is provided
+    if os.getenv("ZAP_API_KEY") is not None:
+        _zap["api_key"] = os.getenv("ZAP_API_KEY", "")
     settings["policy"].setdefault("block_on_severities", ["CRITICAL"])
     settings["policy"].setdefault("block_on_secret_categories", True)
     settings["execution"].setdefault("max_concurrent_targets", int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2")))

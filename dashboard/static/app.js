@@ -1073,6 +1073,7 @@ createApp({
             { label: 'Critical', data: tools.map(t => t.critical_count || 0), backgroundColor: SEVERITY_COLORS.CRITICAL, borderRadius: 4 },
             { label: 'High', data: tools.map(t => t.high_count || 0), backgroundColor: SEVERITY_COLORS.HIGH, borderRadius: 4 },
             { label: 'Medium', data: tools.map(t => t.medium_count || 0), backgroundColor: SEVERITY_COLORS.MEDIUM, borderRadius: 4 },
+            { label: 'Low', data: tools.map(t => t.low_count || 0), backgroundColor: SEVERITY_COLORS.LOW, borderRadius: 4 },
           ],
         },
         options: {

@@ -457,6 +457,8 @@ def test_get_tool_effectiveness(analytics_db):
         assert "average_risk" in tool
         assert "critical_count" in tool
         assert "high_count" in tool
+        assert "medium_count" in tool
+        assert "low_count" in tool
 
         assert tool["total_findings"] > 0
         assert tool["high_risk_findings"] >= 0

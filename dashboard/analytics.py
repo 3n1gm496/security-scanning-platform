@@ -364,6 +364,8 @@ def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
                 "average_risk": round(sum(risk_scores) / len(risk_scores), 2) if risk_scores else 0,
                 "critical_count": severity_counts["CRITICAL"],
                 "high_count": severity_counts["HIGH"],
+                "medium_count": severity_counts["MEDIUM"],
+                "low_count": severity_counts["LOW"],
             }
         )
 

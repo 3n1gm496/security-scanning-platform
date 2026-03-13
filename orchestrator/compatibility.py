@@ -2,6 +2,7 @@
 """Scanner compatibility matrix and preflight checks."""
 
 from __future__ import annotations
+import importlib
 import logging
 from typing import Any
 
@@ -39,7 +40,8 @@ REQUIRED_BINARIES: dict[str, str] = {
     "grype": "grype",
     "syft": "syft",
     "nuclei": "nuclei",
-    "zap": "zap-cli",
+    # ZAP uses the python-owasp-zap-v2.4 client library (zapv2 module),
+    # not a CLI binary.  Preflight handles this as a special case below.
 }
 
 
@@ -76,6 +78,24 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
     runnable = []
     skipped = []
     for tool in scanners:
+        # ZAP uses a Python client library instead of a CLI binary.
+        if tool == "zap":
+            try:
+                importlib.import_module("zapv2")
+                runnable.append(tool)
+            except ImportError:
+                LOGGER.warning(
+                    "Tool %s is enabled but python-owasp-zap-v2.4 is not installed. Skipping.",
+                    tool,
+                )
+                skipped.append(
+                    {
+                        "tool": tool,
+                        "reason": "Required Python package 'python-owasp-zap-v2.4' is not installed",
+                    }
+                )
+            continue
+
         # Trivy is a special case, as both trivy_fs and trivy_image use the same binary
         binary_name = REQUIRED_BINARIES.get(tool.replace("_fs", "").replace("_image", ""))
         if not binary_name:

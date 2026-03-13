@@ -532,7 +532,7 @@
                   <td @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title">{{ finding.title }}</td>
                   <td @click="openFindingDetail(finding)" class="cell-nowrap">
                     <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" class="cve-link" @click.stop>{{ finding.cve }}</a>
-                    <span v-else-if="finding.cve" class="text-muted" :title="finding.cve">{{ finding.cve }}</span>
+                    <span v-else-if="finding.cve" class="text-muted" :title="finding.cve">{{ truncateCve(finding.cve) }}</span>
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td @click="openFindingDetail(finding)" class="cell-wrap">

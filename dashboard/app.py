@@ -1387,6 +1387,12 @@ def chart_remediation_progress(auth: AuthContext = Depends(require_auth)) -> dic
         return ChartingEngine.remediation_progress(conn)
 
 
+@app.get("/api/chart/severity-breakdown")
+def chart_severity_breakdown(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Get findings count grouped by severity for the dashboard bar chart."""
+    return severity_breakdown(DB_PATH)
+
+
 @app.get("/api/chart/cve-distribution")
 def chart_cve_distribution(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get top CVEs found for bar chart."""

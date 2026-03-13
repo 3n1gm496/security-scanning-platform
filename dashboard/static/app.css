@@ -1887,3 +1887,40 @@ code {
   .page-content { padding: 0; overflow: visible; }
   .card { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
 }
+
+/* ── Scrollbar: hidden visually, functional ──────────────────── */
+
+/* Main content area — vertical scroll */
+.main-content {
+  scrollbar-width: none; /* Firefox */
+}
+.main-content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Sidebar nav — vertical scroll */
+.sidebar-nav {
+  scrollbar-width: none;
+}
+.sidebar-nav::-webkit-scrollbar {
+  width: 0;
+}
+
+/* Table wrappers — horizontal scroll */
+.table-wrap,
+.findings-table-wrap {
+  scrollbar-width: none;
+}
+.table-wrap::-webkit-scrollbar,
+.findings-table-wrap::-webkit-scrollbar {
+  height: 0;
+}
+
+/* Modal body — vertical scroll */
+.modal-body {
+  scrollbar-width: none;
+}
+.modal-body::-webkit-scrollbar {
+  width: 0;
+}

@@ -535,11 +535,26 @@ createApp({
       });
     },
 
-    buildSeverityChart() {
+    async buildSeverityChart() {
       const canvas = this.$refs.severityChart;
       if (!canvas) return;
       if (this.charts.severity) this.charts.severity.destroy();
-      const data = this.severityBreakdown;
+      // Fetch fresh data from API so the chart is always up-to-date,
+      // even if __INIT_DATA__ was empty at page load.
+      let data = {};
+      try {
+        const fresh = await apiFetch('/api/chart/severity-breakdown');
+        // API returns { labels: [...], values: [...] } or a plain object
+        if (fresh && Array.isArray(fresh.labels)) {
+          fresh.labels.forEach((k, i) => { data[k.toUpperCase()] = fresh.values[i]; });
+        } else if (fresh && typeof fresh === 'object') {
+          // plain { CRITICAL: N, HIGH: N, ... } shape
+          Object.assign(data, fresh);
+        }
+      } catch (_) {
+        // fallback to init data if API call fails
+        data = this.severityBreakdown || {};
+      }
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
@@ -560,7 +575,25 @@ createApp({
           maintainAspectRatio: false,
           indexAxis: 'y',
           plugins: {
-            legend: { display: false },
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                generateLabels: (chart) => {
+                  return chart.data.labels.map((label, i) => ({
+                    text: `${label}  (${chart.data.datasets[0].data[i]})`,
+                    fillStyle: chart.data.datasets[0].backgroundColor[i],
+                    strokeStyle: chart.data.datasets[0].backgroundColor[i],
+                    hidden: false,
+                    index: i,
+                  }));
+                },
+                font: { size: 11 },
+                padding: 12,
+                usePointStyle: true,
+                pointStyle: 'rectRounded',
+              },
+            },
             tooltip: {
               callbacks: {
                 label: ctx => ` ${ctx.parsed.x} findings`,
@@ -1482,6 +1515,18 @@ createApp({
     cveUrl(cve) {
       if (this.isValidCve(cve)) return 'https://nvd.nist.gov/vuln/detail/' + cve;
       return null;
+    },
+
+    // Truncate long CWE/OWASP strings for table display.
+    // e.g. "CWE-22: Improper Limitation of a Pathname..." → "CWE-22"
+    // e.g. "A01:2021 - Broken Access Control" → "A01:2021"
+    truncateCve(value) {
+      if (!value) return value;
+      // Extract just the ID part before any colon, dash or space separator
+      const m = value.match(/^(CWE-\d+|CVE-\d{4}-\d+|A\d{2}:\d{4}|[A-Z]+-\d+)/i);
+      if (m) return m[1];
+      // Fallback: truncate to 20 chars with ellipsis
+      return value.length > 20 ? value.slice(0, 20) + '…' : value;
     },
 
     copyToClipboard(text) {

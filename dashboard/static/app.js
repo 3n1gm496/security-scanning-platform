@@ -140,6 +140,15 @@ createApp({
       findingsCursorStack: [],
       findingsFilter: { search: '', severity: '', tool: '', target: '', status: '', scan_id: '' },
       findingsSort: { by: 'id', order: 'ASC' },
+      findingsColumns: [
+        { key: 'severity', label: 'Severity', visible: true },
+        { key: 'tool', label: 'Tool', visible: true },
+        { key: 'target', label: 'Target', visible: true },
+        { key: 'title', label: 'Title', visible: true },
+        { key: 'cve', label: 'CVE/ID', visible: true },
+        { key: 'file', label: 'File', visible: true },
+        { key: 'status', label: 'Status', visible: true },
+      ],
       selectedFindings: [],
       bulkStatus: '',
 
@@ -378,10 +387,22 @@ createApp({
     },
 
     // ── Toggle columns ───────────────────────────────────────────────────────────────────────────────────
-
     colVisible(key) {
       const col = this.scanColumns.find(c => c.key === key);
       return col ? col.visible : true;
+    },
+    colVisibleF(key) {
+      const col = this.findingsColumns.find(c => c.key === key);
+      return col ? col.visible : true;
+    },
+    sortFindings(col) {
+      if (this.findingsSort.by === col) {
+        this.findingsSort.order = this.findingsSort.order === 'ASC' ? 'DESC' : 'ASC';
+      } else {
+        this.findingsSort.by = col;
+        this.findingsSort.order = 'DESC';
+      }
+      this.loadFindings(true);
     },
 
     // ── Navigation ─────────────────────────────────────────────────────────────────────────────────────
@@ -600,6 +621,7 @@ createApp({
                 padding: 12,
                 usePointStyle: true,
                 pointStyle: 'rectRounded',
+                color: this.darkMode ? '#cbd5e1' : '#374151',
               },
             },
             tooltip: {
@@ -725,6 +747,7 @@ createApp({
         const scanPag = result.pagination || {};
         this.scansTotal = scanPag.count || this.scans.length;
         this.scansCursor = scanPag.next_cursor || null;
+        this.initResizableColumns();
       } catch (e) {
         this.showToast('Failed to load scans: ' + e.message, 'error');
       } finally {
@@ -806,11 +829,12 @@ createApp({
         if (this.findingsFilter.severity) params.set('severity', this.findingsFilter.severity);
         if (this.findingsFilter.tool) params.set('tool', this.findingsFilter.tool);
         if (this.findingsCursor) params.set('cursor', this.findingsCursor);
-
         // Always use cursor-based pagination endpoint (supports status filter via LEFT JOIN)
         if (this.findingsFilter.status) params.set('status', this.findingsFilter.status);
         if (this.findingsFilter.target) params.set('target', this.findingsFilter.target);
         if (this.findingsFilter.scan_id) params.set('scan_id', this.findingsFilter.scan_id);
+        params.set('sort_by', this.findingsSort.by);
+        params.set('sort_order', this.findingsSort.order);
         const result = await apiFetch(`/api/findings/paginated?${params}`);
 
         this.findings = result.items || [];
@@ -818,6 +842,7 @@ createApp({
         this.findingsTotal = pag.count || this.findings.length;
         this.findingsCursor = pag.next_cursor || null;
         if (this.currentPage === 'findings') this._syncFindingsHash();
+        this.initResizableColumns();
       } catch (e) {
         this.showToast('Failed to load findings: ' + e.message, 'error');
       } finally {
@@ -1551,6 +1576,44 @@ createApp({
 
     copyToClipboard(text) {
       navigator.clipboard.writeText(text).then(() => this.showToast('Copied to clipboard'));
+    },
+
+    // ── Resizable columns ────────────────────────────────────────────────────────
+    // Attach drag-to-resize handles to all <th> inside tables.
+    // Safe to call multiple times — skips th that already have a handle.
+    initResizableColumns() {
+      nextTick(() => {
+        document.querySelectorAll('table').forEach((table) => {
+          table.classList.add('resizable-table');
+          table.querySelectorAll('thead th').forEach((th) => {
+            if (th.querySelector('.resize-handle')) return;
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            th.appendChild(handle);
+            let startX = 0, startW = 0;
+            handle.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              startX = e.pageX;
+              startW = th.offsetWidth;
+              handle.classList.add('resizing');
+              table.classList.add('col-resizing');
+              const onMove = (ev) => {
+                const newW = Math.max(50, startW + ev.pageX - startX);
+                th.style.width = newW + 'px';
+                th.style.minWidth = newW + 'px';
+              };
+              const onUp = () => {
+                handle.classList.remove('resizing');
+                table.classList.remove('col-resizing');
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            });
+          });
+        });
+      });
     },
 
     // ── Dark Mode ────────────────────────────────────────────────────────────────

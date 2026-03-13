@@ -493,6 +493,13 @@
               <button class="btn-secondary btn-sm" @click="selectedFindings = []">Deselect</button>
             </div>
           </div>
+          <!-- Toggle colonne visibili -->
+          <div class="col-toggle-bar col-toggle-pad">
+            <span class="col-toggle-label">Columns:</span>
+            <button v-for="col in findingsColumns" :key="col.key"
+              class="col-toggle-btn" :class="{ active: col.visible }"
+              @click="col.visible = !col.visible">{{ col.label }}</button>
+          </div>
           <div class="findings-table-wrap">
             <table>
               <thead>
@@ -500,13 +507,13 @@
                   <th class="th-check">
                     <input type="checkbox" @change="toggleSelectAll" :checked="allSelected">
                   </th>
-                  <th>Severity</th>
-                  <th>Tool</th>
-                  <th>Target</th>
-                  <th>Title</th>
-                  <th>CVE / ID</th>
-                  <th>File</th>
-                  <th>Status</th>
+                  <th v-if="colVisibleF('severity')" class="th-sortable" @click="sortFindings('severity')">Severity <span class="sort-icon">{{ sortIcon('findings', 'severity') }}</span></th>
+                  <th v-if="colVisibleF('tool')" class="th-sortable" @click="sortFindings('tool')">Tool <span class="sort-icon">{{ sortIcon('findings', 'tool') }}</span></th>
+                  <th v-if="colVisibleF('target')" class="th-sortable" @click="sortFindings('target_name')">Target <span class="sort-icon">{{ sortIcon('findings', 'target_name') }}</span></th>
+                  <th v-if="colVisibleF('title')" class="th-sortable" @click="sortFindings('title')">Title <span class="sort-icon">{{ sortIcon('findings', 'title') }}</span></th>
+                  <th v-if="colVisibleF('cve')">CVE / ID</th>
+                  <th v-if="colVisibleF('file')">File</th>
+                  <th v-if="colVisibleF('status')" class="th-sortable" @click="sortFindings('mgmt_status')">Status <span class="sort-icon">{{ sortIcon('findings', 'mgmt_status') }}</span></th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -524,22 +531,22 @@
                   <td class="th-check" @click.stop>
                     <input type="checkbox" :value="finding.id" v-model="selectedFindings">
                   </td>
-                  <td @click="openFindingDetail(finding)">
+                  <td v-if="colVisibleF('severity')" @click="openFindingDetail(finding)">
                     <span class="severity-badge" :class="'sev-' + (finding.severity || 'unknown').toLowerCase()">{{ finding.severity }}</span>
                   </td>
-                  <td @click="openFindingDetail(finding)" class="cell-nowrap">{{ finding.tool }}</td>
-                  <td @click="openFindingDetail(finding)" class="cell-wrap">{{ finding.target_name }}</td>
-                  <td @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title">{{ finding.title }}</td>
-                  <td @click="openFindingDetail(finding)" class="cell-nowrap">
+                  <td v-if="colVisibleF('tool')" @click="openFindingDetail(finding)" class="cell-nowrap">{{ finding.tool }}</td>
+                  <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap">{{ finding.target_name }}</td>
+                  <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title">{{ finding.title }}</td>
+                  <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-nowrap">
                     <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" class="cve-link" @click.stop>{{ finding.cve }}</a>
                     <span v-else-if="finding.cve" class="text-muted" :title="finding.cve">{{ truncateCve(finding.cve) }}</span>
                     <span v-else class="text-muted">—</span>
                   </td>
-                  <td @click="openFindingDetail(finding)" class="cell-wrap">
+                  <td v-if="colVisibleF('file')" @click="openFindingDetail(finding)" class="cell-wrap">
                     <code v-if="finding.file" class="file-code">{{ finding.file }}</code>
                     <span v-else class="text-muted">—</span>
                   </td>
-                  <td @click="openFindingDetail(finding)">
+                  <td v-if="colVisibleF('status')" @click="openFindingDetail(finding)">
                     <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ finding.mgmt_status || 'new' }}</span>
                   </td>
                   <td @click.stop>

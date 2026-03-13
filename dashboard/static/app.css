@@ -617,7 +617,7 @@ html, body {
 .export-label { font-size: var(--font-sm); color: var(--color-text-secondary); font-weight: 600; }
 
 .btn-export {
-  padding: 5px var(--space-3);
+  padding: 6px var(--space-3);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -625,10 +625,15 @@ html, body {
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition);
-  color: var(--color-text-secondary);
-  line-height: 1.4;
+  color: var(--color-text);
+  line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
 }
 .btn-export:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
+.btn-export:active { transform: translateY(1px); }
 /* PDF + Analytics: accent teal/emerald per distinguerlo dai btn-primary indigo */
 .btn-export-primary {
   background: #0d9488;
@@ -822,39 +827,44 @@ tr:last-child td { border-bottom: none; }
 /* ── Buttons ──────────────────────────────────────────────── */
 
 .btn-primary {
-  padding: var(--space-2) var(--space-4);
+  padding: 6px var(--space-4);
   background: var(--color-primary);
   color: #fff;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  font-size: var(--font-base);
+  font-size: var(--font-sm);
   font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background var(--transition), box-shadow var(--transition);
+  transition: background var(--transition), box-shadow var(--transition), transform 80ms;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  line-height: 1.4;
+  gap: var(--space-2);
+  line-height: 1.5;
+  white-space: nowrap;
 }
-.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); box-shadow: 0 1px 4px rgba(79,70,229,0.25); }
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); box-shadow: 0 2px 6px rgba(79,70,229,0.3); }
+.btn-primary:active:not(:disabled) { transform: translateY(1px); }
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-secondary {
-  padding: var(--space-2) var(--space-4);
+  padding: 6px var(--space-4);
   background: var(--color-surface);
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  font-size: var(--font-base);
+  font-size: var(--font-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition);
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  line-height: 1.4;
+  gap: var(--space-2);
+  line-height: 1.5;
+  white-space: nowrap;
 }
 .btn-secondary:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
+.btn-secondary:active:not(:disabled) { transform: translateY(1px); }
 .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-danger {
@@ -870,8 +880,8 @@ tr:last-child td { border-bottom: none; }
 }
 .btn-danger:hover { background: var(--color-danger); color: #fff; }
 
-.btn-sm { padding: 5px var(--space-3); font-size: var(--font-sm); line-height: 1.4; min-height: 30px; }
-.filters-row > .btn-sm { align-self: flex-end; min-height: 34px; }
+.btn-sm { padding: 5px var(--space-3); font-size: var(--font-sm); line-height: 1.5; min-height: 30px; gap: var(--space-1); }
+.filters-row > .btn-sm { align-self: flex-end; min-height: 32px; }
 .btn-block { width: 100%; text-align: center; justify-content: center; }
 
 .btn-icon {
@@ -889,17 +899,21 @@ tr:last-child td { border-bottom: none; }
 .btn-icon:hover { background: var(--color-border); color: var(--color-text); }
 
 .btn-icon-sm {
-  background: none;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   cursor: pointer;
-  padding: 3px 6px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
   transition: all var(--transition);
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  line-height: 1.4;
 }
-.btn-icon-sm:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.btn-icon-sm:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
 
 /* ── Alert Banner ─────────────────────────────────────────── */
 
@@ -1932,4 +1946,40 @@ code {
 }
 .modal-body::-webkit-scrollbar {
   width: 0;
+}
+
+/* ── Resizable columns ────────────────────────────────────── */
+
+/* Table must be layout:fixed for resize to work */
+table.resizable-table {
+  table-layout: fixed;
+}
+
+/* The resize handle — thin vertical bar on the right edge of each th */
+th .resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 1;
+  border-right: 2px solid transparent;
+  transition: border-color var(--transition);
+}
+
+th .resize-handle:hover,
+th .resize-handle.resizing {
+  border-right-color: var(--color-primary);
+}
+
+/* th needs position:relative for the absolute handle */
+th { position: relative; }
+
+/* Prevent text selection while dragging */
+table.col-resizing,
+table.col-resizing * {
+  user-select: none;
+  cursor: col-resize !important;
 }

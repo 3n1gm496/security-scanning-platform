@@ -358,7 +358,18 @@ class ScansPaginator:
         Returns:
             Paginated scans
         """
-        allowed_sort_columns = {"id", "target_name", "target_type", "status", "policy_status", "findings_count", "critical_count", "high_count", "created_at", "finished_at"}
+        allowed_sort_columns = {
+            "id",
+            "target_name",
+            "target_type",
+            "status",
+            "policy_status",
+            "findings_count",
+            "critical_count",
+            "high_count",
+            "created_at",
+            "finished_at",
+        }
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "created_at"
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 

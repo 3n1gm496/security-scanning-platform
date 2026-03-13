@@ -47,11 +47,13 @@ services:
     environment:
       - JAVA_OPTS=-Xmx512m
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8090/JSON/core/view/version/ || exit 1"]
-      interval: 15s
+      # Pass the API key so ZAP does not log "API key incorrect" warnings.
+      # The ZAP_API_KEY variable is expanded by the shell inside the container.
+      test: ["CMD-SHELL", "curl -sf 'http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY:-zap-api-key}' || exit 1"]
+      interval: 20s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 15
+      start_period: 120s
     restart: unless-stopped
     volumes:
       - zap_data:/home/zap/.ZAP

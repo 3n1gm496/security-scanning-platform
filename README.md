@@ -144,7 +144,7 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 │   └── tests/               # 278 tests
 ├── orchestrator/
 │   ├── main.py              # Scan orchestration & scheduling
-│   ├── scanners.py          # Scanner wrappers (9 scanners)
+│   ├── scanners.py          # Scanner wrappers (10 scanners)
 │   ├── normalizers.py       # Result normalization
 │   ├── Dockerfile
 │   └── tests/               # 223 tests

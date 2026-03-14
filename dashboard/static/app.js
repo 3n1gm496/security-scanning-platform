@@ -261,6 +261,7 @@ createApp({
   },
 
    async mounted() {
+    this._remediationChartVersion = 0;
     this.debouncedLoadFindings = debounce(() => this.loadFindings(true), 400);
 
     // ── URL Routing: read initial page + filter params from URL hash
@@ -280,16 +281,17 @@ createApp({
     history.replaceState({ page: initialPage }, '', '#' + initialPage);
 
     // ── History API: back/forward button support
-    window.addEventListener('popstate', (e) => {
+    window.addEventListener('popstate', async (e) => {
       const page = (e.state && e.state.page) ? e.state.page : 'dashboard';
       if (validPages.includes(page)) {
         this.currentPage = page;
-        if (page === 'dashboard') this.initDashboardCharts();
-        else if (page === 'scans') this.loadScans(true);
-        else if (page === 'findings') this.loadFindings(true);
-        else if (page === 'analytics') this.loadAnalytics();
-        else if (page === 'settings') { this.settingsTab = 'apikeys'; this.loadApiKeys(); }
-        else if (page === 'compare') this.loadCompareScanList();
+        await nextTick();
+        if (page === 'dashboard') await this.initDashboardCharts();
+        else if (page === 'scans') await this.loadScans(true);
+        else if (page === 'findings') await this.loadFindings(true);
+        else if (page === 'analytics') await this.loadAnalytics();
+        else if (page === 'settings') { this.settingsTab = 'apikeys'; await this.loadApiKeys(); }
+        else if (page === 'compare') await this.loadCompareScanList();
       }
     });
 
@@ -503,7 +505,7 @@ createApp({
               this.showToast('Scan completed successfully');
             }
             try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
-            if (this.currentPage === 'dashboard') this.initDashboardCharts();
+            if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
           }
         } catch (e) {
           console.debug('[scanPolling] poll failed:', e.message);
@@ -537,7 +539,7 @@ createApp({
     buildRemediationChart() {
       const canvas = this.$refs.remediationChart;
       if (!canvas) return;
-      if (this.charts.remediation) this.charts.remediation.destroy();
+      if (this.charts.remediation) { this.charts.remediation.destroy(); this.charts.remediation = null; }
       const labels = STATUS_LABELS;
       const colors = STATUS_COLORS;
       this.charts.remediation = new Chart(canvas.getContext('2d'), {
@@ -566,11 +568,13 @@ createApp({
         },
       });
       // Load real data from the single status-counts endpoint
+      const chartId = ++this._remediationChartVersion;
       apiFetch('/api/findings/status-counts').then(statusMap => {
         const counts = STATUS_KEYS.map(s => statusMap[s] || 0);
         return counts;
       }).catch(() => STATUS_KEYS.map(() => 0)).then(counts => {
-        if (!this.charts.remediation) return;
+        // Discard stale response if chart was rebuilt or user navigated away
+        if (!this.charts.remediation || this._remediationChartVersion !== chartId) return;
         // Filter out categories with zero findings to reduce visual noise
         const nonZeroIdx = counts.map((c, i) => c > 0 ? i : -1).filter(i => i >= 0);
         if (nonZeroIdx.length > 0) {
@@ -588,7 +592,7 @@ createApp({
     async buildSeverityChart() {
       const canvas = this.$refs.severityChart;
       if (!canvas) return;
-      if (this.charts.severity) this.charts.severity.destroy();
+      if (this.charts.severity) { this.charts.severity.destroy(); this.charts.severity = null; }
       // Fetch fresh data from API so the chart is always up-to-date,
       // even if __INIT_DATA__ was empty at page load.
       let data = {};
@@ -667,7 +671,7 @@ createApp({
     buildToolChart() {
       const canvas = this.$refs.toolChart;
       if (!canvas) return;
-      if (this.charts.tool) this.charts.tool.destroy();
+      if (this.charts.tool) { this.charts.tool.destroy(); this.charts.tool = null; }
       const data = this.toolBreakdown;
       const labels = Object.keys(data).slice(0, 10);
       const values = Object.values(data).slice(0, 10);
@@ -688,7 +692,7 @@ createApp({
     buildTrendChart() {
       const canvas = this.$refs.trendChart;
       if (!canvas) return;
-      if (this.charts.trend) this.charts.trend.destroy();
+      if (this.charts.trend) { this.charts.trend.destroy(); this.charts.trend = null; }
 
       // Use recent scans data to build a stacked bar chart of severity counts.
       // This is far more useful than the old empty line chart: it shows exactly

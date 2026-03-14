@@ -60,8 +60,8 @@ services:
 
   orchestrator:
     build:
-      context: ./orchestrator
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: orchestrator/Dockerfile
     env_file:
       - .env
     environment:

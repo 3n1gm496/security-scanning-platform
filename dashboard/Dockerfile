@@ -69,12 +69,15 @@ COPY dashboard/ /app/
 # (root_dir = /app/.. = /, so orchestrator will be at /orchestrator)
 COPY orchestrator/ /orchestrator/
 
+# Copy shared common package (schema definitions shared with orchestrator)
+COPY common/ /common/
+
 # Copy default configuration
 COPY config/ /config/
 
 # ── Data directories ───────────────────────────────────────────────────────────
 RUN mkdir -p /data/workspaces /data/reports /data/cache \
-    && chown -R dashuser:dashuser /app /orchestrator /config /data
+    && chown -R dashuser:dashuser /app /orchestrator /common /config /data
 
 # Drop to non-root for runtime
 USER dashuser

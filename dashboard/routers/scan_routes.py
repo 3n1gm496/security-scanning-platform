@@ -228,7 +228,7 @@ def paginate_scans(
 
 @router.get("/scans/{scan_id}")
 def api_get_scan(
-    scan_id: int,
+    scan_id: str,
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Get a single scan by ID with its findings summary and per-tool execution results."""

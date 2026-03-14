@@ -315,15 +315,11 @@ createApp({
     // ── History API: back/forward button support
     window.addEventListener('popstate', async (e) => {
       const page = (e.state && e.state.page) ? e.state.page : 'dashboard';
-      if (validPages.includes(page)) {
-        this.currentPage = page;
-        await nextTick();
-        if (page === 'dashboard') await this.initDashboardCharts();
-        else if (page === 'scans') await this.loadScans(true);
-        else if (page === 'findings') await this.loadFindings(true);
-        else if (page === 'analytics') await this.loadAnalytics();
-        else if (page === 'settings') { this.settingsTab = 'apikeys'; await this.loadApiKeys(); }
-        else if (page === 'compare') await this.loadCompareScanList();
+      if (validPages.includes(page) && page !== this.currentPage) {
+        // Reuse navigate() so chart cleanup runs for the previous page.
+        // Temporarily set _refreshing so the same-page guard is bypassed.
+        this._refreshing = true;
+        try { await this.navigate(page); } finally { this._refreshing = false; }
       }
     });
 
@@ -644,6 +640,9 @@ createApp({
     buildRemediationChart() {
       const canvas = this.$refs.remediationChart;
       if (!canvas) return;
+      if (this.charts.remediation && this.charts.remediation.canvas !== canvas) {
+        this.charts.remediation.destroy(); this.charts.remediation = null;
+      }
       const labels = STATUS_LABELS;
       const colors = STATUS_COLORS;
       if (!this.charts.remediation) {
@@ -699,19 +698,23 @@ createApp({
     buildSeverityChart(data) {
       const canvas = this.$refs.severityChart;
       if (!canvas) return;
+      // If chart instance points to a canvas removed by v-if, discard it.
+      if (this.charts.severity && this.charts.severity.canvas !== canvas) {
+        this.charts.severity.destroy(); this.charts.severity = null;
+      }
       // Use provided data (pre-fetched by caller) or fall back to init data.
       if (!data || Object.keys(data).length === 0) data = this.severityBreakdown || {};
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
       if (this.charts.severity) {
-        // Update existing chart in-place — avoids canvas flicker during polling
         this.charts.severity.data.labels = labels;
         this.charts.severity.data.datasets[0].data = values;
         this.charts.severity.data.datasets[0].backgroundColor = colors;
-        this.charts.severity.update();
+        this.charts.severity.update('none');
         return;
       }
+      const legendColor = () => this.cssVar('--chart-legend') || '#374151';
       this.charts.severity = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -732,7 +735,23 @@ createApp({
             legend: {
               display: true,
               position: 'bottom',
-              labels: { boxWidth: 12, font: { size: 11 }, padding: 12, usePointStyle: false, color: this.cssVar('--chart-legend') },
+              labels: {
+                boxWidth: 12,
+                font: { size: 11 },
+                padding: 12,
+                usePointStyle: false,
+                color: this.cssVar('--chart-legend'),
+                generateLabels: (chart) => {
+                  return chart.data.labels.map((label, i) => ({
+                    text: `${label}  (${chart.data.datasets[0].data[i]})`,
+                    fillStyle: chart.data.datasets[0].backgroundColor[i],
+                    fontColor: legendColor(),
+                    lineWidth: 0,
+                    hidden: false,
+                    index: i,
+                  }));
+                },
+              },
             },
             tooltip: {
               callbacks: {
@@ -772,12 +791,10 @@ createApp({
     buildTrendChart() {
       const canvas = this.$refs.trendChart;
       if (!canvas) return;
+      if (this.charts.trend && this.charts.trend.canvas !== canvas) {
+        this.charts.trend.destroy(); this.charts.trend = null;
+      }
 
-      // Use recent scans data to build a stacked bar chart of severity counts.
-      // This is far more useful than the old empty line chart: it shows exactly
-      // how many critical/high/medium/low findings each scan produced.
-      // recentScans is already sorted DESC (newest first) — keep that order
-      // so the leftmost column corresponds to the most recent scan.
       const scans = (this.recentScans || []).slice(0, 12);
       if (scans.length === 0) return;
 
@@ -795,12 +812,11 @@ createApp({
       ];
 
       if (this.charts.trend) {
-        // Update existing chart in-place to avoid canvas flicker during polling
         this.charts.trend.data.labels = labels;
         dsData.forEach((d, i) => {
           if (this.charts.trend.data.datasets[i]) this.charts.trend.data.datasets[i].data = d;
         });
-        this.charts.trend.update();
+        this.charts.trend.update('none');
         return;
       }
 
@@ -1220,58 +1236,66 @@ createApp({
       this.analyticsRefreshing = true;
 
       this._analyticsRefreshPromise = (async () => {
-        const results = await Promise.allSettled([
-          apiFetch('/api/analytics/risk-distribution'),
-          apiFetch('/api/analytics/compliance'),
-          apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`),
-          apiFetch('/api/analytics/target-risk'),
-          apiFetch('/api/analytics/tool-effectiveness'),
-          apiFetch('/api/chart/severity-breakdown'),
-        ]);
+        // Ensure DOM is ready before any chart building
+        await nextTick();
+        await new Promise(resolve => requestAnimationFrame(resolve));
 
-        const [riskDistRes, complianceRes, trendsRes, targetRiskRes, toolEffRes, sevBreakdownRes] = results;
-        const getValue = (res, fallback) => (res.status === 'fulfilled' ? res.value : fallback);
+        const stale = () => refreshSeq !== this._analyticsRefreshSeq;
 
-        // If a newer refresh started while this one was in-flight, discard stale results.
-        if (refreshSeq !== this._analyticsRefreshSeq) return;
-
-        this.analyticsData = {
-          riskDistribution: getValue(riskDistRes, this.analyticsData.riskDistribution),
-          compliance: getValue(complianceRes, this.analyticsData.compliance),
-          trends: getValue(trendsRes, this.analyticsData.trends),
-          targetRisk: getValue(targetRiskRes, this.analyticsData.targetRisk),
-          toolEffectiveness: getValue(toolEffRes, this.analyticsData.toolEffectiveness),
+        // Helper: parse severity-breakdown response into { CRITICAL: N, ... }
+        const parseSev = (fresh) => {
+          const d = {};
+          if (fresh && Array.isArray(fresh.labels)) {
+            fresh.labels.forEach((k, i) => { d[k.toUpperCase()] = fresh.values[i]; });
+          } else if (fresh && typeof fresh === 'object') {
+            Object.assign(d, fresh);
+          }
+          return d;
         };
 
-        // Parse severity breakdown into a plain { CRITICAL: N, ... } map
+        // Fire all requests in parallel; build each chart as soon as its data
+        // arrives instead of waiting for the slowest endpoint.
         let sevData = {};
-        const freshSev = getValue(sevBreakdownRes, null);
-        if (freshSev) {
-          if (Array.isArray(freshSev.labels)) {
-            freshSev.labels.forEach((k, i) => { sevData[k.toUpperCase()] = freshSev.values[i]; });
-          } else if (typeof freshSev === 'object') {
-            Object.assign(sevData, freshSev);
-          }
-        }
+        const results = await Promise.allSettled([
+          apiFetch('/api/analytics/risk-distribution').then(d => {
+            if (stale()) return;
+            this.analyticsData.riskDistribution = d;
+            if (this.chartsAvailable) this.buildRiskChart();
+          }),
+          apiFetch('/api/analytics/compliance').then(d => {
+            if (stale()) return;
+            this.analyticsData.compliance = d;
+            if (this.chartsAvailable) this.buildOwaspChart();
+          }),
+          apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`).then(d => {
+            if (stale()) return;
+            this.analyticsData.trends = d;
+            if (this.chartsAvailable) this.buildAnalyticsTrendChart();
+          }),
+          apiFetch('/api/analytics/target-risk').then(d => {
+            if (stale()) return;
+            this.analyticsData.targetRisk = d;
+          }),
+          apiFetch('/api/analytics/tool-effectiveness').then(d => {
+            if (stale()) return;
+            this.analyticsData.toolEffectiveness = d;
+            if (this.chartsAvailable) this.buildToolEffChart();
+          }),
+          apiFetch('/api/chart/severity-breakdown').then(fresh => {
+            if (stale()) return;
+            sevData = parseSev(fresh);
+            if (this.chartsAvailable) this.buildSeverityDistChart(sevData);
+          }),
+        ]);
+
+        if (stale()) return;
 
         const failedCount = results.filter(r => r.status === 'rejected').length;
         if (failedCount > 0) {
           console.debug(`[analytics] ${failedCount} endpoint(s) failed during refresh`);
         }
 
-        if (this.chartsAvailable) {
-          // Wait for Vue to flush DOM updates, then wait for the browser to
-          // complete layout (rAF) so canvas elements have non-zero dimensions
-          // before Chart.js reads them (fixes charts disappearing on refresh).
-          await nextTick();
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          this.buildRiskChart();
-          this.buildOwaspChart();
-          this.buildAnalyticsTrendChart();
-          this.buildToolEffChart();
-          this.buildSeverityDistChart(sevData);
-          this.forceResizeCharts();
-        }
+        if (this.chartsAvailable) this.forceResizeCharts();
       })();
 
       try {
@@ -1286,6 +1310,9 @@ createApp({
     buildToolEffChart() {
       const canvas = this.$refs.toolEffChart;
       if (!canvas || !this.analyticsData.toolEffectiveness) return;
+      if (this.charts.toolEff && this.charts.toolEff.canvas !== canvas) {
+        this.charts.toolEff.destroy(); this.charts.toolEff = null;
+      }
       const tools = this.analyticsData.toolEffectiveness;
       const newLabels = tools.map(t => t.tool);
       const dsData = [
@@ -1300,7 +1327,7 @@ createApp({
         dsData.forEach((d, i) => {
           if (this.charts.toolEff.data.datasets[i]) this.charts.toolEff.data.datasets[i].data = d;
         });
-        this.charts.toolEff.update();
+        this.charts.toolEff.update('none');
         return;
       }
       this.charts.toolEff = new Chart(canvas.getContext('2d'), {
@@ -1348,19 +1375,21 @@ createApp({
     buildSeverityDistChart(data) {
       const canvas = this.$refs.severityDistChart;
       if (!canvas) return;
-      // Use provided data (pre-fetched in parallel by _refreshAnalyticsData) or fall back.
+      if (this.charts.severityDist && this.charts.severityDist.canvas !== canvas) {
+        this.charts.severityDist.destroy(); this.charts.severityDist = null;
+      }
       if (!data || Object.keys(data).length === 0) data = this.severityBreakdown || {};
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
       if (this.charts.severityDist) {
-        // Update existing chart in-place to avoid canvas flicker
         this.charts.severityDist.data.labels = labels;
         this.charts.severityDist.data.datasets[0].data = values;
         this.charts.severityDist.data.datasets[0].backgroundColor = colors;
-        this.charts.severityDist.update();
+        this.charts.severityDist.update('none');
         return;
       }
+      const legendColor = () => this.cssVar('--chart-legend') || '#374151';
       this.charts.severityDist = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
@@ -1377,7 +1406,23 @@ createApp({
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { boxWidth: 12, font: { size: 11 }, color: this.cssVar('--chart-legend'), padding: 12, usePointStyle: false },
+              labels: {
+                boxWidth: 12,
+                font: { size: 11 },
+                color: this.cssVar('--chart-legend'),
+                padding: 12,
+                usePointStyle: false,
+                generateLabels: (chart) => {
+                  return chart.data.labels.map((label, i) => ({
+                    text: `${label}  (${chart.data.datasets[0].data[i]})`,
+                    fillStyle: chart.data.datasets[0].backgroundColor[i],
+                    fontColor: legendColor(),
+                    lineWidth: 0,
+                    hidden: false,
+                    index: i,
+                  }));
+                },
+              },
             },
             tooltip: {
               callbacks: {
@@ -1392,6 +1437,9 @@ createApp({
     buildRiskChart() {
       const canvas = this.$refs.riskChart;
       if (!canvas || !this.analyticsData.riskDistribution) return;
+      if (this.charts.risk && this.charts.risk.canvas !== canvas) {
+        this.charts.risk.destroy(); this.charts.risk = null;
+      }
       const dist = this.analyticsData.riskDistribution.distribution;
       const RISK_LABEL_MAP = { '0-25': 'Low Risk (0-25)', '25-50': 'Medium Risk (25-50)', '50-75': 'High Risk (50-75)', '75-100': 'Critical Risk (75-100)' };
       const rawLabels = Object.keys(dist);
@@ -1400,7 +1448,7 @@ createApp({
       if (this.charts.risk) {
         this.charts.risk.data.labels = labels;
         this.charts.risk.data.datasets[0].data = values;
-        this.charts.risk.update();
+        this.charts.risk.update('none');
         return;
       }
       this.charts.risk = new Chart(canvas.getContext('2d'), {
@@ -1434,13 +1482,16 @@ createApp({
     buildOwaspChart() {
       const canvas = this.$refs.owaspChart;
       if (!canvas || !this.analyticsData.compliance) return;
+      if (this.charts.owasp && this.charts.owasp.canvas !== canvas) {
+        this.charts.owasp.destroy(); this.charts.owasp = null;
+      }
       const owasp = this.analyticsData.compliance.owasp_top_10.slice(0, 6);
       const labels = owasp.map(o => o.category.split(' - ')[0]);
       const values = owasp.map(o => o.count);
       if (this.charts.owasp) {
         this.charts.owasp.data.labels = labels;
         this.charts.owasp.data.datasets[0].data = values;
-        this.charts.owasp.update();
+        this.charts.owasp.update('none');
         return;
       }
       this.charts.owasp = new Chart(canvas.getContext('2d'), {
@@ -1463,6 +1514,9 @@ createApp({
     buildAnalyticsTrendChart() {
       const canvas = this.$refs.analyticsTrendChart;
       if (!canvas || !this.analyticsData.trends) return;
+      if (this.charts.analyticsTrend && this.charts.analyticsTrend.canvas !== canvas) {
+        this.charts.analyticsTrend.destroy(); this.charts.analyticsTrend = null;
+      }
       const trendData = this.analyticsData.trends.trend;
       const labels = trendData.map(t => t.date);
       const avgData = trendData.map(t => t.average_risk);
@@ -1471,7 +1525,7 @@ createApp({
         this.charts.analyticsTrend.data.labels = labels;
         this.charts.analyticsTrend.data.datasets[0].data = avgData;
         this.charts.analyticsTrend.data.datasets[1].data = maxData;
-        this.charts.analyticsTrend.update();
+        this.charts.analyticsTrend.update('none');
         return;
       }
       const gridColor = this.cssVar('--chart-grid');

@@ -8,16 +8,32 @@ from typing import Any
 from orchestrator.models import Finding, TargetSpec, utc_now_iso
 
 SEVERITY_MAP = {
+    # ── Standard levels ────────────────────────────────────────────────────
+    "CRITICAL": "CRITICAL",
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "LOW": "LOW",
+    "INFO": "INFO",
+    "UNKNOWN": "UNKNOWN",
+    # ── Semgrep ────────────────────────────────────────────────────────────
+    # Semgrep outputs ERROR / WARNING / INFO / NOTE
     "ERROR": "HIGH",
     "WARNING": "MEDIUM",
     "WARN": "MEDIUM",
-    "INFO": "INFO",
-    "LOW": "LOW",
-    "MEDIUM": "MEDIUM",
+    "NOTE": "INFO",  # semgrep informational rule
+    # ── Trivy / Grype ──────────────────────────────────────────────────────
+    # Both tools emit NEGLIGIBLE for very-low-risk findings
+    "NEGLIGIBLE": "INFO",
+    # ── Checkov ────────────────────────────────────────────────────────────
+    # Checkov uses NONE for checks without a severity classification
+    "NONE": "INFO",
+    # ── ZAP ────────────────────────────────────────────────────────────────
+    # ZAP "risk" field uses title-case and "Informational" for info-level alerts
+    "INFORMATIONAL": "INFO",
+    # ── Generic aliases ────────────────────────────────────────────────────
     "MODERATE": "MEDIUM",
-    "HIGH": "HIGH",
-    "CRITICAL": "CRITICAL",
-    "UNKNOWN": "UNKNOWN",
+    "MINOR": "LOW",
+    "MAJOR": "HIGH",
 }
 
 
@@ -44,7 +60,11 @@ def _rel_path(base_path: str | None, file_path: str | None) -> str | None:
 
 
 def normalize_semgrep(
-    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: dict[str, Any],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for item in raw.get("results", []):
@@ -75,7 +95,9 @@ def normalize_semgrep(
             cve=metadata.get("cwe") or metadata.get("owasp"),
             remediation=str(remediation) if remediation else None,
             raw_reference=raw_reference,
-            fingerprint=_fingerprint("semgrep", target.name, file_path, start.get("line"), item.get("check_id")),
+            fingerprint=_fingerprint(
+                "semgrep", target.name, file_path, start.get("line"), item.get("check_id")
+            ),
         )
         findings.append(finding)
     return findings
@@ -101,8 +123,13 @@ def normalize_trivy(
                 tool="trivy",
                 category=category or ("container" if target.type == "image" else "sca"),
                 severity=_severity(vuln.get("Severity"), "UNKNOWN"),
-                title=vuln.get("Title") or vuln.get("PkgName") or vuln.get("VulnerabilityID") or "Trivy vulnerability",
-                description=vuln.get("Description") or vuln.get("PrimaryURL") or "Vulnerability detected by Trivy",
+                title=vuln.get("Title")
+                or vuln.get("PkgName")
+                or vuln.get("VulnerabilityID")
+                or "Trivy vulnerability",
+                description=vuln.get("Description")
+                or vuln.get("PrimaryURL")
+                or "Vulnerability detected by Trivy",
                 file=_rel_path(base_path, result_target) if target.type != "image" else None,
                 line=None,
                 package=vuln.get("PkgName"),
@@ -138,7 +165,9 @@ def normalize_trivy(
                 cve=misconfig.get("ID"),
                 remediation=misconfig.get("Resolution"),
                 raw_reference=raw_reference,
-                fingerprint=_fingerprint("trivy-misconfig", target.name, result_target, misconfig.get("ID")),
+                fingerprint=_fingerprint(
+                    "trivy-misconfig", target.name, result_target, misconfig.get("ID")
+                ),
             )
             findings.append(finding)
         for secret in result.get("Secrets", []) or []:
@@ -160,7 +189,11 @@ def normalize_trivy(
                 remediation="Rotate the secret and remove it from source control.",
                 raw_reference=raw_reference,
                 fingerprint=_fingerprint(
-                    "trivy-secret", target.name, result_target, secret.get("RuleID"), secret.get("StartLine")
+                    "trivy-secret",
+                    target.name,
+                    result_target,
+                    secret.get("RuleID"),
+                    secret.get("StartLine"),
                 ),
             )
             findings.append(finding)
@@ -168,7 +201,11 @@ def normalize_trivy(
 
 
 def normalize_gitleaks(
-    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: list[dict[str, Any]],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for item in raw:
@@ -192,7 +229,9 @@ def normalize_gitleaks(
             remediation="Rotate the secret, remove it from source control, and add an ignore only if justified.",
             raw_reference=raw_reference,
             fingerprint=item.get("Fingerprint")
-            or _fingerprint("gitleaks", target.name, file_path, item.get("StartLine"), item.get("RuleID")),
+            or _fingerprint(
+                "gitleaks", target.name, file_path, item.get("StartLine"), item.get("RuleID")
+            ),
         )
         findings.append(finding)
     return findings
@@ -227,7 +266,10 @@ def normalize_checkov(
             line = line_ranges[0] if line_ranges else None
             severity = _severity(item.get("severity"), "MEDIUM")
             description = (
-                item.get("guideline") or item.get("check_name") or item.get("check_id") or "IaC misconfiguration"
+                item.get("guideline")
+                or item.get("check_name")
+                or item.get("check_id")
+                or "IaC misconfiguration"
             )
 
             remediation = item.get("guideline")
@@ -251,7 +293,9 @@ def normalize_checkov(
                 cve=item.get("check_id"),
                 remediation=str(remediation) if remediation else None,
                 raw_reference=raw_reference,
-                fingerprint=_fingerprint("checkov", target.name, item.get("file_path"), line, item.get("check_id")),
+                fingerprint=_fingerprint(
+                    "checkov", target.name, item.get("file_path"), line, item.get("check_id")
+                ),
             )
             findings.append(finding)
 
@@ -259,7 +303,11 @@ def normalize_checkov(
 
 
 def normalize_bandit(
-    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: dict[str, Any],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for issue in raw.get("results", []):
@@ -283,7 +331,9 @@ def normalize_bandit(
             cve=None,
             remediation=issue.get("more_info"),
             raw_reference=raw_reference,
-            fingerprint=_fingerprint("bandit", target.name, filename, issue.get("line_number"), issue.get("test_name")),
+            fingerprint=_fingerprint(
+                "bandit", target.name, filename, issue.get("line_number"), issue.get("test_name")
+            ),
         )
         findings.append(finding)
     return findings
@@ -322,7 +372,11 @@ def _nuclei_category(info: dict[str, Any]) -> str:
 
 
 def normalize_nuclei(
-    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: list[dict[str, Any]],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     # nuclei outputs list of JSON objects; parser may load lines into list
@@ -334,11 +388,18 @@ def normalize_nuclei(
         # template (e.g. each missing security header has a different matcher-name).
         # Include it in the title so findings are distinguishable in the UI.
         matcher_name = item.get("matcher-name") or ""
-        base_title = info.get("name") or item.get("templateId") or item.get("template-id") or "Nuclei finding"
+        base_title = (
+            info.get("name")
+            or item.get("templateId")
+            or item.get("template-id")
+            or "Nuclei finding"
+        )
         title = f"{base_title}: {matcher_name}" if matcher_name else base_title
 
         # "matched-at" provides the URL/location that matched; use as file fallback
-        matched_file = item.get("matched", {}).get("file") or item.get("matched-at") or item.get("host")
+        matched_file = (
+            item.get("matched", {}).get("file") or item.get("matched-at") or item.get("host")
+        )
 
         finding = Finding(
             scan_id=scan_id,
@@ -371,7 +432,11 @@ def normalize_nuclei(
 
 
 def normalize_grype(
-    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: dict[str, Any],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for match in raw.get("matches", []) or []:
@@ -404,7 +469,11 @@ def normalize_grype(
 
 
 def normalize_zap(
-    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: list[dict[str, Any]],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     # ZAP REST API returns a list of alert dicts.  The key fields are:
@@ -435,7 +504,9 @@ def normalize_zap(
             cve=cwe_str,
             remediation=item.get("solution"),
             raw_reference=raw_reference,
-            fingerprint=_fingerprint("zap", target.name, item.get("alert"), item.get("url"), item.get("pluginId")),
+            fingerprint=_fingerprint(
+                "zap", target.name, item.get("alert"), item.get("url"), item.get("pluginId")
+            ),
         )
         findings.append(finding)
     return findings

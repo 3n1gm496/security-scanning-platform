@@ -35,7 +35,7 @@ def stub_db(monkeypatch):
         monkeypatch.setattr(module, "tool_breakdown", lambda path: {})
         monkeypatch.setattr(module, "target_breakdown", lambda path: {})
         monkeypatch.setattr(module, "scans_trend", lambda path, days: [])
-        monkeypatch.setattr(module, "recent_failed_scans", lambda path, n: [])
+        monkeypatch.setattr(module, "list_scans", lambda path, limit=12: [])
         monkeypatch.setattr(module, "distinct_targets", lambda path: [])
         monkeypatch.setattr(module, "distinct_tools", lambda path: [])
 

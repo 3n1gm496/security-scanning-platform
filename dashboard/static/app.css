@@ -558,6 +558,13 @@ html, body {
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--color-border-light);
 }
+.chart-hint {
+  text-align: center;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  padding: 0 var(--space-5) var(--space-3);
+  margin: 0;
+}
 
 /* ── Card ─────────────────────────────────────────────────── */
 
@@ -1329,6 +1336,11 @@ tr:last-child td { border-bottom: none; }
 .mini-bar-wrap { height: 6px; background: var(--color-border); border-radius: var(--radius-full); overflow: hidden; }
 .mini-bar { height: 100%; background: var(--color-primary); border-radius: var(--radius-full); }
 .mini-bar-cwe { background: var(--color-info); }
+
+/* OWASP table — wider first column to avoid text truncation */
+.owasp-table { table-layout: fixed; width: 100%; }
+.owasp-category-col { width: 55%; }
+.owasp-category-cell { white-space: normal; word-break: break-word; line-height: 1.4; }
 
 /* ── Settings ─────────────────────────────────────────────── */
 

@@ -816,16 +816,20 @@ createApp({
           },
           scales: {
             x: {
-              stacked: true,
+              stacked: false,
               grid: { display: false },
-              ticks: { font: { size: 11 }, maxRotation: 45 },
+              ticks: { font: { size: 11 }, maxRotation: 45, color: this.cssVar('--chart-tick') },
             },
             y: {
-              stacked: true,
-              beginAtZero: true,
+              stacked: false,
+              type: 'logarithmic',
               grid: { color: this.cssVar('--chart-grid') },
-              ticks: { precision: 0, font: { size: 11 } },
-              title: { display: true, text: 'Findings', font: { size: 10 } },
+              ticks: {
+                font: { size: 11 },
+                color: this.cssVar('--chart-tick'),
+                callback: (val) => [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].includes(val) ? val : null,
+              },
+              title: { display: true, text: 'Findings (log scale)', font: { size: 10 }, color: this.cssVar('--chart-tick') },
             },
           },
         },
@@ -1265,10 +1269,29 @@ createApp({
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: this.cssVar('--chart-legend') } },
+            tooltip: {
+              callbacks: {
+                footer: (items) => {
+                  const total = items.reduce((sum, i) => sum + (i.raw || 0), 0);
+                  return 'Total: ' + total;
+                },
+              },
+            },
+          },
           scales: {
-            x: { stacked: true, grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },
-            y: { stacked: true, beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { color: this.cssVar('--chart-tick') } },
+            x: { stacked: false, grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },
+            y: {
+              stacked: false,
+              type: 'logarithmic',
+              grid: { color: this.cssVar('--chart-grid') },
+              ticks: {
+                color: this.cssVar('--chart-tick'),
+                callback: (val) => [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].includes(val) ? val : null,
+              },
+              title: { display: true, text: 'Findings (log scale)', font: { size: 10 }, color: this.cssVar('--chart-tick') },
+            },
           },
         },
       });

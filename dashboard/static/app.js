@@ -155,6 +155,7 @@ createApp({
       scansSort: { by: 'created_at', order: 'DESC' },
       scansFilter: { search: '', target: '', status: '', policy: '' },
       scansPerPage: 20,
+      filteredScansTargets: null,
 
       // ── Findings page
       findings: [],
@@ -174,6 +175,8 @@ createApp({
         { key: 'file', label: 'File', visible: true },
         { key: 'status', label: 'Status', visible: true },
       ],
+      filteredFindingsTargets: null,
+      filteredFindingsTools: null,
       selectedFindings: [],
       bulkStatus: '',
 
@@ -417,6 +420,7 @@ createApp({
     // ── Chart theme helpers ────────────────────────────────────────────────────
 
     applyChartDefaults() {
+      if (!this.chartsAvailable) return;
       const s = getComputedStyle(document.documentElement);
       Chart.defaults.color = s.getPropertyValue('--chart-tick').trim() || '#6b7280';
       Chart.defaults.borderColor = s.getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,0.06)';
@@ -852,12 +856,12 @@ createApp({
       // This makes the dropdowns context-aware
       if (this.scansFilter.search) {
         const searchLower = this.scansFilter.search.toLowerCase();
-        this._filteredScansTargets = this.availableTargets.filter(
+        this.filteredScansTargets = this.availableTargets.filter(
           t => t.toLowerCase().includes(searchLower) ||
                this.scans.some(s => s.target_name === t)
         );
       } else {
-        this._filteredScansTargets = null; // null = show all
+        this.filteredScansTargets = null; // null = show all
       }
     },
 
@@ -893,7 +897,7 @@ createApp({
 
     resetScansFilter() {
       this.scansFilter = { search: '', target: '', status: '', policy: '' };
-      this._filteredScansTargets = null;
+      this.filteredScansTargets = null;
       this.loadScans(true);
     },
 
@@ -981,8 +985,8 @@ createApp({
 
     resetFindingsFilter() {
       this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '', scan_id: '' };
-      this._filteredFindingsTargets = null;
-      this._filteredFindingsTools = null;
+      this.filteredFindingsTargets = null;
+      this.filteredFindingsTools = null;
       this.loadFindings(true);
     },
 
@@ -990,17 +994,17 @@ createApp({
     _updateFindingsFilterOptions() {
       if (this.findingsFilter.search) {
         const searchLower = this.findingsFilter.search.toLowerCase();
-        this._filteredFindingsTargets = this.availableTargets.filter(
+        this.filteredFindingsTargets = this.availableTargets.filter(
           t => t.toLowerCase().includes(searchLower) ||
                this.findings.some(f => f.target_name === t)
         );
-        this._filteredFindingsTools = this.availableTools.filter(
+        this.filteredFindingsTools = this.availableTools.filter(
           t => t.toLowerCase().includes(searchLower) ||
                this.findings.some(f => f.tool === t)
         );
       } else {
-        this._filteredFindingsTargets = null;
-        this._filteredFindingsTools = null;
+        this.filteredFindingsTargets = null;
+        this.filteredFindingsTools = null;
       }
     },
 

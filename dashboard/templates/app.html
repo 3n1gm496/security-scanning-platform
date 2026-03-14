@@ -216,7 +216,7 @@
         </div>
 
         <!-- Chart.js CDN failure notice -->
-        <div v-if="!chartsAvailable" class="card" class="chart-unavailable">
+        <div v-if="!chartsAvailable" class="card chart-unavailable">
           <span class="u-text-lg">⚠️</span>
           <span>Charts unavailable — Chart.js could not be loaded from CDN. Check your network connection or CSP policy. Data tables remain accessible on this page.</span>
         </div>
@@ -301,7 +301,7 @@
               <label class="filter-label" for="scans-filter-target">Target</label>
               <select id="scans-filter-target" name="scans_target" v-model="scansFilter.target" @change="loadScans(true)" class="filter-select">
                 <option value="">All</option>
-                <option v-for="t in (_filteredScansTargets || availableTargets)" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in (filteredScansTargets || availableTargets)" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
@@ -444,14 +444,14 @@
               <label class="filter-label" for="findings-filter-tool">Tool</label>
               <select id="findings-filter-tool" name="findings_tool" v-model="findingsFilter.tool" @change="loadFindings(true)" class="filter-select">
                 <option value="">All</option>
-                <option v-for="t in (_filteredFindingsTools || availableTools)" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in (filteredFindingsTools || availableTools)" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
               <label class="filter-label" for="findings-filter-target">Target</label>
               <select id="findings-filter-target" name="findings_target" v-model="findingsFilter.target" @change="loadFindings(true)" class="filter-select">
                 <option value="">All</option>
-                <option v-for="t in (_filteredFindingsTargets || availableTargets)" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in (filteredFindingsTargets || availableTargets)" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
@@ -588,7 +588,7 @@
       ================================================================ -->
       <div v-if="currentPage === 'analytics'" class="page-content">
         <!-- Chart.js CDN failure notice -->
-        <div v-if="!chartsAvailable" class="card" class="chart-unavailable u-mb-16">
+        <div v-if="!chartsAvailable" class="card chart-unavailable u-mb-16">
           <span class="u-text-lg">⚠️</span>
           <span>Charts unavailable — Chart.js could not be loaded from CDN. Tabular data below is still accessible.</span>
         </div>
@@ -716,7 +716,7 @@
               </select>
             </div>
             <button class="btn-primary" @click="runCompare" :disabled="!compareIdA || !compareIdB || compareIdA === compareIdB || compareLoading">
-              <span v-if="compareLoading"><div class="spinner-sm" class="u-inline-block u-mr-6"></div>Analyzing...</span>
+              <span v-if="compareLoading"><div class="spinner-sm u-inline-block u-mr-6"></div>Analyzing...</span>
               <span v-else>Compare</span>
             </button>
           </div>
@@ -843,7 +843,7 @@
                 <tr v-for="wh in webhooks" :key="wh.id">
                   <td>{{ wh.name }}</td>
                   <td class="cell-wrap"><code class="file-code">{{ wh.url }}</code></td>
-                  <td><span class="badge badge-neutral" v-for="ev in (wh.events || '').split(',')" :key="ev" class="u-mr-4">{{ ev.trim() }}</span></td>
+                  <td><span class="badge badge-neutral u-mr-4" v-for="ev in (wh.events || '').split(',')" :key="ev">{{ ev.trim() }}</span></td>
                   <td>
                     <label class="toggle-switch">
                       <input type="checkbox" :checked="wh.is_active" @change="toggleWebhook(wh.id, $event.target.checked)">
@@ -1221,7 +1221,7 @@
           <div class="modal-actions">
             <button class="btn-secondary" @click="showScanModal = false">Cancel</button>
             <button class="btn-primary" @click="triggerScan" :disabled="!newScanForm.name || !newScanForm.target || scanTriggering">
-              <span v-if="scanTriggering"><div class="spinner-sm" class="u-inline-block u-mr-6"></div>Starting...</span>
+              <span v-if="scanTriggering"><div class="spinner-sm u-inline-block u-mr-6"></div>Starting...</span>
               <span v-else>Start scan</span>
             </button>
           </div>

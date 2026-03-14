@@ -71,4 +71,14 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 # ---------------------------------------------------------------------------
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "baseline marker", ""),
+    (
+        2,
+        "add composite indexes for analytics query performance",
+        """
+CREATE INDEX IF NOT EXISTS idx_findings_severity_tool
+    ON findings(severity, tool);
+CREATE INDEX IF NOT EXISTS idx_findings_target_severity
+    ON findings(target_name, severity);
+""",
+    ),
 ]

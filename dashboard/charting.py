@@ -139,6 +139,10 @@ class ChartingEngine:
         """Get risk scores by target (for heatmap).
 
         Returns data for heatmap visualization.
+
+        Risk score formula mirrors analytics.SEVERITY_WEIGHTS (scale 0-100):
+          CRITICAL=100, HIGH=75, MEDIUM=50, LOW=25, INFO=10
+        The per-target score is the average across all findings, capped at 100.
         """
         query = """
             SELECT
@@ -146,11 +150,21 @@ class ChartingEngine:
                 COUNT(CASE WHEN f.severity = 'CRITICAL' THEN 1 END) as critical_count,
                 COUNT(CASE WHEN f.severity = 'HIGH' THEN 1 END) as high_count,
                 COUNT(CASE WHEN f.severity = 'MEDIUM' THEN 1 END) as medium_count,
+                COUNT(CASE WHEN f.severity = 'LOW' THEN 1 END) as low_count,
+                COUNT(CASE WHEN f.severity = 'INFO' THEN 1 END) as info_count,
                 COUNT(f.id) as total_findings,
                 ROUND(
-                    COUNT(CASE WHEN f.severity = 'CRITICAL' THEN 1 END) * 4 +
-                    COUNT(CASE WHEN f.severity = 'HIGH' THEN 1 END) * 2 +
-                    COUNT(CASE WHEN f.severity = 'MEDIUM' THEN 1 END) * 1,
+                    CASE WHEN COUNT(f.id) = 0 THEN 0
+                    ELSE MIN(
+                        (
+                            COUNT(CASE WHEN f.severity = 'CRITICAL' THEN 1 END) * 100.0 +
+                            COUNT(CASE WHEN f.severity = 'HIGH' THEN 1 END) * 75.0 +
+                            COUNT(CASE WHEN f.severity = 'MEDIUM' THEN 1 END) * 50.0 +
+                            COUNT(CASE WHEN f.severity = 'LOW' THEN 1 END) * 25.0 +
+                            COUNT(CASE WHEN f.severity = 'INFO' THEN 1 END) * 10.0
+                        ) / NULLIF(COUNT(f.id), 0),
+                        100.0
+                    ) END,
                     2
                 ) as risk_score
             FROM scans s
@@ -174,6 +188,8 @@ class ChartingEngine:
                     "critical": row["critical_count"],
                     "high": row["high_count"],
                     "medium": row["medium_count"],
+                    "low": row["low_count"],
+                    "info": row["info_count"],
                     "total": row["total_findings"],
                 }
             )

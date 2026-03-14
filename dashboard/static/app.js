@@ -1223,7 +1223,11 @@ createApp({
         }
 
         if (this.chartsAvailable) {
+          // Wait for Vue to flush DOM updates, then wait for the browser to
+          // complete layout (rAF) so canvas elements have non-zero dimensions
+          // before Chart.js reads them (fixes charts disappearing on refresh).
           await nextTick();
+          await new Promise(resolve => requestAnimationFrame(resolve));
           this.buildRiskChart();
           this.buildOwaspChart();
           this.buildAnalyticsTrendChart();

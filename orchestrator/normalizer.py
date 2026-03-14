@@ -8,16 +8,32 @@ from typing import Any
 from orchestrator.models import Finding, TargetSpec, utc_now_iso
 
 SEVERITY_MAP = {
+    # ── Standard levels ────────────────────────────────────────────────────
+    "CRITICAL": "CRITICAL",
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "LOW": "LOW",
+    "INFO": "INFO",
+    "UNKNOWN": "UNKNOWN",
+    # ── Semgrep ────────────────────────────────────────────────────────────
+    # Semgrep outputs ERROR / WARNING / INFO / NOTE
     "ERROR": "HIGH",
     "WARNING": "MEDIUM",
     "WARN": "MEDIUM",
-    "INFO": "INFO",
-    "LOW": "LOW",
-    "MEDIUM": "MEDIUM",
+    "NOTE": "INFO",  # semgrep informational rule
+    # ── Trivy / Grype ──────────────────────────────────────────────────────
+    # Both tools emit NEGLIGIBLE for very-low-risk findings
+    "NEGLIGIBLE": "INFO",
+    # ── Checkov ────────────────────────────────────────────────────────────
+    # Checkov uses NONE for checks without a severity classification
+    "NONE": "INFO",
+    # ── ZAP ────────────────────────────────────────────────────────────────
+    # ZAP "risk" field uses title-case and "Informational" for info-level alerts
+    "INFORMATIONAL": "INFO",
+    # ── Generic aliases ────────────────────────────────────────────────────
     "MODERATE": "MEDIUM",
-    "HIGH": "HIGH",
-    "CRITICAL": "CRITICAL",
-    "UNKNOWN": "UNKNOWN",
+    "MINOR": "LOW",
+    "MAJOR": "HIGH",
 }
 
 
@@ -44,7 +60,11 @@ def _rel_path(base_path: str | None, file_path: str | None) -> str | None:
 
 
 def normalize_semgrep(
-    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: dict[str, Any],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for item in raw.get("results", []):
@@ -160,7 +180,11 @@ def normalize_trivy(
                 remediation="Rotate the secret and remove it from source control.",
                 raw_reference=raw_reference,
                 fingerprint=_fingerprint(
-                    "trivy-secret", target.name, result_target, secret.get("RuleID"), secret.get("StartLine")
+                    "trivy-secret",
+                    target.name,
+                    result_target,
+                    secret.get("RuleID"),
+                    secret.get("StartLine"),
                 ),
             )
             findings.append(finding)
@@ -168,7 +192,11 @@ def normalize_trivy(
 
 
 def normalize_gitleaks(
-    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: list[dict[str, Any]],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for item in raw:
@@ -259,7 +287,11 @@ def normalize_checkov(
 
 
 def normalize_bandit(
-    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: dict[str, Any],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for issue in raw.get("results", []):
@@ -322,7 +354,11 @@ def _nuclei_category(info: dict[str, Any]) -> str:
 
 
 def normalize_nuclei(
-    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: list[dict[str, Any]],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     # nuclei outputs list of JSON objects; parser may load lines into list
@@ -371,7 +407,11 @@ def normalize_nuclei(
 
 
 def normalize_grype(
-    scan_id: str, target: TargetSpec, raw: dict[str, Any], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: dict[str, Any],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for match in raw.get("matches", []) or []:
@@ -404,7 +444,11 @@ def normalize_grype(
 
 
 def normalize_zap(
-    scan_id: str, target: TargetSpec, raw: list[dict[str, Any]], raw_reference: str, base_path: str | None = None
+    scan_id: str,
+    target: TargetSpec,
+    raw: list[dict[str, Any]],
+    raw_reference: str,
+    base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     # ZAP REST API returns a list of alert dicts.  The key fields are:

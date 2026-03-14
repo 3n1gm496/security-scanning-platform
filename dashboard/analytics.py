@@ -350,12 +350,11 @@ def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
         risk_scores = [calculate_risk_score(f) for f in finds]
         high_risk_findings = sum(1 for score in risk_scores if score >= 50)
 
-        severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+        severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
         for f in finds:
             sev = f.get("severity", "").upper()
             if sev in severity_counts:
                 severity_counts[sev] += 1
-
         tool_metrics.append(
             {
                 "tool": tool,
@@ -366,9 +365,9 @@ def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
                 "high_count": severity_counts["HIGH"],
                 "medium_count": severity_counts["MEDIUM"],
                 "low_count": severity_counts["LOW"],
+                "info_count": severity_counts["INFO"],
             }
         )
-
     # Sort by high risk findings
     tool_metrics.sort(key=lambda x: x["high_risk_findings"], reverse=True)
     return tool_metrics

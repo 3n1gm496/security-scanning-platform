@@ -293,11 +293,15 @@
         <!-- Filters -->
         <div class="card filters-card">
           <div class="filters-row">
+            <div class="filter-group filter-search">
+              <label class="filter-label" for="scans-filter-search">Search</label>
+              <input id="scans-filter-search" name="scans_search" type="text" v-model="scansFilter.search" @input="debouncedLoadScans" placeholder="Target, scan ID..." class="filter-input">
+            </div>
             <div class="filter-group">
               <label class="filter-label" for="scans-filter-target">Target</label>
               <select id="scans-filter-target" name="scans_target" v-model="scansFilter.target" @change="loadScans(true)" class="filter-select">
                 <option value="">All</option>
-                <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in (_filteredScansTargets || availableTargets)" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
@@ -402,7 +406,13 @@
           <!-- Pagination -->
           <div class="pagination-bar">
             <button class="btn-secondary btn-sm" @click="prevScansPage" :disabled="scansPage <= 1">&#x2190; Previous</button>
-            <span class="page-info">Page {{ scansPage }}</span>
+            <span class="page-info">Page {{ scansPage }} &bull; {{ scans.length }} of {{ scansTotal }} results</span>
+            <select id="scans-per-page" name="scans_per_page" v-model.number="scansPerPage" @change="loadScans(true)" class="filter-select filter-select-sm per-page-select" title="Results per page">
+              <option :value="10">10 / page</option>
+              <option :value="20">20 / page</option>
+              <option :value="50">50 / page</option>
+              <option :value="100">100 / page</option>
+            </select>
             <button class="btn-secondary btn-sm" @click="nextScansPage" :disabled="!scansCursor">Next &#x2192;</button>
           </div>
         </div>
@@ -434,14 +444,14 @@
               <label class="filter-label" for="findings-filter-tool">Tool</label>
               <select id="findings-filter-tool" name="findings_tool" v-model="findingsFilter.tool" @change="loadFindings(true)" class="filter-select">
                 <option value="">All</option>
-                <option v-for="t in availableTools" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in (_filteredFindingsTools || availableTools)" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
               <label class="filter-label" for="findings-filter-target">Target</label>
               <select id="findings-filter-target" name="findings_target" v-model="findingsFilter.target" @change="loadFindings(true)" class="filter-select">
                 <option value="">All</option>
-                <option v-for="t in availableTargets" :key="t" :value="t">{{ t }}</option>
+                <option v-for="t in (_filteredFindingsTargets || availableTargets)" :key="t" :value="t">{{ t }}</option>
               </select>
             </div>
             <div class="filter-group">
@@ -589,8 +599,9 @@
             <div class="chart-container"><canvas ref="riskChart"></canvas></div>
             <div class="chart-stat" v-if="analyticsData.riskDistribution">
               Avg Risk: <strong>{{ analyticsData.riskDistribution.average_risk }}/100</strong>
-              &bull; High Risk: <strong>{{ analyticsData.riskDistribution.high_risk_count }}</strong>
+              &bull; High Risk Findings: <strong>{{ analyticsData.riskDistribution.high_risk_count }}</strong>
             </div>
+            <p class="chart-hint">Risk scores are computed per-finding (0-100) based on severity, exploitability, and context.</p>
           </div>
           <div class="card chart-card">
             <div class="card-header"><h2>OWASP Top 10 Compliance</h2></div>
@@ -638,11 +649,11 @@
           <div class="card">
             <div class="card-header"><h2>OWASP Top 10 2021 Mapping</h2></div>
             <div class="table-wrap" v-if="analyticsData.compliance">
-              <table>
-                <thead><tr><th>Category</th><th>Findings</th><th>Distribution</th></tr></thead>
+              <table class="owasp-table">
+                <thead><tr><th class="owasp-category-col">Category</th><th>Findings</th><th>Distribution</th></tr></thead>
                 <tbody>
                   <tr v-for="item in analyticsData.compliance.owasp_top_10" :key="item.category">
-                    <td class="cell-wrap">{{ item.category }}</td>
+                    <td class="owasp-category-cell" :title="item.category">{{ item.category }}</td>
                     <td><strong>{{ item.count }}</strong></td>
                     <td>
                       <div class="mini-bar-wrap">

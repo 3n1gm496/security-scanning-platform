@@ -27,7 +27,7 @@ from db import (
     distinct_targets,
     distinct_tools,
     fetch_kpis,
-    recent_failed_scans,
+    list_scans,
     scans_trend,
     severity_breakdown,
     target_breakdown,
@@ -285,7 +285,7 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
         "tool_breakdown": tool_breakdown(DB_PATH),
         "target_breakdown": target_breakdown(DB_PATH),
         "trend": scans_trend(DB_PATH, 14),
-        "recent_scans": recent_failed_scans(DB_PATH, 10),
+        "recent_scans": list_scans(DB_PATH, limit=12),
         "available_targets": distinct_targets(DB_PATH),
         "available_tools": distinct_tools(DB_PATH),
     }

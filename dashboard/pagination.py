@@ -163,6 +163,7 @@ class FindingsPaginator:
         tool_filter: list[str] | None = None,
         scan_id: str | None = None,
         status_filter: str | None = None,
+        target_filter: str | None = None,
         cursor: str | None = None,
         sort_by: str = "id",
         sort_order: str = "ASC",
@@ -176,6 +177,7 @@ class FindingsPaginator:
             tool_filter: List of tools to include
             scan_id: Optional scan ID filter
             status_filter: Filter by triage status via finding_states JOIN
+            target_filter: Filter by target name (partial match)
             cursor: Pagination cursor
             sort_by: Column to sort by
             sort_order: ASC or DESC
@@ -183,7 +185,7 @@ class FindingsPaginator:
         Returns:
             Paginated findings with cursor
         """
-        allowed_sort_columns = {"id", "scan_id", "severity", "tool", "timestamp", "line"}
+        allowed_sort_columns = {"id", "scan_id", "severity", "tool", "timestamp", "line", "target_name", "title"}
         # Map legacy column aliases to actual schema column names
         _col_alias = {"created_at": "timestamp", "line_number": "line", "file_path": "file", "cve_id": "cve"}
         sort_by = _col_alias.get(sort_by, sort_by)
@@ -215,6 +217,11 @@ class FindingsPaginator:
         if scan_id is not None:
             where_clauses.append("scan_id = ?")
             params.append(scan_id)
+
+        # Target filter
+        if target_filter:
+            where_clauses.append("target_name LIKE ?")
+            params.append(f"%{target_filter}%")
 
         # Status filter: requires LEFT JOIN with finding_states
         use_status_join = status_filter is not None
@@ -268,6 +275,8 @@ class FindingsPaginator:
             count_params.extend(tool_filter)
         if scan_id is not None:
             count_params.append(scan_id)
+        if target_filter:
+            count_params.append(f"%{target_filter}%")
         if use_status_join:
             count_params.append(status_filter)
         # Rebuild WHERE without cursor clause
@@ -337,6 +346,7 @@ class ScansPaginator:
     def paginate(
         self,
         conn: Any,
+        search: str = "",
         target_filter: str = "",
         status_filter: str = "",
         policy_filter: str = "",
@@ -348,6 +358,7 @@ class ScansPaginator:
 
         Args:
             conn: Database connection
+            search: Full-text search across target_name, id, error_message
             target_filter: Filter by target name (partial match)
             status_filter: Filter by status (exact match)
             policy_filter: Filter by policy_status (exact match)
@@ -375,6 +386,13 @@ class ScansPaginator:
 
         where_clauses = ["1=1"]
         params: list[Any] = []
+
+        if search:
+            search_param = f"%{search}%"
+            where_clauses.append(
+                "(CAST(id AS TEXT) LIKE ? OR target_name LIKE ? OR error_message LIKE ?)"
+            )
+            params.extend([search_param] * 3)
 
         if target_filter:
             where_clauses.append("target_name LIKE ?")
@@ -407,6 +425,23 @@ class ScansPaginator:
             """
         params.append(self.per_page + 1)
 
+        # Total count query (same filters, no cursor/LIMIT)
+        count_clauses = list(where_clauses)
+        count_params: list[Any] = []
+        if search:
+            count_params.extend([f"%{search}%"] * 3)
+        if target_filter:
+            count_params.append(f"%{target_filter}%")
+        if status_filter:
+            count_params.append(status_filter)
+        if policy_filter:
+            count_params.append(policy_filter.upper())
+        if cursor:
+            count_clauses = count_clauses[:-1]
+        count_where = " AND ".join(count_clauses)
+        count_query = f"SELECT COUNT(*) AS total FROM scans WHERE {count_where}"
+        total_count = conn.execute(count_query, count_params).fetchone()["total"]
+
         rows = conn.execute(query, params).fetchall()
         items = [dict(row) for row in rows]
 
@@ -422,6 +457,7 @@ class ScansPaginator:
             "items": items,
             "pagination": {
                 "count": len(items),
+                "total_count": total_count,
                 "has_next": has_next,
                 "next_cursor": next_cursor,
                 "per_page": self.per_page,

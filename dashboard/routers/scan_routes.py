@@ -190,6 +190,7 @@ def compare_scans(
 
 @router.get("/scans/paginated")
 def paginate_scans(
+    search: str = Query(""),
     target: str = Query(""),
     status: str = Query(""),
     policy: str = Query(""),
@@ -202,6 +203,7 @@ def paginate_scans(
     """Get paginated scans with cursor-based pagination.
 
     Query Parameters:
+    - search: Full-text search across scan ID, target name, error message
     - target: Filter by target name (partial match)
     - status: Filter by status (exact match: completed, failed, running)
     - policy: Filter by policy_status (exact match: PASS, BLOCK, UNKNOWN)
@@ -214,6 +216,7 @@ def paginate_scans(
         paginator = ScansPaginator(per_page=per_page)
         return paginator.paginate(
             conn,
+            search=search,
             target_filter=target,
             status_filter=status,
             policy_filter=policy,

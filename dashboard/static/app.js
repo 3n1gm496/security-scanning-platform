@@ -153,7 +153,8 @@ createApp({
       scansCursor: null,
       scansCursorStack: [],
       scansSort: { by: 'created_at', order: 'DESC' },
-      scansFilter: { target: '', status: '', policy: '' },
+      scansFilter: { search: '', target: '', status: '', policy: '' },
+      scansPerPage: 20,
 
       // ── Findings page
       findings: [],
@@ -287,6 +288,7 @@ createApp({
    async mounted() {
     this._remediationChartVersion = 0;
     this.debouncedLoadFindings = debounce(() => this.loadFindings(true), 400);
+    this.debouncedLoadScans = debounce(() => this.loadScans(true), 400);
 
     // ── URL Routing: read initial page + filter params from URL hash
     const validPages = ['dashboard', 'scans', 'findings', 'analytics', 'settings', 'compare'];
@@ -375,7 +377,11 @@ createApp({
     await nextTick();
     this.applyChartDefaults();
     await this.initDashboardCharts();
-    if (initialPage !== 'dashboard') await this.navigate(initialPage);
+    if (initialPage !== 'dashboard') {
+      // Force data loading for the initial page.  navigate() would bail out
+      // because currentPage was already set above — so use refreshCurrentPage().
+      await this.refreshCurrentPage();
+    }
     this.startAutoRefresh();
 
     // Check for running scans on mount — resume polling if any are active
@@ -491,12 +497,25 @@ createApp({
     startAutoRefresh() {
       this.refreshInterval = setInterval(async () => {
         if (!this.autoRefresh) return;
-        if (this.currentPage === 'dashboard') {
-          try {
-            this.kpis = await apiFetch('/api/kpi');
-          } catch (e) {
-            console.debug('[autoRefresh] KPI poll failed:', e.message);
+        try {
+          // Always refresh KPIs
+          this.kpis = await apiFetch('/api/kpi');
+        } catch (e) {
+          console.debug('[autoRefresh] KPI poll failed:', e.message);
+        }
+        // Refresh data for the currently visible page
+        try {
+          if (this.currentPage === 'dashboard') {
+            await this.initDashboardCharts();
+          } else if (this.currentPage === 'scans') {
+            await this.loadScans();
+          } else if (this.currentPage === 'findings') {
+            await this.loadFindings();
+          } else if (this.currentPage === 'analytics') {
+            await this._refreshAnalyticsData();
           }
+        } catch (e) {
+          console.debug('[autoRefresh] page refresh failed:', e.message);
         }
       }, 30000);
     },
@@ -512,8 +531,15 @@ createApp({
         try {
           const result = await apiFetch('/api/scans/paginated?per_page=20&sort_by=created_at&sort_order=DESC');
           const items = result.items || [];
-          this.recentScans = items.slice(0, 5);
+          this.recentScans = items.slice(0, 12);
           if (this.currentPage === 'scans') this.scans = items;
+
+          // Refresh KPIs and current page data on every poll tick
+          try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
+          if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
+          else if (this.currentPage === 'findings') { await this.loadFindings(); }
+          else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
+
           // Check if there are still RUNNING scans that started after our trigger
           const stillRunning = items.some(s =>
             s.status === 'RUNNING' && new Date(s.created_at).getTime() >= this._pollTriggerEpoch
@@ -528,8 +554,11 @@ createApp({
             } else {
               this.showToast('Scan completed successfully');
             }
+            // Final refresh to ensure everything is fully up-to-date
             try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
             if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
+            else if (this.currentPage === 'findings') { await this.loadFindings(); }
+            else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
           }
         } catch (e) {
           console.debug('[scanPolling] poll failed:', e.message);
@@ -721,7 +750,9 @@ createApp({
       // Use recent scans data to build a stacked bar chart of severity counts.
       // This is far more useful than the old empty line chart: it shows exactly
       // how many critical/high/medium/low findings each scan produced.
-      const scans = (this.recentScans || []).slice(0, 12).reverse();
+      // recentScans is already sorted DESC (newest first) — keep that order
+      // so the leftmost column corresponds to the most recent scan.
+      const scans = (this.recentScans || []).slice(0, 12);
       if (scans.length === 0) return;
 
       const labels = scans.map(s => {
@@ -738,6 +769,7 @@ createApp({
             { label: 'High', data: scans.map(s => s.high_count || 0), backgroundColor: SEVERITY_COLORS.HIGH, borderRadius: 3 },
             { label: 'Medium', data: scans.map(s => s.medium_count || 0), backgroundColor: SEVERITY_COLORS.MEDIUM, borderRadius: 3 },
             { label: 'Low', data: scans.map(s => s.low_count || 0), backgroundColor: SEVERITY_COLORS.LOW, borderRadius: 3 },
+            { label: 'Info', data: scans.map(s => s.info_count || 0), backgroundColor: SEVERITY_COLORS.INFO, borderRadius: 3 },
           ],
         },
         options: {
@@ -788,10 +820,11 @@ createApp({
       this.scansLoading = true;
       try {
         const params = new URLSearchParams({
-          per_page: 20,
+          per_page: this.scansPerPage,
           sort_by: this.scansSort.by,
           sort_order: this.scansSort.order,
         });
+        if (this.scansFilter.search) params.set('search', this.scansFilter.search);
         if (this.scansFilter.target) params.set('target', this.scansFilter.target);
         if (this.scansFilter.status) params.set('status', this.scansFilter.status);
         if (this.scansFilter.policy) params.set('policy', this.scansFilter.policy);
@@ -799,13 +832,32 @@ createApp({
         const result = await apiFetch(`/api/scans/paginated?${params}`);
         this.scans = result.items || [];
         const scanPag = result.pagination || {};
-        this.scansTotal = scanPag.count || this.scans.length;
+        this.scansTotal = scanPag.total_count ?? scanPag.count ?? this.scans.length;
         this.scansCursor = scanPag.next_cursor || null;
+
+        // Update available targets/tools from scan data for adaptive filtering
+        this._updateScansFilterOptions();
+
         this.initResizableColumns();
       } catch (e) {
         this.showToast('Failed to load scans: ' + e.message, 'error');
       } finally {
         this.scansLoading = false;
+      }
+    },
+
+    // Build filtered dropdown options based on current search text for scans
+    _updateScansFilterOptions() {
+      // If there's a search query, filter the available targets to show only matching ones
+      // This makes the dropdowns context-aware
+      if (this.scansFilter.search) {
+        const searchLower = this.scansFilter.search.toLowerCase();
+        this._filteredScansTargets = this.availableTargets.filter(
+          t => t.toLowerCase().includes(searchLower) ||
+               this.scans.some(s => s.target_name === t)
+        );
+      } else {
+        this._filteredScansTargets = null; // null = show all
       }
     },
 
@@ -840,7 +892,8 @@ createApp({
     },
 
     resetScansFilter() {
-      this.scansFilter = { target: '', status: '', policy: '' };
+      this.scansFilter = { search: '', target: '', status: '', policy: '' };
+      this._filteredScansTargets = null;
       this.loadScans(true);
     },
 
@@ -851,8 +904,12 @@ createApp({
 
     viewScanFindings(scan) {
       this.selectedScan = null;
-      // Reset all filters and set scan_id as dedicated filter
-      this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '', scan_id: scan.id };
+      // Reset all filters and set scan_id + auto-select the scan's target
+      this.findingsFilter = {
+        search: '', severity: '', tool: '',
+        target: scan.target_name || '',
+        status: '', scan_id: scan.id,
+      };
       this.navigate('findings');
     },
 
@@ -893,9 +950,13 @@ createApp({
 
         this.findings = result.items || [];
         const pag = result.pagination || {};
-        this.findingsTotal = pag.count || this.findings.length;
+        this.findingsTotal = pag.total_count ?? pag.count ?? this.findings.length;
         this.findingsCursor = pag.next_cursor || null;
         if (this.currentPage === 'findings') this._syncFindingsHash();
+
+        // Update available filter options based on current search context
+        this._updateFindingsFilterOptions();
+
         this.initResizableColumns();
       } catch (e) {
         this.showToast('Failed to load findings: ' + e.message, 'error');
@@ -920,7 +981,27 @@ createApp({
 
     resetFindingsFilter() {
       this.findingsFilter = { search: '', severity: '', tool: '', target: '', status: '', scan_id: '' };
+      this._filteredFindingsTargets = null;
+      this._filteredFindingsTools = null;
       this.loadFindings(true);
+    },
+
+    // Build filtered dropdown options based on current search/filters for findings
+    _updateFindingsFilterOptions() {
+      if (this.findingsFilter.search) {
+        const searchLower = this.findingsFilter.search.toLowerCase();
+        this._filteredFindingsTargets = this.availableTargets.filter(
+          t => t.toLowerCase().includes(searchLower) ||
+               this.findings.some(f => f.target_name === t)
+        );
+        this._filteredFindingsTools = this.availableTools.filter(
+          t => t.toLowerCase().includes(searchLower) ||
+               this.findings.some(f => f.tool === t)
+        );
+      } else {
+        this._filteredFindingsTargets = null;
+        this._filteredFindingsTools = null;
+      }
     },
 
     onFindingsPerPageChange() {
@@ -1072,28 +1153,34 @@ createApp({
     // ── Analytics ─────────────────────────────────────────────────────────────
 
     async loadAnalytics() {
-      this.loading = true;
+      // Show loading only on first load, not on refresh
+      const isFirstLoad = !this.analyticsData.riskDistribution;
+      if (isFirstLoad) this.loading = true;
       try {
-        const [riskDist, compliance, trends, targetRisk, toolEffectiveness] = await Promise.all([
-          apiFetch('/api/analytics/risk-distribution'),
-          apiFetch('/api/analytics/compliance'),
-          apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`),
-          apiFetch('/api/analytics/target-risk'),
-          apiFetch('/api/analytics/tool-effectiveness'),
-        ]);
-        this.analyticsData = { riskDistribution: riskDist, compliance, trends, targetRisk, toolEffectiveness };
-        if (this.chartsAvailable) {
-          await nextTick();
-          this.buildRiskChart();
-          this.buildOwaspChart();
-          this.buildAnalyticsTrendChart();
-          this.buildToolEffChart();
-          this.buildSeverityDistChart();
-        }
+        await this._refreshAnalyticsData();
       } catch (e) {
         this.showToast('Failed to load analytics: ' + e.message, 'error');
       } finally {
         this.loading = false;
+      }
+    },
+
+    async _refreshAnalyticsData() {
+      const [riskDist, compliance, trends, targetRisk, toolEffectiveness] = await Promise.all([
+        apiFetch('/api/analytics/risk-distribution'),
+        apiFetch('/api/analytics/compliance'),
+        apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`),
+        apiFetch('/api/analytics/target-risk'),
+        apiFetch('/api/analytics/tool-effectiveness'),
+      ]);
+      this.analyticsData = { riskDistribution: riskDist, compliance, trends, targetRisk, toolEffectiveness };
+      if (this.chartsAvailable) {
+        await nextTick();
+        this.buildRiskChart();
+        this.buildOwaspChart();
+        this.buildAnalyticsTrendChart();
+        this.buildToolEffChart();
+        this.buildSeverityDistChart();
       }
     },
 
@@ -1111,6 +1198,7 @@ createApp({
             { label: 'High', data: tools.map(t => t.high_count || 0), backgroundColor: SEVERITY_COLORS.HIGH, borderRadius: 4 },
             { label: 'Medium', data: tools.map(t => t.medium_count || 0), backgroundColor: SEVERITY_COLORS.MEDIUM, borderRadius: 4 },
             { label: 'Low', data: tools.map(t => t.low_count || 0), backgroundColor: SEVERITY_COLORS.LOW, borderRadius: 4 },
+            { label: 'Info', data: tools.map(t => t.info_count || 0), backgroundColor: SEVERITY_COLORS.INFO, borderRadius: 4 },
           ],
         },
         options: {
@@ -1124,25 +1212,32 @@ createApp({
       });
     },
 
-    buildSeverityDistChart() {
+    async buildSeverityDistChart() {
       const canvas = this.$refs.severityDistChart;
-      if (!canvas || !this.analyticsData.riskDistribution) return;
+      if (!canvas) return;
       if (this.charts.severityDist) this.charts.severityDist.destroy();
-      // riskDistribution.distribution has keys like '0-25', '25-50', '50-75', '75-100'
-      // which map to RISK_COLORS (green → red) not SEVERITY_COLORS.
-      const dist = this.analyticsData.riskDistribution.distribution;
-      const labels = Object.keys(dist);
-      const data = Object.values(dist);
-      // Map risk score buckets to their colours: low risk = green, high risk = red
-      const RISK_BUCKET_COLORS = { '0-25': '#10b981', '25-50': '#f59e0b', '50-75': '#f97316', '75-100': '#dc2626' };
-      const bgColors = labels.map(l => RISK_BUCKET_COLORS[l] || '#9ca3af');
+      // Fetch actual severity breakdown data (same as dashboard chart)
+      let data = {};
+      try {
+        const fresh = await apiFetch('/api/chart/severity-breakdown');
+        if (fresh && Array.isArray(fresh.labels)) {
+          fresh.labels.forEach((k, i) => { data[k.toUpperCase()] = fresh.values[i]; });
+        } else if (fresh && typeof fresh === 'object') {
+          Object.assign(data, fresh);
+        }
+      } catch (_) {
+        data = this.severityBreakdown || {};
+      }
+      const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
+      const values = labels.map(k => data[k]);
+      const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
       this.charts.severityDist = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
           labels,
           datasets: [{
-            data,
-            backgroundColor: bgColors,
+            data: values,
+            backgroundColor: colors,
             borderWidth: 2,
             borderColor: this.cssVar('--chart-border'),
           }],
@@ -1157,6 +1252,22 @@ createApp({
                 font: { size: 11 },
                 color: this.cssVar('--chart-legend'),
                 padding: 12,
+                generateLabels: (chart) => {
+                  const legendColor = this.cssVar('--chart-legend') || '#374151';
+                  return chart.data.labels.map((label, i) => ({
+                    text: `${label}  (${chart.data.datasets[0].data[i]})`,
+                    fillStyle: chart.data.datasets[0].backgroundColor[i],
+                    strokeStyle: chart.data.datasets[0].backgroundColor[i],
+                    fontColor: legendColor,
+                    hidden: false,
+                    index: i,
+                  }));
+                },
+              },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.parsed} findings (${ctx.label})`,
               },
             },
           },
@@ -1169,10 +1280,14 @@ createApp({
       if (!canvas || !this.analyticsData.riskDistribution) return;
       if (this.charts.risk) this.charts.risk.destroy();
       const dist = this.analyticsData.riskDistribution.distribution;
+      // Map numeric risk ranges to descriptive labels
+      const RISK_LABEL_MAP = { '0-25': 'Low Risk (0-25)', '25-50': 'Medium Risk (25-50)', '50-75': 'High Risk (50-75)', '75-100': 'Critical Risk (75-100)' };
+      const rawLabels = Object.keys(dist);
+      const labels = rawLabels.map(l => RISK_LABEL_MAP[l] || l);
       this.charts.risk = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
-          labels: Object.keys(dist),
+          labels,
           datasets: [{
             label: 'Findings', data: Object.values(dist),
             backgroundColor: RISK_COLORS,
@@ -1181,7 +1296,14 @@ createApp({
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.parsed.y} findings in this risk range`,
+              },
+            },
+          },
           scales: {
             y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { color: this.cssVar('--chart-tick') } },
             x: { grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },

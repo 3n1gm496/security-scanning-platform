@@ -104,6 +104,7 @@ def paginate_findings(
     search: str = Query(""),
     severity: str = Query(""),
     tool: str = Query(""),
+    target: str = Query(""),
     scan_id: str | None = Query(None),
     status: str | None = Query(None),
     cursor: str | None = Query(None),
@@ -118,6 +119,7 @@ def paginate_findings(
     - search: Full-text search across title, description, file_path, cve_id
     - severity: Comma-separated list of severities (CRITICAL,HIGH,MEDIUM,LOW)
     - tool: Comma-separated list of tools (semgrep,bandit,nuclei,etc)
+    - target: Filter by target name (partial match)
     - scan_id: Filter by specific scan ID
     - status: Filter by triage status (open, in_progress, resolved, false_positive, accepted_risk)
     - cursor: Pagination cursor from previous response
@@ -137,6 +139,7 @@ def paginate_findings(
             tool_filter=tool_list if tool_list else None,
             scan_id=scan_id,
             status_filter=status if status else None,
+            target_filter=target if target else None,
             cursor=cursor,
             sort_by=sort_by,
             sort_order=sort_order,

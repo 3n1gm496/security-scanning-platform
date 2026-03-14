@@ -1,640 +1,362 @@
-# Senior Staff Engineer / Security Architect Review
+# Repository Review
 
 **Repository:** `3n1gm496/security-scanning-platform`
-**Reviewer:** Staff Engineer / Security Architect (automated review via Claude)
-**Review Date:** 2026-03-11
-**Branch:** `claude/security-platform-review-MqdAz`
+**Reviewer:** Senior Security Engineer / Staff Architect (automated review via Claude)
+**Review Date:** 2026-03-14
+**Branch:** `claude/complete-claude-md-tasks-sV7d1`
+**Commit:** `f91f284`
+**Previous Review:** 2026-03-11 on branch `claude/security-platform-review-MqdAz`
 
 ---
 
-## A. Executive Summary
+## 1. Executive Summary
 
-This is a well-structured, genuinely useful platform that delivers on its promise of being lightweight,
-self-hostable, and CI-agnostic. The component separation (orchestrator CLI vs. dashboard FastAPI) is
-clean, the PostgreSQL migration path is pragmatic, and the test coverage at 86%+ on the orchestrator
-is impressive for a project at this stage. The scanner normalisation layer is mature.
+The platform has undergone **significant hardening** since the March 11 review. All six
+critical/high-severity findings from the previous review (#1–#6) have been properly addressed:
+WAL mode enabled, dashboard runs non-root, OPERATOR privilege escalation fixed, healthchecks
+added, git clone depth configurable, and SSRF protection implemented with DNS-rebinding
+mitigation.
 
-However, several issues range from **immediately exploitable** to **silently incorrect**, and one
-architectural pattern — the `app.py` god-class — is already eroding maintainability. The items below
-are prioritised by *impact × urgency*, not theoretical risk. Every finding is grounded in specific
-lines of code.
+Prometheus metrics are now integrated (`prometheus_client` in requirements, `/metrics`
+endpoint serving OpenMetrics format). The migration system is in place with a
+`schema_migrations` table and idempotent `run_migrations()`. The orchestrator and dashboard
+are production-viable for single-server deployments.
 
-**Do right now (1-2 days):** items 1–4 are either security-critical or prevent production crashes,
-and each takes under 30 minutes to fix.
-**Do this week:** items 5–8 close correctness gaps and operability holes that will bite in production.
-**Plan for next sprint:** items 9–10 are architectural but incremental.
+**However, new findings emerged in this review:**
 
-SQLite is **still appropriate** for single-server deployments handling up to ~50 scans/day with a
-few concurrent users on the dashboard. The PostgreSQL migration path already exists and is tested.
-The one place SQLite **needs help today** is WAL mode (see item 1).
+- **Export injection vulnerabilities** (CSV injection, HTML/XSS injection, PDF markup injection)
+  are the most impactful new findings. These affect all export formats and have no sanitization.
+- **Schema duplication persists** with new divergence (DEFAULT value mismatches between
+  orchestrator and dashboard schemas).
+- **PostgreSQL `INSERT OR REPLACE` adaptation** remains unimplemented — PostgreSQL deployments
+  will crash on notification preference writes.
+- **No CSRF token protection** on form-based mutation endpoints (mitigated by SameSite=Lax).
 
----
-
-## B. Top 10 Prioritized Improvements Table
-
-| # | Title | Severity | Impact | Effort | Urgency |
-|---|-------|----------|--------|--------|---------|
-| 1 | SQLite WAL mode not enabled | BUG | HIGH – prod crashes under concurrent load | TRIVIAL (2 lines) | **MUST FIX NOW** |
-| 2 | Dashboard container runs as root | SECURITY | HIGH – full container compromise if exploited | TRIVIAL (4 lines) | **MUST FIX NOW** |
-| 3 | OPERATOR role has `API_KEY_MANAGE` permission | SECURITY | CRITICAL – privilege escalation to ADMIN | TRIVIAL (1 line) | **MUST FIX NOW** |
-| 4 | Docker Compose: no healthcheck on dashboard | OPS | MEDIUM – blind container restarts | TRIVIAL (6 lines) | **MUST FIX NOW** |
-| 5 | Shallow git clone defeats gitleaks history scan | SECURITY | HIGH – historical secrets not found | LOW | **SHOULD FIX SOON** |
-| 6 | Webhook SSRF – no URL validation | SECURITY | HIGH – internal network probing | LOW | **SHOULD FIX SOON** |
-| 7 | Schema duplication + no migration system | ARCHITECTURE | HIGH – silent data loss on schema drift | MEDIUM | **SHOULD FIX SOON** |
-| 8 | Cache key ignores git commit hash | CORRECTNESS | HIGH – stale scan results mask new vulns | LOW | **SHOULD FIX SOON** |
-| 9 | No Prometheus metrics (observability gap) | OPS | MEDIUM – no monitoring integration | MEDIUM | Nice to have |
-| 10 | `app.py` god-class (62 KB+) | MAINTAINABILITY | MEDIUM – DX is degrading fast | MEDIUM | Nice to have |
+The platform is **safe for internal use behind a firewall** with the current fixes. It is
+**not safe for Internet exposure** until export injection vulnerabilities are resolved, as
+any authenticated user can trigger XSS via HTML export download.
 
 ---
 
-## C. Detailed Recommendations
-
----
+## 2. Validation of Existing Review
 
 ### #1 — SQLite WAL mode not enabled
-
-**Problem:**
-Neither `orchestrator/db_adapter.py` nor `dashboard/db_adapter.py` sets `PRAGMA journal_mode=WAL`
-after opening a SQLite connection. The default journal mode is DELETE (rollback journal), which uses
-exclusive file locks for writes. The orchestrator and dashboard share the **same SQLite file** via a
-Docker volume mount. When the orchestrator writes findings while the dashboard is simultaneously
-serving read queries, SQLite issues `OperationalError: database is locked`. This is a production-
-reliability bug that worsens as scan frequency grows.
-
-**Why it matters:**
-DELETE journal mode means any writer blocks all readers and vice versa. WAL mode allows one writer
-and multiple concurrent readers simultaneously — exactly the access pattern here. The fix is two
-lines per adapter.
-
-**Proposed solution:**
-In both `dashboard/db_adapter.py` and `orchestrator/db_adapter.py`, after opening a SQLite
-connection, execute:
-
-```python
-conn.execute("PRAGMA journal_mode=WAL")
-conn.execute("PRAGMA synchronous=NORMAL")  # WAL + NORMAL is safe and faster than FULL
-```
-
-`synchronous=NORMAL` is safe with WAL — a power-loss can only lose the most recent committed
-transaction, which the orchestrator will re-run. Do not use `synchronous=OFF`.
-
-**Affected files:**
-- `dashboard/db_adapter.py:52` (`_sqlite_connect`)
-- `orchestrator/db_adapter.py:32` (`_sqlite_connect`)
-
-**Migration / compatibility:**
-WAL mode persists in the database file. An existing database is converted silently on first
-connection. No data migration needed. No compatibility concerns with psycopg2 path (PRAGMAs
-are SQLite-only and run inside the `if db_path != ":memory:"` block).
-
-**Tests to add/update:**
-- `test_db_adapter.py`: assert `PRAGMA journal_mode` returns `wal` after `_sqlite_connect()`
-- Integration test: simulate concurrent writer + reader and assert no `OperationalError`
-
----
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/db_adapter.py:63-64` and `orchestrator/db_adapter.py:42-43` both
+  execute `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL` in `_sqlite_connect()`.
+  Tests exist in `test_db_adapter.py`.
+- **What changed:** Two-line fix in both adapters, exactly as recommended.
 
 ### #2 — Dashboard container runs as root
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/Dockerfile:9-10` creates `dashuser` (UID 1000), line 77 transfers
+  ownership, line 80 sets `USER dashuser`. Matches orchestrator's `scanuser` pattern.
+- **What changed:** Non-root user added with proper directory ownership.
 
-**Problem:**
-`dashboard/Dockerfile` has no `USER` directive. The uvicorn process runs as UID 0 (root) inside
-the container. The orchestrator correctly uses a non-root `scanuser` (UID 1000). This
-inconsistency means: if an attacker exploits an RCE in the FastAPI app (e.g., via a Jinja2 SSTI,
-path traversal, or a future dependency vulnerability), they gain root access to the container,
-full read/write on all mounted volumes including the scan database, and a much easier pivot to
-the host if the Docker socket is inadvertently exposed.
+### #3 — OPERATOR role has API_KEY_MANAGE permission
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/rbac.py:51-58` — `API_KEY_MANAGE` removed from OPERATOR role with
+  explicit comment explaining the privilege escalation risk. `dashboard/app.py:520-529` adds
+  a role-ceiling check (`_ROLE_RANK` dictionary) preventing any user from creating keys with
+  roles above their own.
+- **What changed:** Permission removed + role-ceiling enforcement added. Double protection.
 
-**Why it matters:**
-Defence in depth: containers should never run as root. This is a trivially cheap control that
-eliminates an entire privilege escalation step.
-
-**Proposed solution:**
-Add a non-root user to `dashboard/Dockerfile`, mirroring the orchestrator pattern:
-
-```dockerfile
-RUN groupadd -g 1000 dashuser && \
-    useradd -u 1000 -g dashuser -m -s /bin/bash dashuser
-
-# After all pip installs and file copies...
-RUN chown -R dashuser:dashuser /app /data /config || true
-USER dashuser
-```
-
-The `/data` and `/config` directories are mounted from the host, so UID ownership must match
-what the host volume uses. Add `user: "1000:1000"` to the dashboard service in `docker-compose.yml`
-or ensure the volume's owning UID matches.
-
-**Affected files:**
-- `dashboard/Dockerfile`
-- `docker-compose.yml` (add `user:` field or document volume permissions)
-
-**Migration / compatibility:**
-Operators who rely on root access inside the container for debugging will need to use
-`docker exec -u root`. No functional change.
-
-**Tests to add/update:**
-- CI smoke test: `docker inspect security-dashboard --format '{{.Config.User}}'` asserts non-empty.
-
----
-
-### #3 — OPERATOR role has `API_KEY_MANAGE` permission (privilege escalation)
-
-**Problem:**
-In `dashboard/rbac.py:50-55`, `Role.OPERATOR` includes `Permission.API_KEY_MANAGE`. The
-`create_api_key()` function accepts any `role: Role` parameter with **no upper-bound check** —
-an OPERATOR can call `POST /api/keys` and create a new key with `role=admin`, then use that key
-to perform any admin action. This is a textbook privilege escalation via broken access control
-(OWASP A01:2021).
-
-```python
-# rbac.py — current (vulnerable)
-Role.OPERATOR: [
-    Permission.SCAN_READ,
-    Permission.SCAN_WRITE,
-    Permission.FINDING_READ,
-    Permission.FINDING_WRITE,
-    Permission.API_KEY_MANAGE,   # <-- OPERATOR can create ADMIN keys
-],
-```
-
-**Why it matters:**
-In a multi-tenant or enterprise environment where OPERATORs are CI pipelines or junior engineers,
-this allows any OPERATOR to permanently escalate to full ADMIN access. The audit log records the
-action, but nothing prevents it.
-
-**Proposed solution:**
-1. Remove `API_KEY_MANAGE` from the OPERATOR role.
-2. In the `POST /api/keys` handler in `app.py`, add a role-ceiling check: an OPERATOR cannot
-   create a key with a role higher than their own.
-
-```python
-# rbac.py — fixed
-Role.OPERATOR: [
-    Permission.SCAN_READ,
-    Permission.SCAN_WRITE,
-    Permission.FINDING_READ,
-    Permission.FINDING_WRITE,
-    # API_KEY_MANAGE removed — only ADMIN may manage keys
-],
-```
-
-**Affected files:**
-- `dashboard/rbac.py:50-55`
-- `dashboard/app.py` (API key creation endpoint — add role ceiling assertion)
-
-**Migration / compatibility:**
-Existing OPERATORs lose the ability to manage API keys. If operators legitimately need to rotate
-CI keys, add a scoped `Permission.API_KEY_ROTATE_OWN` that allows rotating only keys they created.
-
-**Tests to add/update:**
-- `test_rbac.py`: assert OPERATOR cannot create ADMIN-role key via the API endpoint
-- `test_rbac.py`: assert OPERATOR cannot call `/api/keys` at all (403)
-
----
-
-### #4 — Docker Compose: no healthcheck on dashboard service
-
-**Problem:**
-`docker-compose.yml` defines no `healthcheck` for the `dashboard` service despite the platform
-having a working `/api/health` endpoint. The IMPROVEMENTS.md even documents the correct config
-but it was never applied. Without a healthcheck:
-- Docker cannot distinguish a crashed/deadlocked process from a healthy one.
-- `depends_on: condition: service_healthy` cannot be used by any dependent services.
-- Orchestration systems (systemd, Kubernetes, Nomad) have no liveness signal.
-- `docker compose ps` shows "Up" even when the app has deadlocked.
-
-**Why it matters:**
-Healthchecks are the minimum required for any production service. The endpoint already exists.
-
-**Proposed solution:**
-Add to the `dashboard` service in `docker-compose.yml`:
-
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 40s
-```
-
-Also add `curl` to the dashboard Dockerfile's apt-get block (already present — confirmed in
-`dashboard/Dockerfile:9`).
-
-**Affected files:**
-- `docker-compose.yml`
-
-**Migration / compatibility:** None.
-
-**Tests to add/update:**
-- CI: add a step that runs `docker compose up -d && sleep 45 && docker compose ps` and asserts
-  `(healthy)` status.
-
----
+### #4 — Docker Compose: no healthcheck on dashboard
+- **Status:** `FULLY FIXED`
+- **Evidence:** `docker-compose.yml:118-123` — healthcheck configured with `curl -f
+  http://localhost:8080/api/health`, 30s interval, 10s timeout, 3 retries, 40s start period.
+  All four services (postgres, zap, orchestrator, dashboard) now have healthchecks.
+- **What changed:** Healthcheck added exactly as recommended.
 
 ### #5 — Shallow git clone defeats gitleaks history scanning
-
-**Problem:**
-`orchestrator/scanners.py:79` always passes `--depth 1` to `git clone`. In `orchestrator/main.py:396`,
-gitleaks is configured to run with `use_git_history=True` when a `.git` directory is present.
-With depth=1, gitleaks's `git` mode only sees **one commit** — the HEAD. Any secret that was
-committed and subsequently deleted (the most common pattern for accidentally committed credentials)
-is **completely invisible**. This is a critical gap in the platform's primary value proposition.
-
-```python
-# scanners.py — current (broken for history scanning)
-command = ["git", "clone", "--depth", "1", "--quiet", ...]
-```
-
-**Why it matters:**
-According to GitGuardian's State of Secrets Sprawl, over 85% of exposed secrets in git history
-were removed in a subsequent commit. The platform's users believe they are scanning history — they
-are not.
-
-**Proposed solution:**
-Add a `git_clone_depth` setting (default: `0` = full clone, configurable to a positive integer
-for shallow clones). When gitleaks is enabled and the target is a git repo, default to full clone
-or at minimum a larger depth (e.g., 50-commit window). Full clone is safe given the workspace
-retention policy (workspaces deleted after 3 days by default).
-
-```yaml
-# settings.yaml — proposed addition
-execution:
-  git_clone_depth: 0   # 0 = full history (recommended for secret scanning)
-                        # Positive integer = shallow clone (faster, less storage, misses history)
-```
-
-```python
-# scanners.py — fixed
-depth_arg = [] if depth == 0 else ["--depth", str(depth)]
-command = ["git", "clone"] + depth_arg + ["--quiet", "-c", "credential.helper="]
-```
-
-**Affected files:**
-- `orchestrator/scanners.py:79` (`clone_repo`)
-- `orchestrator/main.py:69` (`resolve_settings` — add `git_clone_depth` default)
-- `config/settings.yaml`
-
-**Migration / compatibility:**
-Existing deployments with limited disk space should set `git_clone_depth: 50` to balance
-coverage vs. storage. Full clone with depth=0 is the secure default.
-
-**Tests to add/update:**
-- `test_scanners.py`: assert `clone_repo` command does NOT contain `--depth` when depth=0
-- `test_scanners.py`: assert `clone_repo` command contains `--depth 50` when depth=50
-
----
+- **Status:** `FULLY FIXED`
+- **Evidence:** `orchestrator/scanners.py:79` — `clone_repo()` accepts `depth: int = 0`
+  (full clone by default). Lines 112-113: `--depth` flag only added when `depth > 0`.
+  `orchestrator/main.py:108-110` reads `ORCH_GIT_CLONE_DEPTH` env var, defaults to `0`.
+  Tests in `test_scanners.py:188-237` verify both full and shallow clone paths.
+- **What changed:** Configurable depth with secure default (full clone).
 
 ### #6 — Webhook SSRF — no URL validation
-
-**Problem:**
-`dashboard/webhooks.py:70-89`, the `create_webhook()` function accepts any URL string without
-validation. The `trigger_webhook()` function then makes an outbound HTTP POST to that URL. An
-authenticated OPERATOR (or ADMIN) can register a webhook pointing to `http://169.254.169.254/`
-(AWS IMDSv1), `http://10.0.0.1/admin`, or any other internal endpoint, causing the server to
-act as a proxy for SSRF attacks against internal infrastructure.
-
-Given that:
-- The `OPERATOR` role was (until fix #3) able to create webhooks
-- Enterprise environments frequently have internal metadata services and admin APIs
-
-This is a real exploitable vulnerability.
-
-**Why it matters:**
-SSRF via webhook is one of the most common ways cloud-hosted services are compromised. The
-`trigger_webhook` function makes outbound requests with a 10-second timeout on every matched event,
-providing a reliable SSRF oracle.
-
-**Proposed solution:**
-Add URL validation before storing or triggering a webhook:
-
-```python
-import ipaddress
-from urllib.parse import urlparse
-
-ALLOWED_SCHEMES = {"https", "http"}  # In prod, consider restricting to https only
-BLOCKED_NETS = [
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),  # link-local / IMDS
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-]
-
-def validate_webhook_url(url: str) -> None:
-    parsed = urlparse(url)
-    if parsed.scheme not in ALLOWED_SCHEMES:
-        raise ValueError(f"Webhook URL must use HTTP/HTTPS, got: {parsed.scheme}")
-    try:
-        addr = ipaddress.ip_address(parsed.hostname)
-        for net in BLOCKED_NETS:
-            if addr in net:
-                raise ValueError(f"Webhook URL targets a private/reserved address: {addr}")
-    except ValueError as e:
-        if "private" in str(e) or "reserved" in str(e):
-            raise
-        # Hostname is a domain name — DNS-rebinding not mitigated here (acceptable
-        # for v1; add DNS pre-resolution check for high-security environments)
-```
-
-**Affected files:**
-- `dashboard/webhooks.py` (add `validate_webhook_url`, call in `create_webhook`)
-- `dashboard/app.py` (webhook creation endpoint)
-
-**Migration / compatibility:**
-Existing webhooks pointing to internal addresses will fail validation on next update. Document
-in CHANGELOG.
-
-**Tests to add/update:**
-- `test_webhooks.py`: assert `create_webhook` raises for `http://169.254.169.254/`
-- `test_webhooks.py`: assert `create_webhook` raises for `http://10.0.0.1/`
-- `test_webhooks.py`: assert valid public HTTPS URL passes
-
----
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/webhooks.py:32-93` — comprehensive `validate_webhook_url()` with:
+  - Blocked networks: RFC 1918, loopback, link-local, AWS IMDS, RFC 6598, IPv6 ULA/link-local
+  - DNS resolution check with rebinding mitigation
+  - Scheme restriction to http/https
+  - Called in `create_webhook()` (line 154) before storing
+- **What changed:** Full SSRF validation with DNS-rebinding mitigation, exceeding original
+  recommendation.
 
 ### #7 — Schema duplication + no migration system
-
-**Problem:**
-`SCHEMA_SQL` is defined identically in **both** `orchestrator/storage.py:13-64` and
-`dashboard/db.py:278-327`. Additionally, the dashboard's `db_adapter.py` `adapt_schema` function
-only handles `AUTOINCREMENT → SERIAL` — it does not handle `INSERT OR REPLACE → INSERT ... ON CONFLICT`
-(PostgreSQL incompatibility left in production code).
-
-When the schema needs a new column (e.g., `triage_status` on findings, or `scan_duration_seconds`
-on scans), the developer must update both files synchronously, update the PostgreSQL DDL adaptation,
-and manually alter any existing databases. There is no `schema_migrations` table, no version tracking,
-and no `ALTER TABLE` scripts. Any deployed instance that is upgraded will silently miss new columns
-and produce silent `KeyError` or `None` mismatches.
-
-**Why it matters:**
-This is the most common source of silent data corruption in self-hosted tools. Operators upgrade
-the image, the old database has different columns, and the dashboard shows wrong KPIs or drops
-findings silently.
-
-**Proposed solution:**
-1. **Deduplicate schema DDL**: Move the canonical schema to a shared location — either a
-   `shared/schema.py` package (preferred) or embed it in `orchestrator/storage.py` and have the
-   dashboard import it via `sys.path` (acceptable given the current monorepo structure).
-
-2. **Add a lightweight migration table** (no Alembic needed at this scale):
-   ```sql
-   CREATE TABLE IF NOT EXISTS schema_migrations (
-       version INTEGER PRIMARY KEY,
-       applied_at TEXT NOT NULL,
-       description TEXT
-   );
-   ```
-   Apply migrations sequentially on startup via a `migrate_db()` function called from both
-   `orchestrator/storage.py:init_db` and `dashboard/db.py:init_db`.
-
-3. **Fix `INSERT OR REPLACE` → `INSERT ... ON CONFLICT DO UPDATE`** in `adapt_schema` for
-   PostgreSQL compatibility (currently the PostgreSQL path silently fails or raises on any
-   `INSERT OR REPLACE` statement).
-
-**Affected files:**
-- `orchestrator/storage.py`
-- `dashboard/db.py`
-- Both `db_adapter.py` files (`adapt_schema`)
-
-**Migration / compatibility:**
-The `schema_migrations` table is additive. `CREATE TABLE IF NOT EXISTS` is idempotent.
-Existing deployments are unaffected.
-
-**Tests to add/update:**
-- Test that both components produce identical schemas on a fresh database
-- Test that `migrate_db()` is idempotent (calling twice is safe)
-- Test `adapt_schema` for `INSERT OR REPLACE` with PostgreSQL flag
-
----
+- **Status:** `PARTIALLY FIXED`
+- **Evidence:**
+  - Migration system added: both `orchestrator/storage.py:70-108` and `dashboard/db.py:364-397`
+    have `schema_migrations` table and `run_migrations()` / `_run_migrations()` with baseline
+    migration. Tests exist in `orchestrator/tests/test_phase2.py:121-171`.
+  - **Schema still duplicated:** `orchestrator/storage.py:18-75` and `dashboard/db.py:314-369`
+    define SCHEMA_SQL independently.
+  - **New divergence introduced:** Dashboard adds `DEFAULT ''` / `DEFAULT '{}'` / `DEFAULT '[]'`
+    on `raw_report_dir`, `normalized_report_path`, `artifacts_json`, `tools_json` — orchestrator
+    does not. This causes schema drift.
+  - **`INSERT OR REPLACE` PostgreSQL adaptation still missing:** Both `adapt_schema()` functions
+    only handle `AUTOINCREMENT → SERIAL`. `dashboard/notifications.py:292` uses
+    `INSERT OR REPLACE INTO notification_preferences` which will crash on PostgreSQL.
+- **What changed:** Migration infrastructure added (good), but root cause (duplication) remains.
 
 ### #8 — Cache key ignores git commit hash
+- **Status:** `FULLY FIXED`
+- **Evidence:** `orchestrator/scanners.py:67-76` — `get_git_commit_sha()` resolves HEAD SHA
+  after clone. `orchestrator/main.py:257-259` injects `git_sha` into cache context via
+  `_git_ctx`. All tool cache calls include `**_git_ctx` spread. Tests in
+  `test_phase2.py:94-113` and `test_main_coverage.py:162-173`.
+- **What changed:** Git SHA included in cache key, preventing stale results.
 
-**Problem:**
-`orchestrator/cache.py:11-19`, the cache key is built from `tool_name`, `target_type`,
-`target_value` (the repo URL), and `context` (scanner config). For a git target, `target_value`
-is the repository URL — **not the current commit hash**. If a developer pushes new commits
-within the 15-minute TTL window, the orchestrator will serve the cached result from before
-the push, silently missing any newly introduced vulnerabilities.
-
-This is especially dangerous for:
-- Semgrep SAST results (new code patterns not checked)
-- Gitleaks secret scanning (new secret commits not flagged)
-- Checkov IaC findings (new misconfigurations missed)
-
-**Why it matters:**
-The platform is supposed to act as a CI gate. A cached PASS result from before a `git push`
-means the gate passes even when it should block. This undermines the core security value of
-the product.
-
-**Proposed solution:**
-After cloning the repository (in `prepare_target()`), resolve the HEAD commit SHA and include
-it in the cache context:
-
-```python
-def get_git_head_sha(repo_path: str) -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "-C", repo_path, "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=10
-        )
-        return result.stdout.strip() if result.returncode == 0 else None
-    except Exception:
-        return None
-```
-
-Pass this SHA as part of `cache_context` when calling `execute_tool` for git targets. The
-cache key will then be unique per commit, eliminating stale results.
-
-**Affected files:**
-- `orchestrator/main.py` (`prepare_target`, `run_single_scan`)
-- `orchestrator/cache.py` (documentation update)
-
-**Migration / compatibility:**
-All existing cache entries for git targets are effectively invalidated (new keys will miss).
-This is the correct behaviour.
-
-**Tests to add/update:**
-- `test_cache.py`: assert cache key differs for same URL at different commits
-- `test_main_coverage.py`: assert git HEAD SHA is included in cache context
-
----
-
-### #9 — No Prometheus metrics (observability gap)
-
-**Problem:**
-`dashboard/monitoring.py:103-117`, the `/api/metrics` endpoint returns basic JSON with only
-`app_uptime_seconds` and static version info. There are no counters for scans completed, no
-histograms for scan duration, no gauges for active jobs, no finding counts by severity. The
-`version` field is hardcoded to `"1.0.0"` regardless of actual version.
-
-The `prometheus_client` library is not in `dashboard/requirements.txt`, meaning there is no
-path to Prometheus scraping. The IMPROVEMENTS.md mentions this as a "future enhancement" but
-provides no implementation.
-
-**Why it matters:**
-In enterprise environments, the security team needs alerting on: sudden spikes in CRITICAL
-findings, scan failures, dropped scans. Without Prometheus metrics, none of these are
-automatable. IMPROVEMENTS.md explicitly calls out Prometheus as a P1 item.
-
-**Proposed solution:**
-Add `prometheus_client>=0.20.0` to `dashboard/requirements.txt`. Expose a proper `/metrics`
-endpoint alongside the existing JSON `/api/metrics`:
-
-```python
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-
-scans_total = Counter("ssp_scans_total", "Total scans completed", ["status", "policy_status"])
-scan_duration = Histogram("ssp_scan_duration_seconds", "Scan duration", buckets=[10,30,60,120,300,600])
-findings_total = Gauge("ssp_findings_total", "Current total findings", ["severity"])
-```
-
-Mount the Prometheus ASGI app at `/metrics` (unauthenticated is standard for scraping behind
-a firewall; optionally add Bearer auth).
-
-Also: read the version from a `VERSION` file or `importlib.metadata` rather than hardcoding.
-
-**Affected files:**
-- `dashboard/monitoring.py`
-- `dashboard/requirements.txt`
-- `dashboard/app.py` (mount metrics endpoint)
-
-**Migration / compatibility:** None. Additive change.
-
-**Tests to add/update:**
-- `test_monitoring.py`: assert `/metrics` returns `text/plain; version=0.0.4` content type
-- `test_monitoring.py`: assert scan counter increments after a scan completes
-
----
+### #9 — No Prometheus metrics
+- **Status:** `FULLY FIXED`
+- **Evidence:** `prometheus-client==0.24.1` in `dashboard/requirements.txt:69`.
+  `dashboard/monitoring.py:11` imports Counter, Gauge, Histogram from prometheus_client.
+  `dashboard/metrics.py:12` also uses prometheus_client. `dashboard/app.py:1539` exposes
+  `/metrics` endpoint. Rate-limited paths exclude `/metrics` (line 216).
+- **What changed:** Full Prometheus integration with counters, gauges, histograms.
 
 ### #10 — `app.py` god-class (62 KB+)
-
-**Problem:**
-`dashboard/app.py` is a 62 KB+ file containing: application bootstrapping, rate limiting
-implementation, login/logout handlers, scan trigger logic, 30+ API route handlers, the
-`run_scan_async` subprocess wrapper, and middleware configuration. Despite having separate
-modules for `auth`, `rbac`, `webhooks`, `finding_management`, and `export`, all route
-definitions and much of the business logic remain in `app.py`.
-
-Symptoms already visible:
-- CI bandit scan excludes `B608` globally to suppress a false positive in this file
-- Test files have names like `test_coverage_gaps.py` and `test_app_coverage.py` — coverage
-  archaeology rather than purposeful testing
-- The rate limiter (a threading.Lock + deque) is embedded inline, making it untestable
-  in isolation
-
-**Why it matters:**
-This is the highest-friction change per line of code added to the project. Any new endpoint
-requires understanding the entire file. The embedded rate limiter and thread pool cannot be
-tested without spinning up the full FastAPI app.
-
-**Proposed solution:**
-Extract into FastAPI `APIRouter` modules (incremental, not a rewrite):
-1. `dashboard/routers/scans.py` — scan trigger, scan listing, scan detail
-2. `dashboard/routers/settings.py` — API key management, webhook management
-3. `dashboard/routers/exports.py` — all export endpoints
-4. `dashboard/routers/triage.py` — finding status, comments, assignments
-
-Move `_is_rate_limited()` and the rate bucket state into `dashboard/rate_limit.py`.
-Move `run_scan_async()` into `dashboard/scan_runner.py`.
-
-Each module can then be independently unit-tested with `TestClient` focused only on that
-router's routes.
-
-**Affected files:**
-- `dashboard/app.py` (shrinks to ~100 lines of bootstrap + router registration)
-- New `dashboard/routers/` directory
-- `dashboard/rate_limit.py`, `dashboard/scan_runner.py`
-
-**Migration / compatibility:** API surface unchanged. Purely internal refactor.
-
-**Tests to add/update:**
-- Refactor `test_app_coverage.py` into focused `test_routers_*.py` files
-- Add `test_rate_limit.py` that tests the rate limiter in pure Python without HTTP
+- **Status:** `PARTIALLY FIXED`
+- **Evidence:** `dashboard/app.py` is now 1551 lines (down from original). Significant
+  extraction has occurred: `rbac.py`, `webhooks.py`, `finding_management.py`, `pagination.py`,
+  `remediation.py`, `analytics.py`, `monitoring.py`, `metrics.py`, `export.py`, `auth.py`,
+  `db.py`, `db_adapter.py`, `notifications.py`. However, all route definitions still live in
+  `app.py` — no `APIRouter` decomposition yet.
+- **What changed:** Business logic extracted to modules; route registration not yet decomposed.
 
 ---
 
-## D. Phased Roadmap
+## 3. New Findings
 
-### Phase 1: Quick wins — 1–2 days
+### CSV Injection in Export
+- **Severity:** `HIGH`
+- **Category:** `SECURITY`
+- **Confidence:** `HIGH`
+- **Affected files:** `dashboard/export.py:29-49`, `dashboard/app.py:695-722`
+- **Why it matters:** Finding values (title, description, message, file path) are written
+  directly to CSV via `csv.DictWriter.writerow()` without sanitization. If a scanner produces
+  a finding whose message starts with `=`, `+`, `-`, `@`, `\t`, or `\r`, opening the exported
+  CSV in Excel/LibreOffice will execute the formula. An attacker who controls a scanned
+  repository could craft filenames or code comments that produce these findings, leading to
+  code execution on the security analyst's workstation.
+- **Proof / reasoning:** `export.py:47` — `writer.writerow(finding)` passes raw dict values.
+  No `html.escape`, no formula prefix stripping. Same pattern in `app.py:695-722` (streaming
+  CSV). Example payload: a file named `=cmd|'/C calc'!A1` in a scanned repo would appear
+  as a finding with that path, executing `calc.exe` when the CSV is opened.
+- **Minimal fix:** Sanitize all string values before CSV write:
+  ```python
+  def _sanitize_csv_value(val):
+      if isinstance(val, str) and val and val[0] in ('=', '+', '-', '@', '\t', '\r'):
+          return "'" + val
+      return val
+  ```
+  Apply to every value in every row before `writerow()`.
+- **Recommended regression test:** Test that `export_to_csv([{"message": "=1+1"}])` produces
+  a CSV where the cell value starts with `'=` (escaped) rather than `=`.
 
-These are all one-file, low-risk changes. Ship as a single PR.
+### HTML/XSS Injection in HTML Export
+- **Severity:** `HIGH`
+- **Category:** `SECURITY`
+- **Confidence:** `HIGH`
+- **Affected files:** `dashboard/export.py:266-340`
+- **Why it matters:** Finding fields (`title`, `tool`, `target`, `description`, `category`,
+  `cve_id`, `cwe_id`) are interpolated directly into HTML via f-strings without any escaping.
+  `html.escape` is not imported or used anywhere in `export.py`. An attacker controlling a
+  scanned repo can craft finding messages containing `<script>` tags or event handlers. When
+  a security analyst downloads and opens the HTML report, JavaScript executes in their browser.
+- **Proof / reasoning:** `export.py:329` — `<div class="finding-title">{title}</div>` where
+  `title = finding.get("message", ...)`. A finding with message
+  `<img src=x onerror=alert(document.cookie)>` would execute JavaScript. No CSP headers on
+  the HTML export either.
+- **Minimal fix:** Import `html.escape` and wrap all interpolated values:
+  ```python
+  from html import escape
+  title = escape(finding.get("message", finding.get("description", "Unknown issue")))
+  tool = escape(finding.get("tool", "unknown"))
+  # ... etc for all fields
+  ```
+- **Recommended regression test:** Test that `export_to_html([{"message": "<script>alert(1)</script>"}])`
+  contains `&lt;script&gt;` in the output, not literal `<script>`.
 
-| Task | File(s) | Time |
-|------|---------|------|
-| Enable SQLite WAL mode | `dashboard/db_adapter.py`, `orchestrator/db_adapter.py` | 20 min |
-| Dashboard non-root Dockerfile | `dashboard/Dockerfile`, `docker-compose.yml` | 30 min |
-| Remove `API_KEY_MANAGE` from OPERATOR | `dashboard/rbac.py`, `dashboard/app.py` | 20 min |
-| Add Docker Compose healthcheck | `docker-compose.yml` | 15 min |
-| Fix shallow clone depth | `orchestrator/scanners.py`, `orchestrator/main.py`, `config/settings.yaml` | 45 min |
-| Basic webhook URL validation | `dashboard/webhooks.py` | 45 min |
+### PDF Markup Injection
+- **Severity:** `MEDIUM`
+- **Category:** `SECURITY`
+- **Confidence:** `MEDIUM`
+- **Affected files:** `dashboard/export.py:548-554`
+- **Why it matters:** ReportLab's `Paragraph` class uses XML-like markup. Unescaped `<` and `>`
+  characters in finding fields (title, file, tool) can break PDF generation or inject unexpected
+  formatting. While this is not directly exploitable for code execution, it causes DoS
+  (report generation crashes) and potential content manipulation.
+- **Proof / reasoning:** `export.py:548` — `f"<b>{idx}. {title}</b><br/>"` where `title`
+  may contain `</b>` or `<para>` tags that ReportLab will interpret.
+- **Minimal fix:** Use `xml.sax.saxutils.escape()` on all interpolated values in PDF paragraphs.
+- **Recommended regression test:** Test that `export_to_pdf([{"message": "</b><i>injected</i>"}])`
+  does not crash and produces valid PDF output.
 
-**Expected outcome:** Zero production-crash bugs, zero trivially exploitable security issues.
+### Schema Divergence Between Orchestrator and Dashboard
+- **Severity:** `MEDIUM`
+- **Category:** `CORRECTNESS`
+- **Confidence:** `HIGH`
+- **Affected files:** `orchestrator/storage.py:18-75`, `dashboard/db.py:314-369`
+- **Why it matters:** The dashboard schema adds `DEFAULT ''` and `DEFAULT '{}'` on four columns
+  (`raw_report_dir`, `normalized_report_path`, `artifacts_json`, `tools_json`) that the
+  orchestrator schema defines as bare `NOT NULL`. If the dashboard initializes the DB first and
+  the orchestrator inserts data without these fields, behavior differs. More critically, this
+  divergence will grow over time without a single source of truth.
+- **Proof / reasoning:** Direct comparison of SCHEMA_SQL strings in both files shows four
+  DEFAULT value mismatches. The schemas are maintained independently with no shared module.
+- **Minimal fix:** Extract schema to a shared `common/schema.py` or have one component import
+  from the other. Synchronize DEFAULT values.
+- **Recommended regression test:** Test that both components produce byte-identical schemas on
+  a fresh database (compare `sqlite_master` output).
 
-### Phase 2: Medium improvements — up to 1 week
+### PostgreSQL INSERT OR REPLACE Not Adapted
+- **Severity:** `MEDIUM`
+- **Category:** `BUG`
+- **Confidence:** `HIGH`
+- **Affected files:** `dashboard/db_adapter.py:247-265`, `orchestrator/db_adapter.py:187-198`,
+  `dashboard/notifications.py:292`
+- **Why it matters:** Both `adapt_schema()` functions only transform `AUTOINCREMENT → SERIAL`.
+  The docstring in `dashboard/db_adapter.py:253` claims to handle `INSERT OR REPLACE → INSERT
+  ... ON CONFLICT DO UPDATE` but the implementation does not. `notifications.py:292` uses
+  `INSERT OR REPLACE INTO notification_preferences` which will crash on PostgreSQL with a
+  syntax error.
+- **Proof / reasoning:** Reading `adapt_schema()` in both files — only one `re.sub` call for
+  AUTOINCREMENT exists. No transformation for `INSERT OR REPLACE`. PostgreSQL does not support
+  this SQLite-specific syntax.
+- **Minimal fix:** Add regex transformation in `adapt_schema()`, or rewrite the notification
+  query to use standard `INSERT ... ON CONFLICT DO UPDATE SET ...` syntax (which works on both
+  SQLite 3.24+ and PostgreSQL).
+- **Recommended regression test:** Test `adapt_schema("INSERT OR REPLACE INTO foo ...")` returns
+  valid PostgreSQL syntax.
 
-| Task | File(s) | Time |
-|------|---------|------|
-| Git commit hash in cache key | `orchestrator/main.py`, `orchestrator/cache.py` | 2h |
-| Schema single source of truth + migration table | `orchestrator/storage.py`, `dashboard/db.py` | 1 day |
-| Prometheus metrics | `dashboard/monitoring.py`, `dashboard/requirements.txt` | 3h |
-| Fix `INSERT OR REPLACE` PostgreSQL adaptation | `dashboard/db_adapter.py`, `orchestrator/db_adapter.py` | 2h |
-| CI: add Python 3.12 to matrix | `.github/workflows/ci.yml` | 30 min |
-| CI: add `pip audit` for dependency CVE scanning | `.github/workflows/ci.yml` | 30 min |
-| Add `healthcheck` test in CI | `.github/workflows/ci.yml` | 30 min |
-
-### Phase 3: Architectural changes — next sprint
-
-| Task | Description |
-|------|-------------|
-| `app.py` decomposition | Extract routers, rate limiter, scan runner into separate modules |
-| Async job queue | Replace `ThreadPoolExecutor` + `subprocess.run` with a proper async job queue (Celery + Redis, or even just a SQLite-backed job table polled by the orchestrator). Persist job state across restarts. |
-| `structlog` adoption | Replace `logging.basicConfig` with structured JSON logging throughout. `structlog` is already a dependency but unused. |
-| Type annotation pass | `app.py` and `db.py` use `dict[str, Any]` everywhere. Add Pydantic request/response models for all API endpoints. This would have caught the OPERATOR privilege escalation issue automatically. |
+### No CSRF Token Protection
+- **Severity:** `LOW`
+- **Category:** `SECURITY`
+- **Confidence:** `MEDIUM`
+- **Affected files:** `dashboard/app.py` (all POST/PATCH/DELETE endpoints)
+- **Why it matters:** No CSRF middleware is configured. Mutation endpoints like
+  `POST /api/scan/trigger`, `POST /api/keys`, `POST /api/webhooks` accept form-encoded data.
+  Without CSRF tokens, a malicious website could submit a form on behalf of an authenticated
+  user whose browser holds a valid session cookie.
+- **Proof / reasoning:** No import of any CSRF library. No CSRF token generation or validation
+  in any middleware or endpoint. Session cookie uses `SameSite=Lax` which provides significant
+  mitigation (blocks cross-origin POST from third-party sites in modern browsers), reducing
+  practical exploitability.
+- **Minimal fix:** Given `SameSite=Lax` is already set and the dashboard is typically accessed
+  by a single admin user, the residual risk is low. For defense-in-depth, add CSRF middleware
+  (e.g., `fastapi-csrf-protect` or custom `X-CSRF-Token` header validation).
+- **Recommended regression test:** Test that a POST request without a valid CSRF token (from a
+  different origin) returns 403.
 
 ---
 
-## E. Suggested First Implementation Batch
+## 4. Highest-ROI Improvements
 
-Ship all of Phase 1 in a single PR. Here is the exact implementation order to minimise conflicts:
-
-1. `dashboard/db_adapter.py` → add WAL PRAGMA (no test changes needed, existing tests pass)
-2. `orchestrator/db_adapter.py` → add WAL PRAGMA (same)
-3. `dashboard/Dockerfile` → add non-root user (build test in CI validates)
-4. `docker-compose.yml` → add healthcheck + `user:` field
-5. `dashboard/rbac.py` → remove `API_KEY_MANAGE` from OPERATOR
-6. `dashboard/app.py` → add role-ceiling check in key creation endpoint
-7. `orchestrator/scanners.py` + `orchestrator/main.py` + `config/settings.yaml` → configurable clone depth
-8. `dashboard/webhooks.py` → webhook URL validation
-
-**Test additions for this batch:**
-- `test_rbac.py`: OPERATOR cannot create ADMIN key
-- `test_webhooks.py`: SSRF URL cases rejected
-- `test_scanners.py`: clone depth=0 omits `--depth` flag
-
-**Estimated total time:** 4–5 hours of focused implementation + 1–2 hours of test writing.
+| Priority | Title | Why | Effort | Risk if Ignored |
+|----------|-------|-----|--------|-----------------|
+| 1 | HTML escape all export outputs | XSS via HTML/PDF export download. Attacker controls scanned repo content. | 1h | HIGH — analyst workstation compromise |
+| 2 | CSV injection sanitization | Formula execution when CSV opened in Excel. Same attack vector. | 30min | HIGH — code execution on analyst machine |
+| 3 | Fix INSERT OR REPLACE for PostgreSQL | PostgreSQL deployments crash on notification preference writes. | 1h | MEDIUM — blocks PostgreSQL adoption |
+| 4 | Deduplicate SCHEMA_SQL | Schema drift already introduced (DEFAULT mismatches). Will compound. | 2h | MEDIUM — silent data inconsistencies |
+| 5 | Synchronize DEFAULT values | Four columns have different defaults between orchestrator/dashboard. | 30min | MEDIUM — insertion failures under edge cases |
+| 6 | PDF markup escaping | ReportLab crashes on findings with XML-like characters in message. | 30min | LOW — DoS on report generation |
+| 7 | CSRF middleware | Defense-in-depth for form-based mutations. SameSite=Lax mitigates most risk. | 2h | LOW — mitigated by SameSite=Lax |
+| 8 | APIRouter decomposition of app.py | 1551 lines still in one file. All routes defined here. DX friction. | 1 day | LOW — maintainability only |
+| 9 | Startup warning for insecure defaults | Warn if SESSION_SECRET is placeholder or HTTPS_ONLY not set. | 30min | LOW — operational oversight |
+| 10 | Structured logging adoption | `structlog` is a dependency but unused. JSON logs needed for prod. | 3h | LOW — observability gap |
 
 ---
 
-## Additional Notes
+## 5. Testing Gaps
 
-**Where SQLite is still fine:**
-- Single-server self-hosted deployments
-- Up to ~100 scans/day with findings in the low tens of thousands
-- Single-region deployments without HA requirements
-- Development and CI environments
+The following security-sensitive behaviors lack dedicated test coverage:
 
-**Where SQLite becomes a bottleneck:**
-- Multiple concurrent scan workers writing simultaneously (>4 concurrent targets)
-- Finding tables growing past ~500K rows (query plans degrade without better indexes)
-- Multi-node deployments (SQLite cannot be shared across machines)
-- When `webhook_deliveries` table grows unboundedly (no retention policy for this table — add one)
+1. **CSV injection** — No test in `test_export.py` verifies formula character sanitization.
+   All test data uses benign values.
 
-**PostgreSQL upgrade trigger:**
-Switch to PostgreSQL when `max_concurrent_targets > 4` consistently, or when the team needs
-replicated read access to findings from multiple machines. The migration path already exists
-and is tested.
+2. **HTML/XSS in exports** — No test verifies that HTML-special characters in findings are
+   escaped in HTML export output.
+
+3. **PDF markup injection** — No test verifies that ReportLab Paragraph-breaking characters
+   in finding fields are handled safely.
+
+4. **CSRF** — No test verifies that cross-origin form submissions are rejected.
+
+5. **PostgreSQL INSERT OR REPLACE** — No test exercises `adapt_schema()` against
+   `INSERT OR REPLACE` SQL statements. The docstring claims the transformation exists but
+   the code does not implement it.
+
+6. **Schema consistency** — No test verifies that `orchestrator/storage.py` and
+   `dashboard/db.py` produce identical schemas.
+
+7. **Rate limiting bypass** — Tests verify rate limiting works, but no test checks for
+   bypass via `X-Forwarded-For` header spoofing or IPv4/IPv6 address variation.
+
+8. **Session fixation** — No test verifies that session ID is regenerated after login.
+
+9. **Concurrent SQLite access** — WAL mode is tested for enablement, but no integration test
+   simulates concurrent writer + reader to verify no `OperationalError`.
+
+10. **Webhook DNS rebinding over time** — Tests verify initial DNS resolution check, but no
+    test verifies that re-resolution at trigger time prevents TOCTOU DNS rebinding.
 
 ---
 
-*This review covers code as of commit `c64e338` on branch `claude/security-platform-review-MqdAz`.*
+## 6. Suggested Patch Plan
+
+### Today (< 4 hours)
+- [ ] Add `html.escape()` to all interpolated values in `export.py` HTML export
+- [ ] Add CSV injection sanitization (prefix-strip formula characters) in `export.py` and
+      streaming CSV in `app.py`
+- [ ] Add `xml.sax.saxutils.escape()` to PDF Paragraph values in `export.py`
+- [ ] Add regression tests for all three export injection types
+- [ ] Synchronize DEFAULT values between orchestrator and dashboard SCHEMA_SQL
+
+### This week
+- [ ] Fix `adapt_schema()` to handle `INSERT OR REPLACE` → `INSERT ... ON CONFLICT DO UPDATE`
+- [ ] Deduplicate SCHEMA_SQL into a shared module importable by both components
+- [ ] Add startup warning when `SESSION_SECRET` is the default placeholder
+- [ ] Add startup warning when `DASHBOARD_HTTPS_ONLY` is not set and secret looks custom
+- [ ] Add test for schema consistency between orchestrator and dashboard
+
+### Next sprint
+- [ ] Add CSRF middleware for form-based mutation endpoints
+- [ ] Decompose `app.py` routes into FastAPI `APIRouter` modules
+- [ ] Adopt `structlog` for structured JSON logging
+- [ ] Add integration test for concurrent SQLite read/write under WAL mode
+- [ ] Add rate limiting bypass test (X-Forwarded-For spoofing)
+
+---
+
+## 7. Overall Verdict
+
+**Is this safe for personal use?**
+Yes. The platform is well-built with solid auth, proper password hashing (bcrypt), rate
+limiting, and now comprehensive SSRF protection. All critical findings from the prior review
+are fixed.
+
+**Is this safe for internal company use?**
+Yes, with caveats. The export injection vulnerabilities mean that a scanned repository
+controlled by a malicious actor could produce findings that execute code when an analyst opens
+the CSV in Excel or views the HTML report. In an internal setting where all scanned repos are
+trusted, this risk is acceptable. Fix the export sanitization before scanning untrusted repos.
+
+**Is this safe for Internet exposure?**
+Not yet. The export injection vulnerabilities (CSV, HTML/XSS, PDF) must be fixed first. The
+`INSERT OR REPLACE` PostgreSQL bug would crash notification writes. CSRF protection should be
+added for defense-in-depth. After these fixes, the platform would be suitable for Internet
+exposure behind TLS with `DASHBOARD_HTTPS_ONLY=1`.
+
+**What must be fixed before production?**
+1. HTML/XSS escaping in all export outputs (export.py)
+2. CSV injection sanitization (export.py, app.py streaming CSV)
+3. PostgreSQL `INSERT OR REPLACE` adaptation (if PostgreSQL is used)
+4. Schema DEFAULT value synchronization
+
+---
+
+*This review covers code as of commit `f91f284` on branch `claude/complete-claude-md-tasks-sV7d1`.*

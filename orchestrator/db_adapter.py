@@ -195,4 +195,5 @@ def adapt_schema(schema_sql: str) -> str:
         sql,
         flags=re.IGNORECASE,
     )
+    sql = re.sub(r"INSERT\s+OR\s+REPLACE\s+INTO", "INSERT INTO", sql, flags=re.IGNORECASE)
     return sql

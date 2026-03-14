@@ -214,6 +214,7 @@ build:orchestrator:
       IMAGE_TAG="${DOCKER_IMAGE_ORCHESTRATOR}:${CI_COMMIT_SHORT_SHA}"
       IMAGE_LATEST="${DOCKER_IMAGE_ORCHESTRATOR}:latest"
       docker build
+        -f orchestrator/Dockerfile
         --cache-from "${IMAGE_LATEST}"
         --build-arg BUILDKIT_INLINE_CACHE=1
         --label "org.opencontainers.image.revision=${CI_COMMIT_SHA}"
@@ -221,7 +222,7 @@ build:orchestrator:
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}"
         -t "${IMAGE_TAG}"
         -t "${IMAGE_LATEST}"
-        ./orchestrator
+        .
       docker push "${IMAGE_TAG}"
       docker push "${IMAGE_LATEST}"
       echo "IMAGE_ORCHESTRATOR=${IMAGE_TAG}" >> build.env
@@ -243,6 +244,7 @@ build:dashboard:
       IMAGE_TAG="${DOCKER_IMAGE_DASHBOARD}:${CI_COMMIT_SHORT_SHA}"
       IMAGE_LATEST="${DOCKER_IMAGE_DASHBOARD}:latest"
       docker build
+        -f dashboard/Dockerfile
         --cache-from "${IMAGE_LATEST}"
         --build-arg BUILDKIT_INLINE_CACHE=1
         --label "org.opencontainers.image.revision=${CI_COMMIT_SHA}"
@@ -250,7 +252,7 @@ build:dashboard:
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}"
         -t "${IMAGE_TAG}"
         -t "${IMAGE_LATEST}"
-        ./dashboard
+        .
       docker push "${IMAGE_TAG}"
       docker push "${IMAGE_LATEST}"
       echo "IMAGE_DASHBOARD=${IMAGE_TAG}" >> build.env

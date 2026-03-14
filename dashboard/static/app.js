@@ -31,10 +31,30 @@ function debounce(fn, delay) {
   };
 }
 
+// CSRF token cache — fetched once, reused for all mutating requests.
+let _csrfToken = null;
+
+async function getCsrfToken() {
+  if (!_csrfToken) {
+    const res = await fetch('/api/csrf-token');
+    if (res.ok) {
+      const data = await res.json();
+      _csrfToken = data.csrf_token || '';
+    }
+  }
+  return _csrfToken;
+}
+
+const _MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 async function apiFetch(url, options = {}, timeoutMs = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    if (_MUTATING_METHODS.has((options.method || 'GET').toUpperCase())) {
+      const token = await getCsrfToken();
+      options.headers = { 'X-CSRF-Token': token, ...options.headers };
+    }
     const res = await fetch(url, { signal: controller.signal, ...options });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -53,6 +73,10 @@ async function apiFetch(url, options = {}, timeoutMs = 30000) {
 
 /** Like apiFetch but does not parse JSON — validates res.ok and returns the raw Response. */
 async function apiSend(url, options = {}) {
+  if (_MUTATING_METHODS.has((options.method || 'GET').toUpperCase())) {
+    const token = await getCsrfToken();
+    options.headers = { 'X-CSRF-Token': token, ...options.headers };
+  }
   const res = await fetch(url, options);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));

@@ -417,6 +417,8 @@ createApp({
     // ── Navigation ─────────────────────────────────────────────────────────────────────────────────────
 
     async navigate(page) {
+      // Skip redundant navigation to the same page (prevents chart destruction)
+      if (page === this.currentPage && !this._refreshing) return;
       this.currentPage = page;
       // Update URL hash for bookmarkability and back/forward support
       history.pushState({ page }, '', '#' + page);
@@ -475,8 +477,9 @@ createApp({
 
     startScanPolling(triggerTime) {
       this.hasRunningScans = true;
-      // Always update so concurrent triggers extend the window
-      this._pollTriggerTime = triggerTime || new Date().toISOString();
+      // Normalise to epoch ms so we can compare reliably regardless of ISO format
+      // (JS uses "Z" suffix, Python uses "+00:00" — string compare breaks).
+      this._pollTriggerEpoch = new Date(triggerTime || Date.now()).getTime();
       this._pollDeadline = Date.now() + 37 * 60 * 1000; // 37 min (> 30 min subprocess timeout)
       if (this.scanPollingInterval) return;
       this.scanPollingInterval = setInterval(async () => {
@@ -485,14 +488,20 @@ createApp({
           const items = result.items || [];
           this.recentScans = items.slice(0, 5);
           if (this.currentPage === 'scans') this.scans = items;
-          // Stop when a completed scan that started after our trigger appears,
-          // or when the deadline is exceeded (scan timed out / failed silently).
-          const scanCompleted = items.some(s =>
-            s.status !== 'RUNNING' && s.created_at >= this._pollTriggerTime
+          // Check if there are still RUNNING scans that started after our trigger
+          const stillRunning = items.some(s =>
+            s.status === 'RUNNING' && new Date(s.created_at).getTime() >= this._pollTriggerEpoch
           );
-          if (scanCompleted || Date.now() > this._pollDeadline) {
+          if (!stillRunning || Date.now() > this._pollDeadline) {
             this.hasRunningScans = false;
             this.stopScanPolling();
+            // Notify user
+            const failed = items.find(s => s.status === 'FAILED' && new Date(s.created_at).getTime() >= this._pollTriggerEpoch);
+            if (failed) {
+              this.showToast('Scan failed: ' + (failed.error_message || 'unknown error'), 'error');
+            } else {
+              this.showToast('Scan completed successfully');
+            }
             try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
             if (this.currentPage === 'dashboard') this.initDashboardCharts();
           }

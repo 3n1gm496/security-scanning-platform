@@ -25,9 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Build context is ./orchestrator (both CI and docker-compose use this directory
-# as the build context). All COPY paths are relative to ./orchestrator/.
-COPY requirements.txt /tmp/requirements.txt
+# Build context is the repository root. All COPY paths are relative to the
+# repo root so that the shared common/ package can be included.
+COPY orchestrator/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     pip install --no-cache-dir semgrep checkov bandit
 
@@ -85,7 +85,8 @@ RUN NUCLEI_VERSION_PLAIN="${NUCLEI_VERSION#v}" && \
 # as a separate container (see config/settings.yaml for setup instructions).
 RUN pip install --no-cache-dir python-owasp-zap-v2.4
 
-COPY . /app/orchestrator
+COPY orchestrator/ /app/orchestrator
+COPY common/ /app/common
 
 WORKDIR /app/orchestrator
 RUN pip install -e . && \

@@ -132,7 +132,7 @@ def test_trigger_scan_local_valid_path_accepted(client, admin_headers, tmp_path)
     target_dir.mkdir()
 
     with patch.dict(os.environ, {"WORKSPACE_DIR": str(workspace)}):
-        with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+        with patch("routers.scan_routes.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
             resp = client.post(
                 "/api/scan/trigger",
                 data={
@@ -149,7 +149,7 @@ def test_trigger_scan_local_valid_path_accepted(client, admin_headers, tmp_path)
 
 def test_trigger_scan_git_url_not_path_validated(client, admin_headers):
     """git and image targets must NOT be subject to path validation."""
-    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+    with patch("routers.scan_routes.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
         resp = client.post(
             "/api/scan/trigger",
             data={
@@ -178,7 +178,7 @@ def test_trigger_scan_unauthenticated(client):
 
 def test_trigger_scan_url_valid(client, admin_headers):
     """A valid https:// URL target must pass validation and reach run_scan."""
-    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+    with patch("routers.scan_routes.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
         resp = client.post(
             "/api/scan/trigger",
             data={"target_type": "url", "target": "https://example.com", "name": "dast-scan"},
@@ -190,7 +190,7 @@ def test_trigger_scan_url_valid(client, admin_headers):
 
 def test_trigger_scan_url_http_valid(client, admin_headers):
     """A valid http:// URL target must also pass validation."""
-    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+    with patch("routers.scan_routes.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
         resp = client.post(
             "/api/scan/trigger",
             data={"target_type": "url", "target": "http://internal.example.com", "name": "dast-http"},
@@ -222,7 +222,7 @@ def test_trigger_scan_url_no_scheme(client, admin_headers):
 
 def test_trigger_scan_url_not_path_validated(client, admin_headers):
     """URL targets must NOT be subject to path traversal validation."""
-    with patch("app.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
+    with patch("routers.scan_routes.run_scan", return_value={"status": "completed", "output": {}, "returncode": 0}):
         resp = client.post(
             "/api/scan/trigger",
             data={"target_type": "url", "target": "https://example.com/path/../other", "name": "url-path"},

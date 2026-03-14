@@ -68,8 +68,9 @@ def test_notification_preferences_api_flow(isolated_db):
     }
 
     with TestClient(app) as client:
-        # Authenticate
-        client.post("/login", data={"username": "testuser", "password": "testpass"})
+        # Authenticate with CSRF
+        from conftest import login_with_csrf
+        login_with_csrf(client)
 
         # 1. Save preferences
         save_response = client.post("/api/notifications/preferences", json=test_prefs)

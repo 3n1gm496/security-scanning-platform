@@ -30,6 +30,7 @@ from fastapi.testclient import TestClient
 
 import app as _app
 from app import _is_bcrypt_hash, _verify_password, app
+from routers import auth_routes as _auth_routes
 
 # ---------------------------------------------------------------------------
 # Unit tests for _is_bcrypt_hash
@@ -102,7 +103,7 @@ def client():
 
 def test_login_with_plain_text_password(client):
     """Login must succeed when DASHBOARD_PASSWORD is a plain-text value."""
-    with patch.object(_app, "USERNAME", "admin"), patch.object(_app, "PASSWORD_RAW", "myplainpass"):
+    with patch.object(_auth_routes, "USERNAME", "admin"), patch.object(_auth_routes, "PASSWORD_RAW", "myplainpass"):
         resp = client.post("/login", data={"username": "admin", "password": "myplainpass"}, follow_redirects=False)
     assert resp.status_code == 302
     assert resp.headers.get("location") == "/"
@@ -111,7 +112,7 @@ def test_login_with_plain_text_password(client):
 def test_login_with_bcrypt_hashed_password(client):
     """Login must succeed when DASHBOARD_PASSWORD is a bcrypt hash."""
     hashed = bcrypt.hashpw(b"securepass", bcrypt.gensalt()).decode()
-    with patch.object(_app, "USERNAME", "admin"), patch.object(_app, "PASSWORD_RAW", hashed):
+    with patch.object(_auth_routes, "USERNAME", "admin"), patch.object(_auth_routes, "PASSWORD_RAW", hashed):
         resp = client.post("/login", data={"username": "admin", "password": "securepass"}, follow_redirects=False)
     assert resp.status_code == 302
     assert resp.headers.get("location") == "/"
@@ -119,7 +120,7 @@ def test_login_with_bcrypt_hashed_password(client):
 
 def test_login_rejects_wrong_password_plain(client):
     """Login must fail with 401 when the plain-text password is wrong."""
-    with patch.object(_app, "USERNAME", "admin"), patch.object(_app, "PASSWORD_RAW", "correctpass"):
+    with patch.object(_auth_routes, "USERNAME", "admin"), patch.object(_auth_routes, "PASSWORD_RAW", "correctpass"):
         resp = client.post("/login", data={"username": "admin", "password": "wrongpass"}, follow_redirects=False)
     assert resp.status_code == 401
 
@@ -127,13 +128,13 @@ def test_login_rejects_wrong_password_plain(client):
 def test_login_rejects_wrong_password_bcrypt(client):
     """Login must fail with 401 when the bcrypt password is wrong."""
     hashed = bcrypt.hashpw(b"correctpass", bcrypt.gensalt()).decode()
-    with patch.object(_app, "USERNAME", "admin"), patch.object(_app, "PASSWORD_RAW", hashed):
+    with patch.object(_auth_routes, "USERNAME", "admin"), patch.object(_auth_routes, "PASSWORD_RAW", hashed):
         resp = client.post("/login", data={"username": "admin", "password": "wrongpass"}, follow_redirects=False)
     assert resp.status_code == 401
 
 
 def test_login_rejects_wrong_username(client):
     """Login must fail with 401 when the username is wrong."""
-    with patch.object(_app, "USERNAME", "admin"), patch.object(_app, "PASSWORD_RAW", "pass"):
+    with patch.object(_auth_routes, "USERNAME", "admin"), patch.object(_auth_routes, "PASSWORD_RAW", "pass"):
         resp = client.post("/login", data={"username": "notadmin", "password": "pass"}, follow_redirects=False)
     assert resp.status_code == 401

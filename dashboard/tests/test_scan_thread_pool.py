@@ -24,7 +24,8 @@ os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 from fastapi.testclient import TestClient
 
 import app as _app
-from app import app, _scan_executor
+from app import app
+from routers._shared import scan_executor as _scan_executor, MAX_SCAN_WORKERS as _MAX_SCAN_WORKERS
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -61,7 +62,7 @@ def test_scan_executor_is_thread_pool_executor():
 
 def test_scan_executor_max_workers_respects_env():
     """MAX_SCAN_WORKERS must be read from env and applied to the executor."""
-    assert _app.MAX_SCAN_WORKERS == int(os.environ.get("DASHBOARD_MAX_SCAN_WORKERS", "4"))
+    assert _MAX_SCAN_WORKERS == int(os.environ.get("DASHBOARD_MAX_SCAN_WORKERS", "4"))
 
 
 def test_trigger_scan_async_uses_executor(client, admin_headers):

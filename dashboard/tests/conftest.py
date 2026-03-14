@@ -63,3 +63,12 @@ def isolated_db():
         _rl._rate_buckets.clear()
     except Exception:
         pass
+
+
+def login_with_csrf(client, username="testuser", password="testpass"):
+    """Log in and set the CSRF token header on the client for subsequent requests."""
+    client.post("/login", data={"username": username, "password": password})
+    csrf_resp = client.get("/api/csrf-token")
+    token = csrf_resp.json().get("csrf_token", "")
+    client.headers["X-CSRF-Token"] = token
+    return client

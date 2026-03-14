@@ -100,7 +100,8 @@ def seeded_client(isolated_db):
         finding_id = row["id"] if row else 1
 
     with TestClient(app) as c:
-        c.post("/login", data={"username": "testuser", "password": "testpass"})
+        from conftest import login_with_csrf
+        login_with_csrf(c)
         yield c
 
 

@@ -426,8 +426,7 @@ class TestMainCLI:
         """main() must exit 0 for a clean local scan and emit valid JSON."""
         db_path = str(tmp_path / "scans.db")
         settings_path = tmp_path / "settings.yaml"
-        settings_path.write_text(
-            f"""
+        settings_path.write_text(f"""
 paths:
   db_path: {db_path}
   reports_dir: {tmp_path}/reports
@@ -450,8 +449,7 @@ execution:
 cache:
   enabled: false
 retention: {{}}
-"""
-        )
+""")
         target_dir = tmp_path / "source"
         target_dir.mkdir()
 

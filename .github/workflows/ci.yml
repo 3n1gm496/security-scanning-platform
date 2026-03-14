@@ -132,7 +132,8 @@ jobs:
     - name: Build orchestrator image
       uses: docker/build-push-action@v5
       with:
-        context: ./orchestrator
+        context: .
+        file: orchestrator/Dockerfile
         push: false
         tags: security-scanner-orchestrator:test
 

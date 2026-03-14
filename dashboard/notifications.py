@@ -289,9 +289,16 @@ class NotificationPreferencesManager:
 
             conn.execute(
                 """
-                INSERT OR REPLACE INTO notification_preferences
+                INSERT INTO notification_preferences
                 (user_email, critical_alerts, high_alerts, scan_summaries, weekly_digest, preferred_channel)
                 VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_email) DO UPDATE SET
+                    critical_alerts = excluded.critical_alerts,
+                    high_alerts = excluded.high_alerts,
+                    scan_summaries = excluded.scan_summaries,
+                    weekly_digest = excluded.weekly_digest,
+                    preferred_channel = excluded.preferred_channel,
+                    updated_at = CURRENT_TIMESTAMP
             """,
                 (
                     user_email,

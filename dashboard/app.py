@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from csrf import CSRFMiddleware
 
 from db import (
     cache_hit_stats,
@@ -78,6 +79,7 @@ from export import (
     export_to_sarif,
     export_to_html,
     export_to_pdf,
+    _sanitize_csv_row,
 )
 from analytics import (
     calculate_risk_score,
@@ -168,6 +170,10 @@ MAX_SCAN_WORKERS = int(os.getenv("DASHBOARD_MAX_SCAN_WORKERS", "4"))
 HTTPS_ONLY = os.getenv("DASHBOARD_HTTPS_ONLY", "0").strip().lower() in ("1", "true", "yes")
 
 app = FastAPI(title=APP_TITLE)
+app.add_middleware(
+    CSRFMiddleware,
+    exempt_paths={"/login", "/api/health", "/api/ready", "/api/metrics", "/metrics"},
+)
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
@@ -346,6 +352,13 @@ async def login(
 def logout(request: Request) -> HTMLResponse:
     request.session.clear()
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
+
+
+@app.get("/api/csrf-token")
+def csrf_token(request: Request):
+    """Return the CSRF token for the current session."""
+    token = request.session.get("csrf_token", "")
+    return {"csrf_token": token}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -718,7 +731,7 @@ def export_findings_endpoint(
                     buf = io.StringIO()
                     w = csv.DictWriter(buf, fieldnames=all_fields)
                     for row in batch:
-                        w.writerow(row)
+                        w.writerow(_sanitize_csv_row(row))
                     yield buf.getvalue()
 
             return StreamingResponse(

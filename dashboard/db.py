@@ -2,9 +2,17 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+# Make common package importable when running from the dashboard directory
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+from common.schema import SCHEMA_SQL, MIGRATIONS as _MIGRATIONS
 from db_adapter import get_connection
 from logging_config import get_logger
 
@@ -311,69 +319,8 @@ def cache_hit_trend(db_path: str, days: int = 14) -> list[dict[str, Any]]:
     return payload
 
 
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS scans (
-    id TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL,
-    finished_at TEXT NOT NULL,
-    target_type TEXT NOT NULL,
-    target_name TEXT NOT NULL,
-    target_value TEXT NOT NULL,
-    status TEXT NOT NULL,
-    policy_status TEXT NOT NULL,
-    findings_count INTEGER NOT NULL DEFAULT 0,
-    critical_count INTEGER NOT NULL DEFAULT 0,
-    high_count INTEGER NOT NULL DEFAULT 0,
-    medium_count INTEGER NOT NULL DEFAULT 0,
-    low_count INTEGER NOT NULL DEFAULT 0,
-    info_count INTEGER NOT NULL DEFAULT 0,
-    unknown_count INTEGER NOT NULL DEFAULT 0,
-    raw_report_dir TEXT NOT NULL DEFAULT '',
-    normalized_report_path TEXT NOT NULL DEFAULT '',
-    artifacts_json TEXT NOT NULL DEFAULT '{}',
-    tools_json TEXT NOT NULL DEFAULT '[]',
-    error_message TEXT
-);
-CREATE TABLE IF NOT EXISTS findings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    scan_id TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    target_type TEXT NOT NULL,
-    target_name TEXT NOT NULL,
-    tool TEXT NOT NULL,
-    category TEXT NOT NULL,
-    severity TEXT NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL,
-    file TEXT,
-    line INTEGER,
-    package TEXT,
-    version TEXT,
-    cve TEXT,
-    remediation TEXT,
-    raw_reference TEXT,
-    fingerprint TEXT,
-    FOREIGN KEY (scan_id) REFERENCES scans(id)
-);
-CREATE INDEX IF NOT EXISTS idx_findings_scan_id ON findings(scan_id);
-CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
-CREATE INDEX IF NOT EXISTS idx_findings_tool ON findings(tool);
-CREATE INDEX IF NOT EXISTS idx_findings_target_name ON findings(target_name);
-CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at);
 
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version     INTEGER PRIMARY KEY,
-    description TEXT    NOT NULL,
-    applied_at  TEXT    NOT NULL
-);
-"""
-
-# ---------------------------------------------------------------------------
-# Versioned migrations (shared version numbering with orchestrator/storage.py)
-# ---------------------------------------------------------------------------
-_MIGRATIONS: list[tuple[int, str, str]] = [
-    (1, "baseline marker", ""),
-]
+# SCHEMA_SQL and _MIGRATIONS are imported from common.schema (single source of truth)
 
 
 def _run_migrations(db_path: str) -> None:

@@ -6,8 +6,31 @@ import csv
 import json
 import os
 from datetime import datetime, timezone
+from html import escape as html_escape
 from io import StringIO, BytesIO
 from typing import List, Dict, Any
+from xml.sax.saxutils import escape as xml_escape
+
+
+# ---------------------------------------------------------------------------
+# Sanitisation helpers
+# ---------------------------------------------------------------------------
+
+# Characters that spreadsheet applications interpret as formula starters.
+_CSV_FORMULA_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize_csv_value(val: Any) -> Any:
+    """Prefix-escape string values that start with formula characters to prevent
+    CSV injection when the file is opened in Excel / LibreOffice Calc."""
+    if isinstance(val, str) and val and val[0] in _CSV_FORMULA_CHARS:
+        return "'" + val
+    return val
+
+
+def _sanitize_csv_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply CSV injection sanitisation to every value in a row dict."""
+    return {k: _sanitize_csv_value(v) for k, v in row.items()}
 
 # SARIF format version
 SARIF_VERSION = "2.1.0"
@@ -44,7 +67,7 @@ def export_to_csv(findings: List[Dict[str, Any]]) -> str:
     writer.writeheader()
 
     for finding in findings:
-        writer.writerow(finding)
+        writer.writerow(_sanitize_csv_row(finding))
 
     return output.getvalue()
 
@@ -263,8 +286,8 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
     <div class="header">
         <h1>Security Scan Report</h1>
         <p>Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
-        {f'<p>Scan ID: {scan_info.get("scan_id")}</p>' if scan_info.get("scan_id") else ''}
-        {f'<p>Target: {scan_info.get("target")}</p>' if scan_info.get("target") else ''}
+        {f'<p>Scan ID: {html_escape(str(scan_info.get("scan_id")))}</p>' if scan_info.get("scan_id") else ''}
+        {f'<p>Target: {html_escape(str(scan_info.get("target")))}</p>' if scan_info.get("target") else ''}
     </div>
 
     <div class="summary">
@@ -304,13 +327,13 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
 """
 
         for finding in findings_list:
-            title = finding.get("message", finding.get("description", "Unknown issue"))
-            tool = finding.get("tool", "unknown")
-            target = finding.get("target", finding.get("file", ""))
-            category = finding.get("category", "")
-            cve_id = finding.get("cve_id", "")
-            cwe_id = finding.get("cwe_id", "")
-            cvss_score = finding.get("cvss_score", "")
+            title = html_escape(str(finding.get("message", finding.get("description", "Unknown issue"))))
+            tool = html_escape(str(finding.get("tool", "unknown")))
+            target = html_escape(str(finding.get("target", finding.get("file", ""))))
+            category = html_escape(str(finding.get("category", "")))
+            cve_id = html_escape(str(finding.get("cve_id", "")))
+            cwe_id = html_escape(str(finding.get("cwe_id", "")))
+            cvss_score = html_escape(str(finding.get("cvss_score", "")))
 
             # Build metadata line
             meta_parts = [f"<strong>Tool:</strong> {tool}", f"<strong>Target:</strong> {target}"]
@@ -337,7 +360,7 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
             if "description" in finding and finding["description"] != title:
                 html += f"""
             <div class="finding-description">
-                {finding["description"]}
+                {html_escape(str(finding["description"]))}
             </div>
 """
 
@@ -541,24 +564,25 @@ def export_to_pdf(
         story.append(Spacer(1, 0.1 * inch))
 
         for idx, finding in enumerate(findings_list[:50], 1):  # Limit to 50 per severity
-            title = finding.get("title", "Untitled")
-            tool = finding.get("tool", "unknown")
-            category = finding.get("category", "N/A")
+            title = xml_escape(str(finding.get("title", "Untitled")))
+            tool = xml_escape(str(finding.get("tool", "unknown")))
+            category = xml_escape(str(finding.get("category", "N/A")))
 
             finding_text = f"<b>{idx}. {title}</b><br/>"
             finding_text += f"Tool: {tool} | Category: {category}<br/>"
 
             if finding.get("file"):
-                finding_text += f"Location: {finding['file']}"
+                finding_text += f"Location: {xml_escape(str(finding['file']))}"
                 if finding.get("line"):
                     finding_text += f":{finding['line']}"
                 finding_text += "<br/>"
 
             if finding.get("description"):
-                desc = finding["description"][:200]
-                if len(finding["description"]) > 200:
+                raw_desc = str(finding["description"])
+                desc = raw_desc[:200]
+                if len(raw_desc) > 200:
                     desc += "..."
-                finding_text += f"<i>{desc}</i><br/>"
+                finding_text += f"<i>{xml_escape(desc)}</i><br/>"
 
             story.append(Paragraph(finding_text, styles["Normal"]))
             story.append(Spacer(1, 0.1 * inch))

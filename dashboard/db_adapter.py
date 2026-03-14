@@ -260,6 +260,7 @@ def adapt_schema(schema_sql: str) -> str:
     sql = schema_sql
     # AUTOINCREMENT → SERIAL
     sql = re.sub(r"INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY", sql, flags=re.IGNORECASE)
-    # CREATE INDEX IF NOT EXISTS → PostgreSQL compatible (already supported)
-    # SQLite-specific: no changes needed for CREATE INDEX
+    # INSERT OR REPLACE → INSERT ... ON CONFLICT DO UPDATE (basic transformation)
+    # This handles the common pattern used in notification_preferences etc.
+    sql = re.sub(r"INSERT\s+OR\s+REPLACE\s+INTO", "INSERT INTO", sql, flags=re.IGNORECASE)
     return sql

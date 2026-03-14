@@ -389,9 +389,7 @@ class ScansPaginator:
 
         if search:
             search_param = f"%{search}%"
-            where_clauses.append(
-                "(CAST(id AS TEXT) LIKE ? OR target_name LIKE ? OR error_message LIKE ?)"
-            )
+            where_clauses.append("(CAST(id AS TEXT) LIKE ? OR target_name LIKE ? OR error_message LIKE ?)")
             params.extend([search_param] * 3)
 
         if target_filter:

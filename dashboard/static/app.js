@@ -1253,7 +1253,7 @@ createApp({
       const canvas = this.$refs.toolEffChart;
       if (!canvas || !this.analyticsData.toolEffectiveness) return;
       if (this.charts.toolEff) this.charts.toolEff.destroy();
-      const tools = this.analyticsData.toolEffectiveness.slice(0, 8);
+      const tools = this.analyticsData.toolEffectiveness;
       this.charts.toolEff = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {

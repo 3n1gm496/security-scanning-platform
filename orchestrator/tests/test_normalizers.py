@@ -213,6 +213,7 @@ def test_semgrep_roundtrip():
     findings = normalize_semgrep("s", TARGET, raw, "ref", base_path="/tmp")
     assert findings and findings[0].tool == "semgrep"
 
+
 def test_normalize_zap_informational():
     """ZAP alerts with risk='Informational' or 'Inform' should be normalized to 'INFO'."""
     raw = [

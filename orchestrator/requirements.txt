@@ -22,20 +22,28 @@ psycopg2-binary==2.9.11
     # via -r requirements.in
 pygments==2.19.2
     # via rich
+python-owasp-zap-v2-4==0.1.0
+    # via -r requirements.in
 pyyaml==6.0.3
     # via
     #   -r requirements.in
     #   bandit
 requests==2.32.5
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   zaproxy
 rich==14.3.3
     # via bandit
+six==1.17.0
+    # via zaproxy
 stevedore==5.7.0
     # via bandit
 tenacity==9.1.4
     # via -r requirements.in
 urllib3==2.6.3
     # via requests
+zaproxy==0.5.0
+    # via python-owasp-zap-v2-4
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

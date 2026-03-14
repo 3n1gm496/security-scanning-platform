@@ -8,3 +8,4 @@ tenacity>=8.2
 bandit>=1.7.0
 pbr>=5.11.0
 psycopg2-binary>=2.9.9
+python-owasp-zap-v2.4>=0.0.21

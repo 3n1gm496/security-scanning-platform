@@ -101,6 +101,7 @@ def seeded_client(isolated_db):
 
     with TestClient(app) as c:
         from conftest import login_with_csrf
+
         login_with_csrf(c)
         yield c
 

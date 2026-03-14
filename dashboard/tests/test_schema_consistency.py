@@ -66,11 +66,13 @@ class TestSchemaConsistency:
     def test_orchestrator_imports_same_schema(self):
         """Orchestrator's storage.py should use the same SCHEMA_SQL."""
         from orchestrator.storage import SCHEMA_SQL as orch_schema
+
         assert orch_schema is SCHEMA_SQL
 
     def test_dashboard_uses_same_schema(self):
         """Dashboard's db.py should use the same SCHEMA_SQL."""
         from db import SCHEMA_SQL as dash_schema
+
         assert dash_schema is SCHEMA_SQL
 
 
@@ -87,10 +89,9 @@ class TestAdaptSchemaPostgres:
         try:
             # Re-import to pick up new env var
             import db_adapter
+
             importlib.reload(db_adapter)
-            result = db_adapter.adapt_schema(
-                "CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)"
-            )
+            result = db_adapter.adapt_schema("CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)")
             assert "SERIAL PRIMARY KEY" in result
             assert "AUTOINCREMENT" not in result
         finally:
@@ -108,10 +109,9 @@ class TestAdaptSchemaPostgres:
         os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/testdb"
         try:
             import db_adapter
+
             importlib.reload(db_adapter)
-            result = db_adapter.adapt_schema(
-                "INSERT OR REPLACE INTO foo (a, b) VALUES (1, 2)"
-            )
+            result = db_adapter.adapt_schema("INSERT OR REPLACE INTO foo (a, b) VALUES (1, 2)")
             assert "INSERT INTO" in result
             assert "OR REPLACE" not in result
         finally:

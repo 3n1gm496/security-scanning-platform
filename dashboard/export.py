@@ -11,7 +11,6 @@ from io import StringIO, BytesIO
 from typing import List, Dict, Any
 from xml.sax.saxutils import escape as xml_escape
 
-
 # ---------------------------------------------------------------------------
 # Sanitisation helpers
 # ---------------------------------------------------------------------------
@@ -31,6 +30,7 @@ def _sanitize_csv_value(val: Any) -> Any:
 def _sanitize_csv_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """Apply CSV injection sanitisation to every value in a row dict."""
     return {k: _sanitize_csv_value(v) for k, v in row.items()}
+
 
 # SARIF format version
 SARIF_VERSION = "2.1.0"

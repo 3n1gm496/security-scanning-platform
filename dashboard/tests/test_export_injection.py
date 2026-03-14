@@ -19,7 +19,6 @@ from export import (
     _sanitize_csv_row,
 )
 
-
 # ---------------------------------------------------------------------------
 # CSV injection tests
 # ---------------------------------------------------------------------------
@@ -102,7 +101,7 @@ class TestHTMLExportXSSPrevention:
     def test_img_onerror_escaped(self):
         findings = [
             {
-                "message": '<img src=x onerror=alert(1)>',
+                "message": "<img src=x onerror=alert(1)>",
                 "severity": "critical",
                 "tool": "test",
             }

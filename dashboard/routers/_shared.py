@@ -22,18 +22,14 @@ from notifications import EmailNotificationEngine
 DB_PATH: str = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 
 # ── Templates ──────────────────────────────────────────────────────────────
-templates: Jinja2Templates = Jinja2Templates(
-    directory=str(Path(__file__).resolve().parent.parent / "templates")
-)
+templates: Jinja2Templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 
 # ── Notification engine ───────────────────────────────────────────────────
 notification_engine: EmailNotificationEngine = EmailNotificationEngine()
 
 # ── Bounded thread pool for background scans ──────────────────────────────
 MAX_SCAN_WORKERS: int = int(os.getenv("DASHBOARD_MAX_SCAN_WORKERS", "4"))
-scan_executor: ThreadPoolExecutor = ThreadPoolExecutor(
-    max_workers=MAX_SCAN_WORKERS, thread_name_prefix="scan-worker"
-)
+scan_executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=MAX_SCAN_WORKERS, thread_name_prefix="scan-worker")
 
 # ── TTL cache for analytics queries ──────────────────────────────────────
 _ttl_cache: dict[str, tuple[float, object]] = {}

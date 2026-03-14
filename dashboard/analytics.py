@@ -167,9 +167,7 @@ def map_to_cwe(category: str) -> str | None:
 def get_risk_distribution(db_path: str) -> dict[str, Any]:
     """Calculate risk score distribution across all findings."""
     with get_connection(db_path) as conn:
-        findings = conn.execute(
-            "SELECT severity, category, cve, file, line FROM findings"
-        ).fetchall()
+        findings = conn.execute("SELECT severity, category, cve, file, line FROM findings").fetchall()
 
     risk_scores = [calculate_risk_score(dict(f)) for f in findings]
 
@@ -301,9 +299,7 @@ def get_trend_analysis(db_path: str, days: int = 90) -> dict[str, Any]:
 def get_target_risk_ranking(db_path: str) -> list[dict[str, Any]]:
     """Rank targets by aggregated risk score."""
     with get_connection(db_path) as conn:
-        findings = conn.execute(
-            "SELECT target_name, severity, category, cve, file, line FROM findings"
-        ).fetchall()
+        findings = conn.execute("SELECT target_name, severity, category, cve, file, line FROM findings").fetchall()
 
     # Group by target
     target_findings: dict[str, list[dict[str, Any]]] = {}
@@ -338,9 +334,7 @@ def get_target_risk_ranking(db_path: str) -> list[dict[str, Any]]:
 def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
     """Analyze tool effectiveness by findings and risk detection."""
     with get_connection(db_path) as conn:
-        findings = conn.execute(
-            "SELECT tool, severity, category, cve, file, line FROM findings"
-        ).fetchall()
+        findings = conn.execute("SELECT tool, severity, category, cve, file, line FROM findings").fetchall()
 
     # Group by tool
     tool_findings: dict[str, list[dict[str, Any]]] = {}

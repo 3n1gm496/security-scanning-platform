@@ -280,12 +280,8 @@ class ChartingEngine:
             "datasets": [
                 {
                     "data": data,
-                    "backgroundColor": [
-                        status_colors.get(label, "rgb(100, 100, 100)") for label in labels
-                    ],
-                    "borderColor": [
-                        status_colors.get(label, "rgb(50, 50, 50)") for label in labels
-                    ],
+                    "backgroundColor": [status_colors.get(label, "rgb(100, 100, 100)") for label in labels],
+                    "borderColor": [status_colors.get(label, "rgb(50, 50, 50)") for label in labels],
                     "borderWidth": 2,
                 }
             ],

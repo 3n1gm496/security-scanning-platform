@@ -29,7 +29,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def _findings_conn_with_data(n: int = 20) -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE findings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             scan_id INTEGER,
@@ -44,14 +45,17 @@ def _findings_conn_with_data(n: int = 20) -> sqlite3.Connection:
             timestamp TEXT,
             target_name TEXT
         )
-        """)
-    conn.execute("""
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE finding_states (
             id INTEGER PRIMARY KEY,
             finding_id INTEGER,
             status TEXT
         )
-        """)
+        """
+    )
     for i in range(n):
         conn.execute(
             "INSERT INTO findings (title, severity, tool, timestamp) VALUES (?, ?, ?, ?)",
@@ -64,7 +68,8 @@ def _findings_conn_with_data(n: int = 20) -> sqlite3.Connection:
 def _scans_conn_with_data(n: int = 15) -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             target_name TEXT,
@@ -80,7 +85,8 @@ def _scans_conn_with_data(n: int = 15) -> sqlite3.Connection:
             low_count INTEGER DEFAULT 0,
             error_message TEXT
         )
-        """)
+        """
+    )
     for i in range(n):
         conn.execute(
             "INSERT INTO scans (target_name, target_type, status, policy_status, created_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)",

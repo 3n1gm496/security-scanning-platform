@@ -200,6 +200,9 @@ createApp({
         toolEffectiveness: null,
       },
       analyticsDays: 30,
+      analyticsRefreshing: false,
+      _analyticsRefreshPromise: null,
+      _analyticsRefreshSeq: 0,
 
       // ── Settings page
       settingsTab: 'apikeys',
@@ -387,6 +390,9 @@ createApp({
     }
     this.startAutoRefresh();
 
+    this._resizeHandler = () => this.forceResizeCharts();
+    window.addEventListener('resize', this._resizeHandler);
+
     // Check for running scans on mount — resume polling if any are active
     try {
       const result = await apiFetch('/api/scans/paginated?per_page=10&sort_by=created_at&sort_order=DESC');
@@ -400,6 +406,7 @@ createApp({
   beforeUnmount() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     this.stopScanPolling();
+    if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
     Object.values(this.charts).forEach(c => c && c.destroy());
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
   },
@@ -429,6 +436,17 @@ createApp({
     // Read a CSS variable from :root — used by all chart builders for consistent theming
     cssVar(name) {
       return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    },
+
+    forceResizeCharts() {
+      if (!this.chartsAvailable) return;
+      requestAnimationFrame(() => {
+        Object.values(this.charts).forEach(chart => {
+          if (!chart) return;
+          chart.resize();
+          chart.update('none');
+        });
+      });
     },
 
     // ── Toggle columns ───────────────────────────────────────────────────────────────────────────────────
@@ -586,8 +604,9 @@ createApp({
       try {
         await nextTick();
         this.buildTrendChart();
-        this.buildSeverityChart();
+        await this.buildSeverityChart();
         this.buildRemediationChart();
+        this.forceResizeCharts();
       } finally {
         this._chartsBuilding = false;
       }
@@ -1170,21 +1189,56 @@ createApp({
     },
 
     async _refreshAnalyticsData() {
-      const [riskDist, compliance, trends, targetRisk, toolEffectiveness] = await Promise.all([
-        apiFetch('/api/analytics/risk-distribution'),
-        apiFetch('/api/analytics/compliance'),
-        apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`),
-        apiFetch('/api/analytics/target-risk'),
-        apiFetch('/api/analytics/tool-effectiveness'),
-      ]);
-      this.analyticsData = { riskDistribution: riskDist, compliance, trends, targetRisk, toolEffectiveness };
-      if (this.chartsAvailable) {
-        await nextTick();
-        this.buildRiskChart();
-        this.buildOwaspChart();
-        this.buildAnalyticsTrendChart();
-        this.buildToolEffChart();
-        this.buildSeverityDistChart();
+      if (this._analyticsRefreshPromise) return this._analyticsRefreshPromise;
+
+      const refreshSeq = ++this._analyticsRefreshSeq;
+      this.analyticsRefreshing = true;
+
+      this._analyticsRefreshPromise = (async () => {
+        const results = await Promise.allSettled([
+          apiFetch('/api/analytics/risk-distribution'),
+          apiFetch('/api/analytics/compliance'),
+          apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`),
+          apiFetch('/api/analytics/target-risk'),
+          apiFetch('/api/analytics/tool-effectiveness'),
+        ]);
+
+        const [riskDistRes, complianceRes, trendsRes, targetRiskRes, toolEffRes] = results;
+        const getValue = (res, fallback) => (res.status === 'fulfilled' ? res.value : fallback);
+
+        // If a newer refresh started while this one was in-flight, discard stale results.
+        if (refreshSeq !== this._analyticsRefreshSeq) return;
+
+        this.analyticsData = {
+          riskDistribution: getValue(riskDistRes, this.analyticsData.riskDistribution),
+          compliance: getValue(complianceRes, this.analyticsData.compliance),
+          trends: getValue(trendsRes, this.analyticsData.trends),
+          targetRisk: getValue(targetRiskRes, this.analyticsData.targetRisk),
+          toolEffectiveness: getValue(toolEffRes, this.analyticsData.toolEffectiveness),
+        };
+
+        const failedCount = results.filter(r => r.status === 'rejected').length;
+        if (failedCount > 0) {
+          console.debug(`[analytics] ${failedCount} endpoint(s) failed during refresh`);
+        }
+
+        if (this.chartsAvailable) {
+          await nextTick();
+          this.buildRiskChart();
+          this.buildOwaspChart();
+          this.buildAnalyticsTrendChart();
+          this.buildToolEffChart();
+          await this.buildSeverityDistChart();
+          this.forceResizeCharts();
+        }
+      })();
+
+      try {
+        await this._analyticsRefreshPromise;
+      } finally {
+        this._analyticsRefreshPromise = null;
+        // Only unset loading state if this is still the latest request.
+        if (refreshSeq === this._analyticsRefreshSeq) this.analyticsRefreshing = false;
       }
     },
 

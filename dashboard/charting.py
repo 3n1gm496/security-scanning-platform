@@ -40,7 +40,8 @@ class ChartingEngine:
                 [cutoff.isoformat()],
             ).fetchall()
         else:
-            rows = conn.execute("""
+            rows = conn.execute(
+                """
                 SELECT
                     DATE(timestamp) as date,
                     severity,
@@ -48,7 +49,8 @@ class ChartingEngine:
                 FROM findings
                 GROUP BY DATE(timestamp), severity
                 ORDER BY date ASC
-                """).fetchall()
+                """
+            ).fetchall()
 
         # Organize by date and severity
         data_by_date = {}

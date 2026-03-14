@@ -118,7 +118,8 @@ class TestResolveTargets:
         targets_yaml = tmp_path / "targets.yaml"
         target_dir = tmp_path / "src"
         target_dir.mkdir()
-        targets_yaml.write_text(f"""
+        targets_yaml.write_text(
+            f"""
 targets:
   - name: svc-a
     type: local
@@ -128,7 +129,8 @@ targets:
     type: local
     path: {target_dir}
     enabled: false
-""")
+"""
+        )
         args = SimpleNamespace(
             targets_file=str(targets_yaml),
             target=None,
@@ -308,7 +310,8 @@ class TestMainCLIAdditionalFlags:
     def _write_settings(self, tmp_path: Path) -> str:
         db_path = str(tmp_path / "scans.db")
         settings_path = tmp_path / "settings.yaml"
-        settings_path.write_text(f"""
+        settings_path.write_text(
+            f"""
 paths:
   db_path: {db_path}
   reports_dir: {tmp_path}/reports
@@ -331,7 +334,8 @@ execution:
 cache:
   enabled: false
 retention: {{}}
-""")
+"""
+        )
         return str(settings_path)
 
     def test_retention_only_exits_zero(self, tmp_path, monkeypatch, capsys):

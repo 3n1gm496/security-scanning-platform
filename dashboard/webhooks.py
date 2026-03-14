@@ -107,7 +107,8 @@ class WebhookEvent(str, Enum):
 def init_webhook_tables():
     """Initialize webhook tables in the database."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS webhooks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -121,7 +122,8 @@ def init_webhook_tables():
                 failure_count INTEGER DEFAULT 0,
                 consecutive_failures INTEGER DEFAULT 0
             )
-        """)
+        """
+        )
 
         # Migrate: add column if missing (safe for SQLite)
         try:
@@ -129,7 +131,8 @@ def init_webhook_tables():
         except Exception:
             conn.execute("ALTER TABLE webhooks ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
 
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS webhook_deliveries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 webhook_id INTEGER NOT NULL,
@@ -142,7 +145,8 @@ def init_webhook_tables():
                 duration_ms INTEGER,
                 FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
             )
-        """)
+        """
+        )
 
 
 def create_webhook(name: str, url: str, events: list[WebhookEvent], secret: Optional[str] = None) -> int:
@@ -170,12 +174,14 @@ def create_webhook(name: str, url: str, events: list[WebhookEvent], secret: Opti
 def list_webhooks() -> list[dict]:
     """List all webhooks."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT id, name, url, events, is_active, created_at, last_triggered_at,
                    success_count, failure_count, consecutive_failures
             FROM webhooks
             ORDER BY created_at DESC
-        """).fetchall()
+        """
+        ).fetchall()
     return [dict(row) for row in rows]
 
 

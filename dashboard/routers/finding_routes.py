@@ -90,12 +90,14 @@ def api_findings(
 def api_findings_status_counts(auth: AuthContext = Depends(require_auth)) -> dict:
     """Return finding counts grouped by triage status in a single query."""
     with get_connection(DB_PATH) as conn:
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT COALESCE(fs.status, 'new') AS status, COUNT(*) AS count
             FROM findings f
             LEFT JOIN finding_states fs ON fs.finding_id = f.id
             GROUP BY COALESCE(fs.status, 'new')
-        """).fetchall()
+        """
+        ).fetchall()
     return {row["status"]: row["count"] for row in rows}
 
 

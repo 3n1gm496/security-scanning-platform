@@ -14,7 +14,8 @@ def _setup_test_db():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
 
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE scans (
             id INTEGER PRIMARY KEY,
             target_name TEXT,
@@ -22,9 +23,11 @@ def _setup_test_db():
             status TEXT,
             created_at TEXT
         )
-    """)
+    """
+    )
 
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE findings (
             id INTEGER PRIMARY KEY,
             scan_id INTEGER,
@@ -36,14 +39,17 @@ def _setup_test_db():
             cve TEXT,
             timestamp TEXT
         )
-    """)
+    """
+    )
 
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE finding_states (
             finding_id INTEGER,
             status TEXT
         )
-    """)
+    """
+    )
 
     # Insert test data
     for i in range(5):

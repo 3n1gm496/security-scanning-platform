@@ -63,9 +63,7 @@ class TestConcurrentSQLiteWAL:
                     conn.execute("PRAGMA journal_mode=WAL")
                     for _ in range(read_iterations):
                         conn.execute("SELECT COUNT(*) FROM test_data").fetchone()
-                        conn.execute(
-                            "SELECT * FROM test_data ORDER BY id DESC LIMIT 10"
-                        ).fetchall()
+                        conn.execute("SELECT * FROM test_data ORDER BY id DESC LIMIT 10").fetchall()
                     conn.close()
                 except Exception as e:
                     errors.append((f"reader_{reader_id}", e))
@@ -112,10 +110,7 @@ class TestConcurrentSQLiteWAL:
                 except Exception as e:
                     errors.append((f"writer_{writer_id}", e))
 
-            threads = [
-                threading.Thread(target=writer, args=(i,))
-                for i in range(num_writers)
-            ]
+            threads = [threading.Thread(target=writer, args=(i,)) for i in range(num_writers)]
             for t in threads:
                 t.start()
             for t in threads:

@@ -57,9 +57,7 @@ def analytics_tool_effectiveness(auth: AuthContext = Depends(require_auth)) -> l
     return cached("tool_effectiveness", lambda: get_tool_effectiveness(DB_PATH))
 
 
-@router.get(
-    "/analytics/finding-risk/{finding_id}", dependencies=[Depends(require_permission(Permission.FINDING_READ))]
-)
+@router.get("/analytics/finding-risk/{finding_id}", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
 def analytics_finding_risk(finding_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Calculate risk score for a specific finding."""
 

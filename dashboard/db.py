@@ -319,7 +319,6 @@ def cache_hit_trend(db_path: str, days: int = 14) -> list[dict[str, Any]]:
     return payload
 
 
-
 # SCHEMA_SQL and _MIGRATIONS are imported from common.schema (single source of truth)
 
 

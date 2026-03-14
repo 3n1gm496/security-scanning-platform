@@ -26,13 +26,15 @@ _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 # Paths that are exempt from CSRF validation.  Typically login (needs to
 # POST without a token the very first time) and health/readiness probes.
-_DEFAULT_EXEMPT: Set[str] = frozenset({
-    "/login",
-    "/api/health",
-    "/api/ready",
-    "/api/metrics",
-    "/metrics",
-})
+_DEFAULT_EXEMPT: Set[str] = frozenset(
+    {
+        "/login",
+        "/api/health",
+        "/api/ready",
+        "/api/metrics",
+        "/metrics",
+    }
+)
 
 
 def _get_or_create_csrf_token(request: Request) -> str:

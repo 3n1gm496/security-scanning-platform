@@ -274,8 +274,7 @@ class NotificationPreferencesManager:
     ) -> bool:
         """Save notification preferences for a user."""
         try:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS notification_preferences (
                     id INTEGER PRIMARY KEY,
                     user_email TEXT UNIQUE,
@@ -286,8 +285,7 @@ class NotificationPreferencesManager:
                     preferred_channel TEXT DEFAULT 'email',
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
-            """
-            )
+            """)
 
             conn.execute(
                 """

@@ -32,8 +32,7 @@ def analytics_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "analytics_test.db")
 
     conn = sqlite3.connect(db_path)
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS findings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             scan_id TEXT NOT NULL,
@@ -54,8 +53,7 @@ def analytics_db(tmp_path, monkeypatch):
             raw_reference TEXT,
             fingerprint TEXT
         )
-    """
-    )
+    """)
 
     # Insert test findings with various attributes
     now = datetime.now(timezone.utc)
@@ -342,8 +340,7 @@ def test_get_risk_distribution_empty_db(tmp_path):
     """Test risk distribution with no findings."""
     db_path = str(tmp_path / "empty.db")
     conn = sqlite3.connect(db_path)
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE findings (
             id INTEGER PRIMARY KEY,
             severity TEXT,
@@ -352,8 +349,7 @@ def test_get_risk_distribution_empty_db(tmp_path):
             file TEXT,
             line INTEGER
         )
-    """
-    )
+    """)
     conn.close()
 
     result = get_risk_distribution(db_path)

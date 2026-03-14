@@ -22,8 +22,7 @@ def test_findings_paginator_basic():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE findings (
             id INTEGER PRIMARY KEY,
             scan_id INTEGER,
@@ -38,8 +37,7 @@ def test_findings_paginator_basic():
             timestamp TEXT,
             target_name TEXT
         )
-    """
-    )
+    """)
 
     for i in range(25):
         conn.execute(
@@ -64,8 +62,7 @@ def _make_scans_db(n: int = 15):
     """Helper: create an in-memory scans DB with the full schema."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE scans (
             id INTEGER PRIMARY KEY,
             target_name TEXT,
@@ -81,8 +78,7 @@ def _make_scans_db(n: int = 15):
             low_count INTEGER DEFAULT 0,
             error_message TEXT
         )
-    """
-    )
+    """)
 
     for i in range(15):
         conn.execute(
@@ -116,8 +112,7 @@ def _make_full_scans_db(rows: list[tuple]) -> sqlite3.Connection:
     """Helper: create an in-memory scans DB matching the production schema."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE scans (
             id INTEGER PRIMARY KEY,
             target_name TEXT,
@@ -133,8 +128,7 @@ def _make_full_scans_db(rows: list[tuple]) -> sqlite3.Connection:
             low_count INTEGER NOT NULL DEFAULT 0,
             error_message TEXT
         )
-    """
-    )
+    """)
     for row in rows:
         conn.execute(
             "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
@@ -171,25 +165,21 @@ def test_findings_paginator_with_status_filter():
     conn.row_factory = sqlite3.Row
 
     # Create findings table
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE findings (
             id INTEGER PRIMARY KEY, scan_id INTEGER, title TEXT, description TEXT,
             severity TEXT, file TEXT, line INTEGER, tool TEXT, cve TEXT,
             fingerprint TEXT, timestamp TEXT, target_name TEXT
         )
-    """
-    )
+    """)
 
     # Create finding_states table
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE finding_states (
             id INTEGER PRIMARY KEY, finding_id INTEGER, status TEXT, user TEXT,
             comment TEXT, created_at TEXT
         )
-    """
-    )
+    """)
 
     # Insert findings
     for i in range(10):

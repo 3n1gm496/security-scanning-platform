@@ -66,8 +66,7 @@ ROLE_PERMISSIONS = {
 def init_rbac_tables():
     """Initialize RBAC tables in the database."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS api_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 key_hash TEXT UNIQUE NOT NULL,
@@ -80,11 +79,9 @@ def init_rbac_tables():
                 is_active INTEGER DEFAULT 1,
                 created_by TEXT
             )
-        """
-        )
+        """)
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
@@ -94,11 +91,9 @@ def init_rbac_tables():
                 last_login_at TEXT,
                 is_active INTEGER DEFAULT 1
             )
-        """
-        )
+        """)
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
@@ -109,8 +104,7 @@ def init_rbac_tables():
                 result TEXT,
                 ip_address TEXT
             )
-        """
-        )
+        """)
 
 
 def generate_api_key() -> tuple[str, str]:
@@ -216,13 +210,11 @@ def has_permission(role: Role, permission: Permission) -> bool:
 def list_api_keys() -> list[dict]:
     """List all API keys (without sensitive data)."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT id, key_prefix, name, role, created_at, last_used_at, expires_at, is_active, created_by
             FROM api_keys
             ORDER BY created_at DESC
-        """
-        ).fetchall()
+        """).fetchall()
     return [dict(row) for row in rows]
 
 

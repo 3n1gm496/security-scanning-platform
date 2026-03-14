@@ -30,8 +30,7 @@ class FindingStatus(str, Enum):
 def init_finding_management_tables():
     """Initialize finding management tables."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS finding_states (
                 finding_id INTEGER PRIMARY KEY,
                 status TEXT NOT NULL DEFAULT 'new',
@@ -45,11 +44,9 @@ def init_finding_management_tables():
                 risk_acceptance_expires_at TEXT,
                 FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
             )
-        """
-        )
+        """)
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS finding_comments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 finding_id INTEGER NOT NULL,
@@ -58,11 +55,9 @@ def init_finding_management_tables():
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
             )
-        """
-        )
+        """)
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS finding_attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 finding_id INTEGER NOT NULL,
@@ -72,8 +67,7 @@ def init_finding_management_tables():
                 uploaded_at TEXT NOT NULL,
                 FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
             )
-        """
-        )
+        """)
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_finding_states_status ON finding_states(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_finding_states_assigned ON finding_states(assigned_to)")
@@ -319,14 +313,12 @@ def get_findings_by_status(status: Optional[str] = None, limit: int = 100) -> li
 def get_finding_stats_by_status() -> dict:
     """Get statistics of findings grouped by status."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT
                 COALESCE(fs.status, 'new') as status,
                 COUNT(*) as count
             FROM findings f
             LEFT JOIN finding_states fs ON f.id = fs.finding_id
             GROUP BY status
-        """
-        ).fetchall()
+        """).fetchall()
     return {row["status"]: row["count"] for row in rows}

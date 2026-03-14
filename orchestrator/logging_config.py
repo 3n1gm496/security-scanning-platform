@@ -1,8 +1,10 @@
 """
-Structured JSON logging via structlog.
+Structured JSON logging via structlog for the orchestrator.
 
-Call configure_logging() once at application startup (app.py does this).
-All other modules should import get_logger and call it at module level.
+Call configure_logging() once at process startup (main.py does this).
+All other modules should continue using ``logging.getLogger(__name__)``;
+structlog's ProcessorFormatter ensures their output is also rendered as
+structured JSON (or human-readable console output in development).
 """
 
 from __future__ import annotations
@@ -14,13 +16,13 @@ import sys
 import structlog
 
 
-def configure_logging() -> None:
-    """Configure structlog + stdlib logging for the process.
+def configure_logging(level: str = "INFO") -> None:
+    """Configure structlog + stdlib logging for the orchestrator process.
 
     Outputs JSON in production (LOG_FORMAT=json).
     Outputs human-friendly coloured output in development (LOG_FORMAT=console, the default).
     """
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = level.upper()
     log_format = os.getenv("LOG_FORMAT", "console").lower()
     json_mode = log_format == "json"
 

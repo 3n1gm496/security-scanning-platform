@@ -57,10 +57,9 @@ def utc_now_iso() -> str:
 
 
 def setup_logging(level: str = "INFO") -> None:
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    from orchestrator.logging_config import configure_logging
+
+    configure_logging(level)
 
 
 def load_yaml(path: str) -> dict[str, Any]:

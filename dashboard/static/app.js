@@ -473,6 +473,22 @@ createApp({
     async navigate(page) {
       // Skip redundant navigation to the same page (prevents chart destruction)
       if (page === this.currentPage && !this._refreshing) return;
+
+      // Destroy chart instances when leaving a chart page — the v-if directive
+      // removes the canvas elements from the DOM so old instances become stale.
+      const prevPage = this.currentPage;
+      if (prevPage !== page) {
+        if (prevPage === 'dashboard') {
+          ['severity', 'trend', 'remediation'].forEach(k => {
+            if (this.charts[k]) { this.charts[k].destroy(); this.charts[k] = null; }
+          });
+        } else if (prevPage === 'analytics') {
+          ['risk', 'owasp', 'analyticsTrend', 'toolEff', 'severityDist'].forEach(k => {
+            if (this.charts[k]) { this.charts[k].destroy(); this.charts[k] = null; }
+          });
+        }
+      }
+
       this.currentPage = page;
       // Update URL hash for bookmarkability and back/forward support
       history.pushState({ page }, '', '#' + page);
@@ -602,9 +618,22 @@ createApp({
       if (this._chartsBuilding) return;
       this._chartsBuilding = true;
       try {
+        // Pre-fetch severity data so the chart builder does not make its own
+        // request (avoids destroy-then-wait-for-fetch blank canvas flicker).
+        let sevData = {};
+        try {
+          const fresh = await apiFetch('/api/chart/severity-breakdown');
+          if (fresh && Array.isArray(fresh.labels)) {
+            fresh.labels.forEach((k, i) => { sevData[k.toUpperCase()] = fresh.values[i]; });
+          } else if (fresh && typeof fresh === 'object') {
+            Object.assign(sevData, fresh);
+          }
+        } catch (_) {
+          sevData = this.severityBreakdown || {};
+        }
         await nextTick();
         this.buildTrendChart();
-        await this.buildSeverityChart();
+        this.buildSeverityChart(sevData);
         this.buildRemediationChart();
         this.forceResizeCharts();
       } finally {
@@ -615,34 +644,35 @@ createApp({
     buildRemediationChart() {
       const canvas = this.$refs.remediationChart;
       if (!canvas) return;
-      if (this.charts.remediation) { this.charts.remediation.destroy(); this.charts.remediation = null; }
       const labels = STATUS_LABELS;
       const colors = STATUS_COLORS;
-      this.charts.remediation = new Chart(canvas.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Findings',
-            data: [0, 0, 0, 0, 0, 0], // updated async
-            backgroundColor: colors,
-            borderRadius: 6,
-            borderSkipped: false,
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} findings` } },
+      if (!this.charts.remediation) {
+        this.charts.remediation = new Chart(canvas.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Findings',
+              data: [0, 0, 0, 0, 0, 0],
+              backgroundColor: colors,
+              borderRadius: 6,
+              borderSkipped: false,
+            }],
           },
-          scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-            y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0 } },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} findings` } },
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+              y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0 } },
+            },
           },
-        },
-      });
+        });
+      }
       // Load real data from the single status-counts endpoint
       const chartId = ++this._remediationChartVersion;
       apiFetch('/api/findings/status-counts').then(statusMap => {
@@ -658,36 +688,30 @@ createApp({
           this.charts.remediation.data.datasets[0].data = nonZeroIdx.map(i => counts[i]);
           this.charts.remediation.data.datasets[0].backgroundColor = nonZeroIdx.map(i => colors[i]);
         } else {
-          // No findings at all — show all with zeros (better than empty chart)
+          this.charts.remediation.data.labels = labels;
           this.charts.remediation.data.datasets[0].data = counts;
+          this.charts.remediation.data.datasets[0].backgroundColor = colors;
         }
         this.charts.remediation.update();
       });
     },
 
-    async buildSeverityChart() {
+    buildSeverityChart(data) {
       const canvas = this.$refs.severityChart;
       if (!canvas) return;
-      if (this.charts.severity) { this.charts.severity.destroy(); this.charts.severity = null; }
-      // Fetch fresh data from API so the chart is always up-to-date,
-      // even if __INIT_DATA__ was empty at page load.
-      let data = {};
-      try {
-        const fresh = await apiFetch('/api/chart/severity-breakdown');
-        // API returns { labels: [...], values: [...] } or a plain object
-        if (fresh && Array.isArray(fresh.labels)) {
-          fresh.labels.forEach((k, i) => { data[k.toUpperCase()] = fresh.values[i]; });
-        } else if (fresh && typeof fresh === 'object') {
-          // plain { CRITICAL: N, HIGH: N, ... } shape
-          Object.assign(data, fresh);
-        }
-      } catch (_) {
-        // fallback to init data if API call fails
-        data = this.severityBreakdown || {};
-      }
+      // Use provided data (pre-fetched by caller) or fall back to init data.
+      if (!data || Object.keys(data).length === 0) data = this.severityBreakdown || {};
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
+      if (this.charts.severity) {
+        // Update existing chart in-place — avoids canvas flicker during polling
+        this.charts.severity.data.labels = labels;
+        this.charts.severity.data.datasets[0].data = values;
+        this.charts.severity.data.datasets[0].backgroundColor = colors;
+        this.charts.severity.update();
+        return;
+      }
       this.charts.severity = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -708,26 +732,7 @@ createApp({
             legend: {
               display: true,
               position: 'bottom',
-              labels: {
-                generateLabels: (chart) => {
-                  // Explicitly include 'fontColor' in each label item so Chart.js 4
-                  // applies the correct text color regardless of labels.color fallback.
-                  const legendColor = getComputedStyle(document.documentElement)
-                    .getPropertyValue('--chart-legend').trim() || '#374151';
-                  return chart.data.labels.map((label, i) => ({
-                    text: `${label}  (${chart.data.datasets[0].data[i]})`,
-                    fillStyle: chart.data.datasets[0].backgroundColor[i],
-                    strokeStyle: chart.data.datasets[0].backgroundColor[i],
-                    fontColor: legendColor,
-                    hidden: false,
-                    index: i,
-                  }));
-                },
-                font: { size: 11 },
-                padding: 12,
-                usePointStyle: false,
-                color: this.cssVar('--chart-legend'),
-              },
+              labels: { boxWidth: 12, font: { size: 11 }, padding: 12, usePointStyle: false, color: this.cssVar('--chart-legend') },
             },
             tooltip: {
               callbacks: {
@@ -767,7 +772,6 @@ createApp({
     buildTrendChart() {
       const canvas = this.$refs.trendChart;
       if (!canvas) return;
-      if (this.charts.trend) { this.charts.trend.destroy(); this.charts.trend = null; }
 
       // Use recent scans data to build a stacked bar chart of severity counts.
       // This is far more useful than the old empty line chart: it shows exactly
@@ -781,6 +785,24 @@ createApp({
         const name = s.target_name || s.id || '?';
         return name.length > 18 ? name.slice(0, 16) + '…' : name;
       });
+
+      const dsData = [
+        scans.map(s => s.critical_count || 0),
+        scans.map(s => s.high_count || 0),
+        scans.map(s => s.medium_count || 0),
+        scans.map(s => s.low_count || 0),
+        scans.map(s => s.info_count || 0),
+      ];
+
+      if (this.charts.trend) {
+        // Update existing chart in-place to avoid canvas flicker during polling
+        this.charts.trend.data.labels = labels;
+        dsData.forEach((d, i) => {
+          if (this.charts.trend.data.datasets[i]) this.charts.trend.data.datasets[i].data = d;
+        });
+        this.charts.trend.update();
+        return;
+      }
 
       this.charts.trend = new Chart(canvas.getContext('2d'), {
         type: 'bar',
@@ -1204,9 +1226,10 @@ createApp({
           apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`),
           apiFetch('/api/analytics/target-risk'),
           apiFetch('/api/analytics/tool-effectiveness'),
+          apiFetch('/api/chart/severity-breakdown'),
         ]);
 
-        const [riskDistRes, complianceRes, trendsRes, targetRiskRes, toolEffRes] = results;
+        const [riskDistRes, complianceRes, trendsRes, targetRiskRes, toolEffRes, sevBreakdownRes] = results;
         const getValue = (res, fallback) => (res.status === 'fulfilled' ? res.value : fallback);
 
         // If a newer refresh started while this one was in-flight, discard stale results.
@@ -1219,6 +1242,17 @@ createApp({
           targetRisk: getValue(targetRiskRes, this.analyticsData.targetRisk),
           toolEffectiveness: getValue(toolEffRes, this.analyticsData.toolEffectiveness),
         };
+
+        // Parse severity breakdown into a plain { CRITICAL: N, ... } map
+        let sevData = {};
+        const freshSev = getValue(sevBreakdownRes, null);
+        if (freshSev) {
+          if (Array.isArray(freshSev.labels)) {
+            freshSev.labels.forEach((k, i) => { sevData[k.toUpperCase()] = freshSev.values[i]; });
+          } else if (typeof freshSev === 'object') {
+            Object.assign(sevData, freshSev);
+          }
+        }
 
         const failedCount = results.filter(r => r.status === 'rejected').length;
         if (failedCount > 0) {
@@ -1235,7 +1269,7 @@ createApp({
           this.buildOwaspChart();
           this.buildAnalyticsTrendChart();
           this.buildToolEffChart();
-          await this.buildSeverityDistChart();
+          this.buildSeverityDistChart(sevData);
           this.forceResizeCharts();
         }
       })();
@@ -1252,8 +1286,23 @@ createApp({
     buildToolEffChart() {
       const canvas = this.$refs.toolEffChart;
       if (!canvas || !this.analyticsData.toolEffectiveness) return;
-      if (this.charts.toolEff) this.charts.toolEff.destroy();
       const tools = this.analyticsData.toolEffectiveness;
+      const newLabels = tools.map(t => t.tool);
+      const dsData = [
+        tools.map(t => t.critical_count || 0),
+        tools.map(t => t.high_count || 0),
+        tools.map(t => t.medium_count || 0),
+        tools.map(t => t.low_count || 0),
+        tools.map(t => t.info_count || 0),
+      ];
+      if (this.charts.toolEff) {
+        this.charts.toolEff.data.labels = newLabels;
+        dsData.forEach((d, i) => {
+          if (this.charts.toolEff.data.datasets[i]) this.charts.toolEff.data.datasets[i].data = d;
+        });
+        this.charts.toolEff.update();
+        return;
+      }
       this.charts.toolEff = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -1296,25 +1345,22 @@ createApp({
       });
     },
 
-    async buildSeverityDistChart() {
+    buildSeverityDistChart(data) {
       const canvas = this.$refs.severityDistChart;
       if (!canvas) return;
-      if (this.charts.severityDist) this.charts.severityDist.destroy();
-      // Fetch actual severity breakdown data (same as dashboard chart)
-      let data = {};
-      try {
-        const fresh = await apiFetch('/api/chart/severity-breakdown');
-        if (fresh && Array.isArray(fresh.labels)) {
-          fresh.labels.forEach((k, i) => { data[k.toUpperCase()] = fresh.values[i]; });
-        } else if (fresh && typeof fresh === 'object') {
-          Object.assign(data, fresh);
-        }
-      } catch (_) {
-        data = this.severityBreakdown || {};
-      }
+      // Use provided data (pre-fetched in parallel by _refreshAnalyticsData) or fall back.
+      if (!data || Object.keys(data).length === 0) data = this.severityBreakdown || {};
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
+      if (this.charts.severityDist) {
+        // Update existing chart in-place to avoid canvas flicker
+        this.charts.severityDist.data.labels = labels;
+        this.charts.severityDist.data.datasets[0].data = values;
+        this.charts.severityDist.data.datasets[0].backgroundColor = colors;
+        this.charts.severityDist.update();
+        return;
+      }
       this.charts.severityDist = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
@@ -1331,24 +1377,7 @@ createApp({
           plugins: {
             legend: {
               position: 'bottom',
-              labels: {
-                boxWidth: 12,
-                font: { size: 11 },
-                color: this.cssVar('--chart-legend'),
-                padding: 12,
-                usePointStyle: false,
-                generateLabels: (chart) => {
-                  const legendColor = this.cssVar('--chart-legend') || '#374151';
-                  return chart.data.labels.map((label, i) => ({
-                    text: `${label}  (${chart.data.datasets[0].data[i]})`,
-                    fillStyle: chart.data.datasets[0].backgroundColor[i],
-                    strokeStyle: chart.data.datasets[0].backgroundColor[i],
-                    fontColor: legendColor,
-                    hidden: false,
-                    index: i,
-                  }));
-                },
-              },
+              labels: { boxWidth: 12, font: { size: 11 }, color: this.cssVar('--chart-legend'), padding: 12, usePointStyle: false },
             },
             tooltip: {
               callbacks: {
@@ -1363,18 +1392,23 @@ createApp({
     buildRiskChart() {
       const canvas = this.$refs.riskChart;
       if (!canvas || !this.analyticsData.riskDistribution) return;
-      if (this.charts.risk) this.charts.risk.destroy();
       const dist = this.analyticsData.riskDistribution.distribution;
-      // Map numeric risk ranges to descriptive labels
       const RISK_LABEL_MAP = { '0-25': 'Low Risk (0-25)', '25-50': 'Medium Risk (25-50)', '50-75': 'High Risk (50-75)', '75-100': 'Critical Risk (75-100)' };
       const rawLabels = Object.keys(dist);
       const labels = rawLabels.map(l => RISK_LABEL_MAP[l] || l);
+      const values = Object.values(dist);
+      if (this.charts.risk) {
+        this.charts.risk.data.labels = labels;
+        this.charts.risk.data.datasets[0].data = values;
+        this.charts.risk.update();
+        return;
+      }
       this.charts.risk = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
           labels,
           datasets: [{
-            label: 'Findings', data: Object.values(dist),
+            label: 'Findings', data: values,
             backgroundColor: RISK_COLORS,
             borderRadius: 6,
           }],
@@ -1400,14 +1434,21 @@ createApp({
     buildOwaspChart() {
       const canvas = this.$refs.owaspChart;
       if (!canvas || !this.analyticsData.compliance) return;
-      if (this.charts.owasp) this.charts.owasp.destroy();
       const owasp = this.analyticsData.compliance.owasp_top_10.slice(0, 6);
+      const labels = owasp.map(o => o.category.split(' - ')[0]);
+      const values = owasp.map(o => o.count);
+      if (this.charts.owasp) {
+        this.charts.owasp.data.labels = labels;
+        this.charts.owasp.data.datasets[0].data = values;
+        this.charts.owasp.update();
+        return;
+      }
       this.charts.owasp = new Chart(canvas.getContext('2d'), {
         type: 'pie',
         data: {
-          labels: owasp.map(o => o.category.split(' - ')[0]),
+          labels,
           datasets: [{
-            data: owasp.map(o => o.count),
+            data: values,
             backgroundColor: OWASP_COLORS,
             borderWidth: 2, borderColor: this.cssVar('--chart-border'),
           }],
@@ -1422,8 +1463,17 @@ createApp({
     buildAnalyticsTrendChart() {
       const canvas = this.$refs.analyticsTrendChart;
       if (!canvas || !this.analyticsData.trends) return;
-      if (this.charts.analyticsTrend) this.charts.analyticsTrend.destroy();
       const trendData = this.analyticsData.trends.trend;
+      const labels = trendData.map(t => t.date);
+      const avgData = trendData.map(t => t.average_risk);
+      const maxData = trendData.map(t => t.max_risk);
+      if (this.charts.analyticsTrend) {
+        this.charts.analyticsTrend.data.labels = labels;
+        this.charts.analyticsTrend.data.datasets[0].data = avgData;
+        this.charts.analyticsTrend.data.datasets[1].data = maxData;
+        this.charts.analyticsTrend.update();
+        return;
+      }
       const gridColor = this.cssVar('--chart-grid');
       const tickColor = this.cssVar('--chart-tick');
       const primaryColor = this.cssVar('--color-primary');
@@ -1893,6 +1943,11 @@ createApp({
       // may not be flushed until the next animation frame.
       requestAnimationFrame(() => {
         this.applyChartDefaults();
+        // Destroy existing charts so they get recreated with new CSS variable
+        // values for grid, tick, and legend colors.
+        Object.keys(this.charts).forEach(k => {
+          if (this.charts[k]) { this.charts[k].destroy(); this.charts[k] = null; }
+        });
         // Rebuild visible charts so legend/tick colors update immediately
         if (this.currentPage === 'dashboard') this.initDashboardCharts();
         else if (this.currentPage === 'analytics') this.loadAnalytics();

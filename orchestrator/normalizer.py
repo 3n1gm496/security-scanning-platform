@@ -30,6 +30,7 @@ SEVERITY_MAP = {
     # ── ZAP ────────────────────────────────────────────────────────────────
     # ZAP "risk" field uses title-case and "Informational" for info-level alerts
     "INFORMATIONAL": "INFO",
+    "INFORM": "INFO",
     # ── Generic aliases ────────────────────────────────────────────────────
     "MODERATE": "MEDIUM",
     "MINOR": "LOW",

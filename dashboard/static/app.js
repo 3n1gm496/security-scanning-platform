@@ -725,8 +725,7 @@ createApp({
                 },
                 font: { size: 11 },
                 padding: 12,
-                usePointStyle: true,
-                pointStyle: 'rectRounded',
+                usePointStyle: false,
                 color: this.cssVar('--chart-legend'),
               },
             },
@@ -803,7 +802,7 @@ createApp({
             legend: {
               display: true,
               position: 'bottom',
-              labels: { boxWidth: 12, font: { size: 11 }, padding: 20 },
+              labels: { boxWidth: 12, font: { size: 11 }, padding: 20, usePointStyle: false },
             },
             tooltip: {
               callbacks: {
@@ -1270,7 +1269,7 @@ createApp({
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: this.cssVar('--chart-legend') } },
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: this.cssVar('--chart-legend'), usePointStyle: false } },
             tooltip: {
               callbacks: {
                 footer: (items) => {
@@ -1337,6 +1336,7 @@ createApp({
                 font: { size: 11 },
                 color: this.cssVar('--chart-legend'),
                 padding: 12,
+                usePointStyle: false,
                 generateLabels: (chart) => {
                   const legendColor = this.cssVar('--chart-legend') || '#374151';
                   return chart.data.labels.map((label, i) => ({
@@ -1414,7 +1414,7 @@ createApp({
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, usePointStyle: false } } },
         },
       });
     },
@@ -1452,7 +1452,7 @@ createApp({
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: this.cssVar('--chart-legend'), font: { size: 11 } },
+              labels: { color: this.cssVar('--chart-legend'), font: { size: 11 }, usePointStyle: false },
             },
             tooltip: {
               backgroundColor: this.cssVar('--chart-tooltip-bg'),

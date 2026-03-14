@@ -34,7 +34,7 @@ scan_executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=MAX_SCAN_WORK
 # ── TTL cache for analytics queries ──────────────────────────────────────
 _ttl_cache: dict[str, tuple[float, object]] = {}
 _ttl_lock = Lock()
-ANALYTICS_CACHE_TTL: int = int(os.getenv("ANALYTICS_CACHE_TTL_SECONDS", "60"))
+ANALYTICS_CACHE_TTL: int = int(os.getenv("ANALYTICS_CACHE_TTL_SECONDS", "300"))
 
 
 def cached(key: str, fn, ttl: int = ANALYTICS_CACHE_TTL):

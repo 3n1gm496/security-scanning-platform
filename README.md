@@ -306,6 +306,24 @@ EMAIL_FROM_NAME=Security Scanner
 
 Utility script for managing the stack, database, scans, and development operations:
 
+### Docker-first update flow (recommended)
+
+If you run the platform primarily with Docker, use this exact update sequence:
+
+```bash
+docker compose down && git pull origin main && docker compose build --no-cache && docker compose up -d
+```
+
+Quick post-update checks:
+
+```bash
+docker compose ps
+curl -fsS http://localhost:8080/api/health
+curl -fsS http://localhost:8080/api/ready
+```
+
+> Note: this is the preferred operational path in production-like environments. Non-Docker workflows are still supported for local development and CI.
+
 ```bash
 # Stack
 ./scripts/ops.sh up                    # Start Docker Compose stack

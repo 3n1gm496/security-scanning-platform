@@ -40,6 +40,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "slow: Slow running tests",
+    "asyncio: Async tests (pytest-asyncio)",
 ]
 filterwarnings = [
     # anyio uses Task.cancel(msg=...) and Future.cancel(*exc.args) which are deprecated

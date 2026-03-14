@@ -551,6 +551,22 @@ html, body {
   padding-bottom: var(--space-8);
 }
 
+.chart-container-roomy {
+  height: 320px;
+}
+
+@media (max-width: 1200px) {
+  .chart-container-roomy {
+    height: 300px;
+  }
+}
+
+@media (max-width: 768px) {
+  .chart-container-roomy {
+    height: 280px;
+  }
+}
+
 .chart-stat {
   text-align: center;
   font-size: var(--font-base);

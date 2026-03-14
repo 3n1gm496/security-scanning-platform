@@ -223,8 +223,12 @@ build:orchestrator:
         -t "${IMAGE_TAG}"
         -t "${IMAGE_LATEST}"
         .
-      docker push "${IMAGE_TAG}"
-      docker push "${IMAGE_LATEST}"
+      if [ "${PUSH_IMAGE:-true}" = "true" ]; then
+        docker push "${IMAGE_TAG}"
+        docker push "${IMAGE_LATEST}"
+      else
+        echo "[INFO] PUSH_IMAGE=false, skipping docker push for MR pipeline"
+      fi
       echo "IMAGE_ORCHESTRATOR=${IMAGE_TAG}" >> build.env
   artifacts:
     reports:
@@ -253,8 +257,12 @@ build:dashboard:
         -t "${IMAGE_TAG}"
         -t "${IMAGE_LATEST}"
         .
-      docker push "${IMAGE_TAG}"
-      docker push "${IMAGE_LATEST}"
+      if [ "${PUSH_IMAGE:-true}" = "true" ]; then
+        docker push "${IMAGE_TAG}"
+        docker push "${IMAGE_LATEST}"
+      else
+        echo "[INFO] PUSH_IMAGE=false, skipping docker push for MR pipeline"
+      fi
       echo "IMAGE_DASHBOARD=${IMAGE_TAG}" >> build.env
   artifacts:
     reports:

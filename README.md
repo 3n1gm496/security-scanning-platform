@@ -6,7 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
-Open-source, Linux-based, CI-agnostic platform for centralized security scanning in heterogeneous enterprise environments. Automated orchestration of 10+ OSS scanners with unified dashboard, result normalization, and **468 unit and integration tests**.
+Open-source, Linux-based, CI-agnostic platform for centralized security scanning in heterogeneous enterprise environments. Automated orchestration of 10+ OSS scanners with unified dashboard, result normalization, and **501 unit and integration tests**.
 
 **Repository:** [github.com/3n1gm496/security-scanning-platform](https://github.com/3n1gm496/security-scanning-platform)
 
@@ -86,7 +86,7 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 - **Webhooks** — Event-driven notifications with HMAC signatures, retry logic, and circuit breaker auto-disable
 - **Prometheus Metrics** — `/metrics` endpoint for observability and monitoring
 - **Audit Log** — API key operations and triage actions logged with CSV/JSON export
-- **High Test Coverage** — 468 total tests (273 dashboard + 195 orchestrator) across Python 3.11 and 3.12
+- **High Test Coverage** — 501 total tests (278 dashboard + 223 orchestrator) across Python 3.11 and 3.12
 
 ---
 
@@ -141,13 +141,13 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 │   ├── static/              # Vue.js 3 SPA (app.js, app.css, login.css)
 │   ├── templates/           # Jinja2 templates (app.html, login.html)
 │   ├── Dockerfile
-│   └── tests/               # 273 tests
+│   └── tests/               # 278 tests
 ├── orchestrator/
 │   ├── main.py              # Scan orchestration & scheduling
 │   ├── scanners.py          # Scanner wrappers (9 scanners)
 │   ├── normalizers.py       # Result normalization
 │   ├── Dockerfile
-│   └── tests/               # 195 tests
+│   └── tests/               # 223 tests
 ├── scripts/
 │   ├── ops.sh               # Unified CLI for all operations
 │   ├── run_scan.sh
@@ -690,13 +690,13 @@ The project uses `pip-tools` for pinning dependencies. To update or add packages
 ### Running Tests
 
 ```bash
-# Run all 468 tests
+# Run all 501 tests
 ./scripts/ops.sh test
 
-# Run only dashboard tests (273 tests)
+# Run only dashboard tests (278 tests)
 ./scripts/ops.sh test dashboard
 
-# Run only orchestrator tests with coverage (195 tests)
+# Run only orchestrator tests with coverage (223 tests)
 ./scripts/ops.sh test orchestrator --coverage
 ```
 

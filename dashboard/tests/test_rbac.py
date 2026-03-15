@@ -5,6 +5,7 @@ Test per il sistema RBAC e API keys.
 import os
 import sqlite3
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -13,11 +14,19 @@ import pytest
 root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 
+if "bcrypt" not in sys.modules:
+    fake_bcrypt = types.ModuleType("bcrypt")
+    fake_bcrypt.gensalt = lambda: b"salt"
+    fake_bcrypt.hashpw = lambda value, salt: b"$2b$" + value
+    fake_bcrypt.checkpw = lambda plain, hashed: hashed == (b"$2b$" + plain)
+    sys.modules["bcrypt"] = fake_bcrypt
+
 from rbac import (
     Role,
     Permission,
     init_rbac_tables,
     create_api_key,
+    create_default_admin_key,
     verify_api_key,
     has_permission,
     list_api_keys,
@@ -117,6 +126,17 @@ def test_revoke_nonexistent_key(db_setup):
     """Test revoca di key inesistente."""
     success = revoke_api_key("ssp_nonexist")
     assert success is False
+
+
+def test_create_default_admin_key_only_once(db_setup):
+    first = create_default_admin_key()
+    second = create_default_admin_key()
+
+    assert first is not None
+    assert second is None
+
+    keys = list_api_keys()
+    assert len(keys) == 1
 
 
 def test_permissions():

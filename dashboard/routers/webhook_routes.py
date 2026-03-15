@@ -20,13 +20,13 @@ router = APIRouter(prefix="/api", tags=["webhooks"])
 
 
 @router.get("/webhooks", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def get_webhooks(auth: AuthContext = Depends(require_auth)) -> list[dict]:
+async def get_webhooks(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """List all webhooks (admin/operator only)."""
     return list_webhooks()
 
 
 @router.post("/webhooks", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def create_new_webhook(
+async def create_new_webhook(
     name: str = Form(...),
     url: str = Form(...),
     events: str = Form(...),  # Comma-separated event types
@@ -60,7 +60,7 @@ def create_new_webhook(
 
 
 @router.delete("/webhooks/{webhook_id}", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
+async def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Delete a webhook (admin/operator only)."""
     success = delete_webhook(webhook_id)
 
@@ -79,7 +79,7 @@ def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require
 
 
 @router.patch("/webhooks/{webhook_id}", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def toggle_webhook_endpoint(
+async def toggle_webhook_endpoint(
     webhook_id: int, is_active: bool = Form(...), auth: AuthContext = Depends(require_auth)
 ) -> dict:
     """Enable or disable a webhook (admin/operator only)."""

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -79,6 +77,14 @@ def test_sqlite_connect_row_factory():
     """Row factory should be set to sqlite3.Row."""
     conn = _sqlite_connect(":memory:")
     assert conn.row_factory == sqlite3.Row
+    conn.close()
+
+
+def test_sqlite_connect_sets_busy_timeout():
+    """SQLite connections should wait briefly on lock contention instead of failing immediately."""
+    conn = _sqlite_connect(":memory:")
+    timeout_ms = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    assert timeout_ms == 5000
     conn.close()
 
 

@@ -199,3 +199,11 @@ class TestCweWordBoundaryMatch:
         findings = [{"severity": "HIGH", "fingerprint": "fp4", "cve": "CWE-22,CWE-35"}]
         result = engine.evaluate(findings, target_name="dev-svc", target_type="git")
         assert result["exempted_count"] == 1
+
+    def test_plain_cve_identifier_does_not_match_cwe_exemption(self):
+        """A CVE identifier must not accidentally satisfy a CWE exemption."""
+        engine = PolicyEngine(self._config_with_cwe("CWE-22"))
+        findings = [{"severity": "HIGH", "fingerprint": "fp5", "cve": "CVE-2024-12345"}]
+        result = engine.evaluate(findings, target_name="dev-svc", target_type="git")
+        assert result["exempted_count"] == 0
+        assert result["status"] == "BLOCK"

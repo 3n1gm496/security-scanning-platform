@@ -9,15 +9,14 @@ import shutil
 import sys
 import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from orchestrator.cache import build_cache_key, load_cached_output, store_cached_output
-from orchestrator.models import ScanResult, TargetSpec, ToolExecutionResult
+from orchestrator.models import ScanResult, TargetSpec, ToolExecutionResult, utc_now_iso
 from orchestrator.normalizer import (
     normalize_checkov,
     normalize_gitleaks,
@@ -32,7 +31,6 @@ from orchestrator.normalizer import (
 from orchestrator.retention import apply_retention
 from orchestrator.compatibility import get_compatible_scanners, preflight_check
 from orchestrator.scanners import (
-    ScannerError,
     clone_repo,
     get_git_commit_sha,
     load_json,
@@ -53,10 +51,6 @@ from orchestrator.policy_engine import load_policy_engine
 LOGGER = logging.getLogger(__name__)
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
 def setup_logging(level: str = "INFO") -> None:
     from orchestrator.logging_config import configure_logging
 
@@ -74,6 +68,10 @@ def _safe_int(value: str, default: int) -> int:
         return int(value)
     except (ValueError, TypeError):
         return default
+
+
+def _scan_timeout_seconds(settings: dict[str, Any]) -> int:
+    return max(1, _safe_int(str(settings.get("execution", {}).get("scan_timeout_seconds", 3600)), 3600))
 
 
 def resolve_settings(path: str) -> dict[str, Any]:
@@ -124,6 +122,9 @@ def resolve_settings(path: str) -> dict[str, Any]:
     # git_clone_depth: 0 = full history (recommended for secret scanning via gitleaks).
     # Set to a positive integer for shallow clones in bandwidth-constrained environments.
     settings["execution"].setdefault("git_clone_depth", _safe_int(os.getenv("ORCH_GIT_CLONE_DEPTH", "0"), 0))
+    settings["execution"].setdefault(
+        "scan_timeout_seconds", _safe_int(os.getenv("ORCH_SCAN_TIMEOUT_SECONDS", "3600"), 3600)
+    )
     settings["cache"].setdefault(
         "enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     )
@@ -236,8 +237,17 @@ def evaluate_policy(
     return "PASS"
 
 
+def _validate_scan_id(scan_id: str) -> str:
+    """Validate that scan_id is a proper UUID to prevent path traversal."""
+    try:
+        # Parse and re-format to ensure it's a valid UUID string
+        return str(uuid.UUID(scan_id))
+    except (ValueError, AttributeError):
+        raise ValueError(f"Invalid scan_id: must be a valid UUID, got '{scan_id}'")
+
+
 def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str | None = None) -> ScanResult:
-    scan_id = scan_id or str(uuid.uuid4())
+    scan_id = _validate_scan_id(scan_id) if scan_id else str(uuid.uuid4())
     started_at = utc_now_iso()
     db_path = settings["paths"]["db_path"]
     reports_root = Path(settings["paths"]["reports_dir"]) / scan_id
@@ -595,9 +605,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
                 except Exception:  # noqa: BLE001
                     LOGGER.exception("Unexpected scanner task failure for target=%s", target.name)
 
-    if not findings and status == "COMPLETED_CLEAN":
-        status = "COMPLETED_CLEAN"
-    elif findings and status == "COMPLETED_CLEAN":
+    if findings and status == "COMPLETED_CLEAN":
         status = "COMPLETED_WITH_FINDINGS"
 
     policy_status = evaluate_policy([f.to_dict() for f in findings], settings, target.name, target.type)
@@ -673,8 +681,11 @@ def run_targets_concurrently(
         target_settings = copy.deepcopy(settings)
         # Use the pre-assigned scan_id only for single-target runs (dashboard flow).
         sid = scan_id_override if len(targets) == 1 else None
+        started_at = utc_now_iso()
+        finished_at = None
         try:
             result = run_single_scan(target, target_settings, scan_id=sid)
+            finished_at = result.finished_at
             return {
                 "payload": result.to_dict(),
                 "policy_status": result.policy_status,
@@ -684,18 +695,47 @@ def run_targets_concurrently(
             }
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Scan failed for target=%s", target.name)
+            finished_at = utc_now_iso()
+            payload = {
+                "scan_id": sid or str(uuid.uuid4()),
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "target_name": target.name,
+                "target_type": target.type,
+                "target_value": target.resolved_target,
+                "status": "FAILED",
+                "policy_status": "UNKNOWN",
+                "error_message": str(exc),
+                "tools": [],
+                "findings": [],
+                "artifacts": {},
+                "raw_report_dir": "",
+                "normalized_report_path": "",
+            }
+            db_path = target_settings["paths"].get("db_path")
+            if db_path:
+                failed_result = ScanResult(
+                    scan_id=payload["scan_id"],
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    target_name=target.name,
+                    target_type=target.type,
+                    target_value=target.resolved_target,
+                    status="FAILED",
+                    policy_status="UNKNOWN",
+                    tools=[],
+                    findings=[],
+                    artifacts={},
+                    raw_report_dir="",
+                    normalized_report_path="",
+                    error_message=str(exc),
+                )
+                try:
+                    save_scan_result(db_path, failed_result)
+                except Exception:  # noqa: BLE001
+                    LOGGER.exception("Failed to persist FAILED scan result for target=%s", target.name)
             return {
-                "payload": {
-                    "scan_id": sid or str(uuid.uuid4()),
-                    "target_name": target.name,
-                    "target_type": target.type,
-                    "target_value": target.resolved_target,
-                    "status": "FAILED",
-                    "policy_status": "UNKNOWN",
-                    "error_message": str(exc),
-                    "tools": [],
-                    "findings": [],
-                },
+                "payload": payload,
                 "policy_status": "UNKNOWN",
                 "status": "FAILED",
                 "target": target.name,
@@ -704,13 +744,70 @@ def run_targets_concurrently(
 
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="target-scan") as executor:
         futures = [executor.submit(_scan_target, target) for target in targets]
-        for future in as_completed(futures):
-            item = future.result()
-            results.append(item["payload"])
-            if item["policy_status"] == "BLOCK":
-                has_block = True
-            if item["status"] in {"PARTIAL_FAILED", "FAILED"}:
-                has_failure = True
+        future_to_target = {future: target for future, target in zip(futures, targets)}
+        pending = set(futures)
+        try:
+            for future in as_completed(futures, timeout=_scan_timeout_seconds(settings)):
+                pending.discard(future)
+                item = future.result()
+                results.append(item["payload"])
+                if item["policy_status"] == "BLOCK":
+                    has_block = True
+                if item["status"] in {"PARTIAL_FAILED", "FAILED"}:
+                    has_failure = True
+        except FuturesTimeoutError:
+            LOGGER.error(
+                "scan.timeout.batch timeout_seconds=%s pending=%s",
+                _scan_timeout_seconds(settings),
+                len(pending),
+            )
+        for future in pending:
+            target = future_to_target[future]
+            future.cancel()
+            scan_id = scan_id_override if len(targets) == 1 else str(uuid.uuid4())
+            started_at = utc_now_iso()
+            finished_at = utc_now_iso()
+            error_message = f"Scan exceeded timeout of {_scan_timeout_seconds(settings)} seconds"
+            payload = {
+                "scan_id": scan_id,
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "target_name": target.name,
+                "target_type": target.type,
+                "target_value": target.resolved_target,
+                "status": "FAILED",
+                "policy_status": "UNKNOWN",
+                "error_message": error_message,
+                "tools": [],
+                "findings": [],
+                "artifacts": {},
+                "raw_report_dir": "",
+                "normalized_report_path": "",
+            }
+            db_path = settings["paths"].get("db_path")
+            if db_path:
+                timeout_result = ScanResult(
+                    scan_id=scan_id,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    target_name=target.name,
+                    target_type=target.type,
+                    target_value=target.resolved_target,
+                    status="FAILED",
+                    policy_status="UNKNOWN",
+                    tools=[],
+                    findings=[],
+                    artifacts={},
+                    raw_report_dir="",
+                    normalized_report_path="",
+                    error_message=error_message,
+                )
+                try:
+                    save_scan_result(db_path, timeout_result)
+                except Exception:  # noqa: BLE001
+                    LOGGER.exception("Failed to persist timed-out scan result for target=%s", target.name)
+            results.append(payload)
+            has_failure = True
 
     # BLOCK takes priority over FAILED (security policy violation is more important)
     if has_block and fail_on_policy_block:

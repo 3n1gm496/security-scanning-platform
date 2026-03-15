@@ -31,54 +31,20 @@ COPY orchestrator/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     pip install --no-cache-dir semgrep checkov bandit
 
-# Install Trivy (filesystem + container vulnerability scanner).
-# Download the pre-built .tar.gz directly from GitHub releases to avoid
-# relying on the install.sh wrapper script which queries the GitHub API
-# and can fail in CI environments with rate-limited or restricted network access.
-RUN TRIVY_ARCH="Linux-64bit" && \
-    curl -sSfL \
-      "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
-      -o /tmp/trivy.tar.gz && \
-    tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy && \
-    rm /tmp/trivy.tar.gz && \
-    trivy --version
+COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
 
-# Install Gitleaks (secret scanner).
-RUN curl -sSfL \
-      "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-      -o /tmp/gitleaks.tar.gz && \
-    tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks && \
-    rm /tmp/gitleaks.tar.gz && \
-    gitleaks version
-
-# Install Syft (SBOM generator).
-# Same rationale as Trivy: direct asset download is more reliable in CI.
-RUN SYFT_VERSION_PLAIN="${SYFT_VERSION#v}" && \
-    curl -sSfL \
-      "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION_PLAIN}/syft_${SYFT_VERSION_PLAIN}_linux_amd64.tar.gz" \
-      -o /tmp/syft.tar.gz && \
-    tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft && \
-    rm /tmp/syft.tar.gz && \
-    syft version
-
-# Install Grype (vulnerability scanner for SBOMs and container images).
-RUN GRYPE_VERSION_PLAIN="${GRYPE_VERSION#v}" && \
-    curl -sSfL \
-      "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION_PLAIN}/grype_${GRYPE_VERSION_PLAIN}_linux_amd64.tar.gz" \
-      -o /tmp/grype.tar.gz && \
-    tar -xzf /tmp/grype.tar.gz -C /usr/local/bin grype && \
-    rm /tmp/grype.tar.gz && \
-    grype version
-
-# Install Nuclei (web vulnerability scanner — best-effort; scan continues if unavailable).
-RUN NUCLEI_VERSION_PLAIN="${NUCLEI_VERSION#v}" && \
-    curl -sSfL \
-      "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION_PLAIN}/nuclei_${NUCLEI_VERSION_PLAIN}_linux_amd64.zip" \
-      -o /tmp/nuclei.zip && \
-    unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin && \
-    rm /tmp/nuclei.zip && \
-    nuclei -version \
-    || echo "WARNING: nuclei install failed — tool will be skipped at runtime"
+# Install scanner binaries from GitHub releases with SHA-256 verification.
+RUN python /tmp/fetch_binaries.py \
+      --trivy-version "${TRIVY_VERSION}" \
+      --gitleaks-version "${GITLEAKS_VERSION}" \
+      --syft-version "${SYFT_VERSION}" \
+      --grype-version "${GRYPE_VERSION}" \
+      --nuclei-version "${NUCLEI_VERSION}" && \
+    trivy --version && \
+    gitleaks version && \
+    syft version && \
+    grype version && \
+    nuclei -version
 
 # Install python-owasp-zap-v2.4 client library for ZAP REST API integration.
 # This is a lightweight Python client; the actual ZAP server is expected to run

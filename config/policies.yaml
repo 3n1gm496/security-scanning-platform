@@ -92,9 +92,7 @@ exemptions:
     expires_at: "2026-06-30"
   
   # Exempt by CWE for specific targets
-  - cwe: "CWE-
-
-611"  # XML External Entity
+  - cwe: "CWE-611"  # XML External Entity
     target_pattern: "legacy-*"
     reason: "Legacy app - XML parsing disabled at firewall level"
     approved_by: "security-architect@company.com"

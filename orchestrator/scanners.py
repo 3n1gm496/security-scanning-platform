@@ -8,7 +8,6 @@ import shutil
 import signal
 import socket
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -61,8 +60,8 @@ def _check_ssrf(hostname: str) -> None:
             addr = ipaddress.ip_address(sockaddr[0])
             if _is_blocked_ip(addr):
                 raise ScannerError(f"Clone target '{hostname}' resolves to blocked IP range: {addr}")
-    except socket.gaierror:
-        pass  # DNS resolution failed — let git clone handle the error
+    except socket.gaierror as exc:
+        raise ScannerError(f"DNS resolution failed for '{hostname}': {exc}") from exc
 
 
 def _redact_url_credentials(token: str) -> str:
@@ -82,6 +81,40 @@ def _redact_url_credentials(token: str) -> str:
     return token
 
 
+_SAFE_ENV_KEYS = {
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "TRIVY_CACHE_DIR",
+    "XDG_CACHE_HOME",
+    "ZAP_API_URL",
+    "ZAP_API_KEY",
+}
+
+
+def _scanner_subprocess_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Build a minimal subprocess environment to avoid leaking unrelated secrets."""
+    env = {key: value for key, value in os.environ.items() if key in _SAFE_ENV_KEYS}
+    env.setdefault("PATH", os.environ.get("PATH", ""))
+    env.setdefault("HOME", os.environ.get("HOME", "/tmp"))
+    env.setdefault("LANG", os.environ.get("LANG", "C.UTF-8"))
+    if extra:
+        env.update(extra)
+    return env
+
+
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -91,10 +124,6 @@ from tenacity import (
 )
 
 LOGGER = logging.getLogger(__name__)
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 class ScannerError(RuntimeError):
@@ -139,7 +168,7 @@ def run_command(
 
 def ensure_json_file(path: str | Path, default_payload: dict | list) -> None:
     output = Path(path)
-    if output.exists():
+    if output.exists() and output.stat().st_size > 0:
         return
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as handle:
@@ -202,8 +231,7 @@ def clone_repo(repo_url: str, destination: str, ref: str | None = None, depth: i
     command.extend([repo_url, destination])
 
     # disable interactive credential prompting inside containers
-    env = os.environ.copy()
-    env["GIT_TERMINAL_PROMPT"] = "0"
+    env = _scanner_subprocess_env({"GIT_TERMINAL_PROMPT": "0"})
 
     code, stdout, stderr = run_command(command, timeout=1800, env=env)
     if code != 0:
@@ -228,7 +256,7 @@ def run_semgrep(target_path: str, output_path: str, configs: list[str]) -> dict[
         for config in configs:
             command.extend(["--config", config])
         command.append(target_path)
-        code, stdout, stderr = run_command(command, timeout=3600)
+        code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
 
         # Detect rate limiting
         if "rate limit" in stderr.lower() or code == 429:
@@ -262,7 +290,7 @@ def run_trivy_fs(
     if ignore_unfixed:
         command.append("--ignore-unfixed")
     command.append(target_path)
-    code, stdout, stderr = run_command(command, timeout=3600)
+    code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code not in (0, 1):
         raise ScannerError(f"trivy fs failed: {stderr or stdout}")
     Path(output_path).write_text(stdout or '{"Results": []}', encoding="utf-8")
@@ -292,7 +320,7 @@ def run_trivy_image(
     if ignore_unfixed:
         command.append("--ignore-unfixed")
     command.append(image_ref)
-    code, stdout, stderr = run_command(command, timeout=3600)
+    code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code not in (0, 1):
         raise ScannerError(f"trivy image failed: {stderr or stdout}")
     Path(output_path).write_text(stdout or '{"Results": []}', encoding="utf-8")
@@ -322,7 +350,7 @@ def run_gitleaks(target_path: str, output_path: str, use_git_history: bool = Tru
         "--log-level",
         "error",
     ]
-    code, stdout, stderr = run_command(command, timeout=3600)
+    code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code not in (0, 1):
         raise ScannerError(f"gitleaks failed: {stderr or stdout}")
     ensure_json_file(output_path, [])
@@ -348,7 +376,7 @@ def run_checkov(target_path: str, output_path: str) -> dict[str, Any]:
         "sca_package",
         "sca_image",
     ]
-    code, stdout, stderr = run_command(command, timeout=3600)
+    code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code not in (0, 1):
         raise ScannerError(f"checkov failed: {stderr or stdout}")
     Path(output_path).write_text(stdout or '{"results":{"failed_checks":[],"passed_checks":[]}}', encoding="utf-8")
@@ -363,7 +391,7 @@ def run_syft(target_value: str, output_path: str) -> dict[str, Any]:
     if not command_exists("syft"):
         raise ScannerError("syft not found in PATH — install it or disable the scanner in settings.yaml")
     command = ["syft", target_value, "-o", f"spdx-json={output_path}"]
-    code, stdout, stderr = run_command(command, timeout=3600)
+    code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code != 0:
         raise ScannerError(f"syft failed: {stderr or stdout}")
     ensure_json_file(output_path, {"spdxVersion": "SPDX-2.3", "packages": []})
@@ -388,7 +416,7 @@ def run_bandit(target_path: str, output_path: str) -> dict[str, Any]:
     # Use -o to write directly to file: avoids progress bar / rich output
     # polluting stdout which would break JSON parsing.
     command = ["bandit", "-f", "json", "-o", output_path, "-r", target_path]
-    code, stdout, stderr = run_command(command, timeout=3600)
+    code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code not in (0, 1):
         raise ScannerError(f"bandit execution failed: {stderr or stdout}")
     # Ensure output file exists even if bandit produced no findings
@@ -420,6 +448,15 @@ _NUCLEI_SAST_DEFAULT_TEMPLATES: list[str] = [
 ]
 
 
+def _check_url_ssrf(url: str) -> None:
+    """Validate a URL target against SSRF attacks."""
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in ("http", "https"):
+        raise ScannerError(f"Unsupported URL scheme '{parsed.scheme}' — only http/https are allowed")
+    if parsed.hostname:
+        _check_ssrf(parsed.hostname)
+
+
 def run_nuclei(
     target_path: str,
     output_path: str,
@@ -447,6 +484,8 @@ def run_nuclei(
     """
     if not command_exists("nuclei"):
         raise ScannerError("nuclei not found in PATH — install it or disable the scanner in settings.yaml")
+    if target_type == "url":
+        _check_url_ssrf(target_path)
 
     # Resolve effective template list
     effective_templates: list[str] = []
@@ -477,7 +516,7 @@ def run_nuclei(
     # Disable automatic update checks in CI/automated environments to avoid delays
     # (nuclei v3 flag: -duc / -disable-update-check)
     command.extend(["-duc"])
-    code, stdout, stderr = run_command(command, timeout=3600)
+    code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code not in (0, 1):
         raise ScannerError(f"nuclei failed: {stderr or stdout}")
     # ensure a file exists even if nuclei produced nothing
@@ -523,6 +562,8 @@ def run_owasp_zap(
             -config api.addrs.addr.regex=true \\
             -config api.key=<your-api-key>
     """
+    _check_url_ssrf(target_url)
+
     try:
         from zapv2 import ZAPv2  # type: ignore[import]
     except ImportError as exc:

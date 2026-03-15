@@ -31,10 +31,18 @@ function debounce(fn, delay) {
   };
 }
 
+function normalizePerPage(value, fallback = 50) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 // CSRF token cache — fetched once, reused for all mutating requests.
 let _csrfToken = null;
 
-async function getCsrfToken() {
+async function getCsrfToken(forceRefresh = false) {
+  if (forceRefresh) {
+    _csrfToken = null;
+  }
   if (!_csrfToken) {
     const res = await fetch('/api/csrf-token');
     if (res.ok) {
@@ -45,44 +53,47 @@ async function getCsrfToken() {
   return _csrfToken;
 }
 
+async function _fetchWithCsrfRetry(url, options, timeoutMs, parseJson) {
+  const attempt = async (forceRefresh = false) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const requestOptions = { ...options };
+      if (_MUTATING_METHODS.has((requestOptions.method || 'GET').toUpperCase())) {
+        const token = await getCsrfToken(forceRefresh);
+        requestOptions.headers = { 'X-CSRF-Token': token, ...requestOptions.headers };
+      }
+      const res = await fetch(url, { signal: controller.signal, ...requestOptions });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        const message = err.detail || `HTTP ${res.status}`;
+        if (!forceRefresh && res.status === 403 && /csrf/i.test(message)) {
+          return attempt(true);
+        }
+        throw new Error(message);
+      }
+      return parseJson ? res.json() : res;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  return attempt(false);
+}
+
 const _MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 async function apiFetch(url, options = {}, timeoutMs = 30000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    if (_MUTATING_METHODS.has((options.method || 'GET').toUpperCase())) {
-      const token = await getCsrfToken();
-      options.headers = { 'X-CSRF-Token': token, ...options.headers };
-    }
-    const res = await fetch(url, { signal: controller.signal, ...options });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
-    }
-    return res.json();
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
+  return _fetchWithCsrfRetry(url, options, timeoutMs, true);
 }
 
 /** Like apiFetch but does not parse JSON — validates res.ok and returns the raw Response. */
 async function apiSend(url, options = {}) {
-  if (_MUTATING_METHODS.has((options.method || 'GET').toUpperCase())) {
-    const token = await getCsrfToken();
-    options.headers = { 'X-CSRF-Token': token, ...options.headers };
-  }
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res;
+  return _fetchWithCsrfRetry(url, options, 30000, false);
 }
 
 function formatDate(iso) {
@@ -106,10 +117,12 @@ createApp({
     return {
       // ── Auth / User
       currentUser: init.user || 'unknown',
+      currentUserRole: String(init.userRole || 'admin').toLowerCase(),
 
       // ── Navigation
       currentPage: 'dashboard',
       sidebarCollapsed: false,
+      mobileNavOpen: false,
 
       // ── Global state
       loading: false,
@@ -238,7 +251,7 @@ createApp({
       newScanForm: { name: '', target: '', target_type: 'local' },
       scanPollingInterval: null,
       hasRunningScans: false,
-      findingsPerPage: parseInt(localStorage.getItem('ssp-findings-per-page') || '50', 10),
+      findingsPerPage: normalizePerPage(localStorage.getItem('ssp-findings-per-page'), 50),
 
       // ── Finding modal tabs
       findingModalTab: 'info',
@@ -278,8 +291,12 @@ createApp({
       };
       return subs[this.currentPage] || '';
     },
+    currentUserRoleLabel() {
+      const labels = { admin: 'Administrator', operator: 'Operator', viewer: 'Viewer' };
+      return labels[this.currentUserRole] || 'User';
+    },
     allSelected() {
-      return this.findings.length > 0 && this.selectedFindings.length === this.findings.length;
+      return this.findings.length > 0 && this.findings.every(f => this.selectedFindings.includes(f.id));
     },
     // Scan B list: only scans with the same target_name as scan A (excluding scan A itself)
     compareScanListB() {
@@ -312,15 +329,13 @@ createApp({
     history.replaceState({ page: initialPage }, '', '#' + initialPage);
 
     // ── History API: back/forward button support
-    window.addEventListener('popstate', async (e) => {
+    this._popstateHandler = async (e) => {
       const page = (e.state && e.state.page) ? e.state.page : 'dashboard';
       if (validPages.includes(page) && page !== this.currentPage) {
-        // Reuse navigate() so chart cleanup runs for the previous page.
-        // Temporarily set _refreshing so the same-page guard is bypassed.
-        this._refreshing = true;
-        try { await this.navigate(page); } finally { this._refreshing = false; }
+        await this.navigate(page, { pushHistory: false });
       }
-    });
+    };
+    window.addEventListener('popstate', this._popstateHandler);
 
     // ── Dark mode: restore preference from localStorage
     const savedTheme = localStorage.getItem('ssp-theme');
@@ -416,8 +431,13 @@ createApp({
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     this.stopScanPolling();
     if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
+    if (this._popstateHandler) window.removeEventListener('popstate', this._popstateHandler);
     Object.values(this.charts).forEach(c => c && c.destroy());
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
+    if (this._toastTimers) {
+      this._toastTimers.forEach(timer => clearTimeout(timer));
+      this._toastTimers.clear();
+    }
   },
 
   methods: {
@@ -479,7 +499,7 @@ createApp({
 
     // ── Navigation ─────────────────────────────────────────────────────────────────────────────────────
 
-    async navigate(page) {
+    async navigate(page, { pushHistory = true } = {}) {
       // Skip redundant navigation to the same page (prevents chart destruction)
       if (page === this.currentPage && !this._refreshing) return;
 
@@ -499,8 +519,9 @@ createApp({
       }
 
       this.currentPage = page;
+      this.mobileNavOpen = false;
       // Update URL hash for bookmarkability and back/forward support
-      history.pushState({ page }, '', '#' + page);
+      if (pushHistory) history.pushState({ page }, '', '#' + page);
       window.scrollTo(0, 0);
       await nextTick();
       if (page === 'dashboard') await this.initDashboardCharts();
@@ -534,9 +555,20 @@ createApp({
     showToast(message, type = 'success') {
       const id = ++this.toastCounter;
       this.toasts.push({ id, message, type });
-      setTimeout(() => {
+      if (!this._toastTimers) this._toastTimers = new Set();
+      const timer = setTimeout(() => {
         this.toasts = this.toasts.filter(t => t.id !== id);
+        this._toastTimers.delete(timer);
       }, 4000);
+      this._toastTimers.add(timer);
+    },
+
+    toggleMobileNav() {
+      this.mobileNavOpen = !this.mobileNavOpen;
+    },
+
+    closeMobileNav() {
+      this.mobileNavOpen = false;
     },
 
     // ── Auto-refresh ──────────────────────────────────────────────────────────
@@ -555,9 +587,9 @@ createApp({
           if (this.currentPage === 'dashboard') {
             await this.initDashboardCharts();
           } else if (this.currentPage === 'scans') {
-            await this.loadScans();
+            await this.loadScans(false, true);
           } else if (this.currentPage === 'findings') {
-            await this.loadFindings();
+            await this.loadFindings(false, true);
           } else if (this.currentPage === 'analytics') {
             await this._refreshAnalyticsData();
           }
@@ -581,8 +613,8 @@ createApp({
           // Refresh KPIs and current page data on every poll tick
           try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
           if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
-          else if (this.currentPage === 'scans') { await this.loadScans(); }
-          else if (this.currentPage === 'findings') { await this.loadFindings(); }
+          else if (this.currentPage === 'scans') { await this.loadScans(false, true); }
+          else if (this.currentPage === 'findings') { await this.loadFindings(false, true); }
           else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
 
           // Check if the tracked scan is still RUNNING
@@ -607,8 +639,8 @@ createApp({
             // Final refresh to ensure everything is fully up-to-date
             try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
             if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
-            else if (this.currentPage === 'scans') { await this.loadScans(); }
-            else if (this.currentPage === 'findings') { await this.loadFindings(); }
+            else if (this.currentPage === 'scans') { await this.loadScans(false, true); }
+            else if (this.currentPage === 'findings') { await this.loadFindings(false, true); }
             else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
           }
         } catch (e) {
@@ -783,27 +815,6 @@ createApp({
       });
     },
 
-    buildToolChart() {
-      const canvas = this.$refs.toolChart;
-      if (!canvas) return;
-      if (this.charts.tool) { this.charts.tool.destroy(); this.charts.tool = null; }
-      const data = this.toolBreakdown;
-      const labels = Object.keys(data).slice(0, 10);
-      const values = Object.values(data).slice(0, 10);
-      this.charts.tool = new Chart(canvas.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{ label: 'Findings', data: values, backgroundColor: this.cssVar('--color-primary'), borderRadius: 6 }],
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-          plugins: { legend: { display: false } },
-          scales: { x: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') } }, y: { grid: { display: false } } },
-        },
-      });
-    },
-
     buildTrendChart() {
       const canvas = this.$refs.trendChart;
       if (!canvas) return;
@@ -812,7 +823,13 @@ createApp({
       }
 
       const scans = (this.recentScans || []).slice(0, 12);
-      if (scans.length === 0) return;
+      if (scans.length === 0) {
+        if (this.charts.trend) {
+          this.charts.trend.destroy();
+          this.charts.trend = null;
+        }
+        return;
+      }
 
       const labels = scans.map(s => {
         const name = s.target_name || s.id || '?';
@@ -875,14 +892,14 @@ createApp({
             },
             y: {
               stacked: false,
-              type: 'logarithmic',
+              type: 'linear',
               grid: { color: this.cssVar('--chart-grid') },
               ticks: {
                 font: { size: 11 },
                 color: this.cssVar('--chart-tick'),
-                callback: (val) => [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].includes(val) ? val : null,
+                precision: 0,
               },
-              title: { display: true, text: 'Findings (log scale)', font: { size: 10 }, color: this.cssVar('--chart-tick') },
+              title: { display: true, text: 'Findings', font: { size: 10 }, color: this.cssVar('--chart-tick') },
             },
           },
         },
@@ -891,7 +908,7 @@ createApp({
 
     // ── Scans ─────────────────────────────────────────────────────────────────
 
-    async loadScans(reset = false) {
+    async loadScans(reset = false, preservePage = false) {
       if (reset) {
         this.scansPage = 1;
         this.scansCursor = null;
@@ -909,7 +926,8 @@ createApp({
         if (this.scansFilter.target) params.set('target', this.scansFilter.target);
         if (this.scansFilter.status) params.set('status', this.scansFilter.status);
         if (this.scansFilter.policy) params.set('policy', this.scansFilter.policy);
-        if (this.scansCursor) params.set('cursor', this.scansCursor);
+        const requestCursor = preservePage ? (this._scansPageCursor || null) : this.scansCursor;
+        if (requestCursor) params.set('cursor', requestCursor);
         const result = await apiFetch(`/api/scans/paginated?${params}`);
         this.scans = result.items || [];
         const scanPag = result.pagination || {};
@@ -1010,7 +1028,7 @@ createApp({
       history.replaceState({ page: 'findings' }, '', hash);
     },
 
-    async loadFindings(reset = false) {
+    async loadFindings(reset = false, preservePage = false) {
       if (reset) {
         this.findingsPage = 1;
         this.findingsCursor = null;
@@ -1024,7 +1042,8 @@ createApp({
         if (this.findingsFilter.search) params.set('search', this.findingsFilter.search);
         if (this.findingsFilter.severity) params.set('severity', this.findingsFilter.severity);
         if (this.findingsFilter.tool) params.set('tool', this.findingsFilter.tool);
-        if (this.findingsCursor) params.set('cursor', this.findingsCursor);
+        const requestCursor = preservePage ? (this._findingsPageCursor || null) : this.findingsCursor;
+        if (requestCursor) params.set('cursor', requestCursor);
         // Always use cursor-based pagination endpoint (supports status filter via LEFT JOIN)
         if (this.findingsFilter.status) params.set('status', this.findingsFilter.status);
         if (this.findingsFilter.target) params.set('target', this.findingsFilter.target);
@@ -1034,6 +1053,7 @@ createApp({
         const result = await apiFetch(`/api/findings/paginated?${params}`);
 
         this.findings = result.items || [];
+        this.selectedFindings = this.selectedFindings.filter(id => this.findings.some(f => f.id === id));
         const pag = result.pagination || {};
         this.findingsTotal = pag.total_count ?? pag.count ?? this.findings.length;
         this.findingsCursor = pag.next_cursor || null;
@@ -1238,6 +1258,29 @@ createApp({
       }
     },
 
+    async viewCriticalFindings() {
+      this.findingsFilter = {
+        search: '',
+        severity: 'CRITICAL',
+        tool: '',
+        target: '',
+        status: '',
+        scan_id: '',
+      };
+      await this.navigate('findings');
+    },
+
+    safeExternalUrl(value) {
+      if (!value) return '#';
+      try {
+        const url = new URL(String(value), window.location.origin);
+        if (!['http:', 'https:'].includes(url.protocol)) return '#';
+        return url.href;
+      } catch (_) {
+        return '#';
+      }
+    },
+
     // ── Analytics ─────────────────────────────────────────────────────────────
 
     async loadAnalytics() {
@@ -1337,6 +1380,13 @@ createApp({
         this.charts.toolEff.destroy(); this.charts.toolEff = null;
       }
       const tools = this.analyticsData.toolEffectiveness;
+      if (!Array.isArray(tools) || tools.length === 0) {
+        if (this.charts.toolEff) {
+          this.charts.toolEff.destroy();
+          this.charts.toolEff = null;
+        }
+        return;
+      }
       const newLabels = tools.map(t => t.tool);
       const dsData = [
         tools.map(t => t.critical_count || 0),
@@ -1382,13 +1432,13 @@ createApp({
             x: { stacked: false, grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },
             y: {
               stacked: false,
-              type: 'logarithmic',
+              type: 'linear',
               grid: { color: this.cssVar('--chart-grid') },
               ticks: {
                 color: this.cssVar('--chart-tick'),
-                callback: (val) => [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].includes(val) ? val : null,
+                precision: 0,
               },
-              title: { display: true, text: 'Findings (log scale)', font: { size: 10 }, color: this.cssVar('--chart-tick') },
+              title: { display: true, text: 'Findings', font: { size: 10 }, color: this.cssVar('--chart-tick') },
             },
           },
         },
@@ -1405,6 +1455,13 @@ createApp({
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
+      if (labels.length === 0) {
+        if (this.charts.severityDist) {
+          this.charts.severityDist.destroy();
+          this.charts.severityDist = null;
+        }
+        return;
+      }
       if (this.charts.severityDist) {
         this.charts.severityDist.data.labels = labels;
         this.charts.severityDist.data.datasets[0].data = values;
@@ -1463,7 +1520,14 @@ createApp({
       if (this.charts.risk && this.charts.risk.canvas !== canvas) {
         this.charts.risk.destroy(); this.charts.risk = null;
       }
-      const dist = this.analyticsData.riskDistribution.distribution;
+      const dist = this.analyticsData.riskDistribution.distribution || {};
+      if (Object.keys(dist).length === 0) {
+        if (this.charts.risk) {
+          this.charts.risk.destroy();
+          this.charts.risk = null;
+        }
+        return;
+      }
       const RISK_LABEL_MAP = { '0-25': 'Low Risk (0-25)', '25-50': 'Medium Risk (25-50)', '50-75': 'High Risk (50-75)', '75-100': 'Critical Risk (75-100)' };
       const rawLabels = Object.keys(dist);
       const labels = rawLabels.map(l => RISK_LABEL_MAP[l] || l);
@@ -1508,7 +1572,14 @@ createApp({
       if (this.charts.owasp && this.charts.owasp.canvas !== canvas) {
         this.charts.owasp.destroy(); this.charts.owasp = null;
       }
-      const owasp = this.analyticsData.compliance.owasp_top_10.slice(0, 6);
+      const owasp = (this.analyticsData.compliance.owasp_top_10 || []).slice(0, 6);
+      if (owasp.length === 0) {
+        if (this.charts.owasp) {
+          this.charts.owasp.destroy();
+          this.charts.owasp = null;
+        }
+        return;
+      }
       const labels = owasp.map(o => o.category.split(' - ')[0]);
       const values = owasp.map(o => o.count);
       if (this.charts.owasp) {
@@ -1540,7 +1611,14 @@ createApp({
       if (this.charts.analyticsTrend && this.charts.analyticsTrend.canvas !== canvas) {
         this.charts.analyticsTrend.destroy(); this.charts.analyticsTrend = null;
       }
-      const trendData = this.analyticsData.trends.trend;
+      const trendData = this.analyticsData.trends.trend || [];
+      if (trendData.length === 0) {
+        if (this.charts.analyticsTrend) {
+          this.charts.analyticsTrend.destroy();
+          this.charts.analyticsTrend = null;
+        }
+        return;
+      }
       const labels = trendData.map(t => t.date);
       const avgData = trendData.map(t => t.average_risk);
       const maxData = trendData.map(t => t.max_risk);
@@ -1604,10 +1682,18 @@ createApp({
       });
     },
 
-    owaspBarWidth(count) {
+    owaspBarWidth(count, series = 'owasp') {
       if (!this.analyticsData.compliance) return 0;
-      const max = Math.max(...this.analyticsData.compliance.owasp_top_10.map(o => o.count), 1);
-      return Math.round((count / max) * 100);
+      const owasp = Array.isArray(this.analyticsData.compliance.owasp_top_10)
+        ? this.analyticsData.compliance.owasp_top_10
+        : [];
+      const cwe = Array.isArray(this.analyticsData.compliance.cwe_top)
+        ? this.analyticsData.compliance.cwe_top
+        : [];
+      const source = series === 'cwe' ? cwe : owasp;
+      const numericCount = Number(count) || 0;
+      const max = Math.max(...source.map(o => o.count), 1);
+      return Math.round(((numericCount || 0) / max) * 100);
     },
 
     riskBarClass(risk) {
@@ -1833,6 +1919,16 @@ createApp({
       }
     },
 
+    async logout() {
+      try {
+        await apiSend('/logout', { method: 'POST' });
+      } catch (e) {
+        console.debug('[logout] failed:', e.message);
+      } finally {
+        window.location.href = '/login';
+      }
+    },
+
     // ── Export ────────────────────────────────────────────────────────────────
 
     _downloadBlob(res, filename) {
@@ -1862,7 +1958,8 @@ createApp({
         if (!res.ok) throw new Error('Export failed');
         this._checkExportTruncation(res);
         const blob = await res.blob();
-        this._downloadBlob(blob, `scan_${scanId.substring(0, 8)}_${Date.now()}.${format}`);
+        const scanIdLabel = String(scanId || 'scan').slice(0, 8);
+        this._downloadBlob(blob, `scan_${scanIdLabel}_${Date.now()}.${format}`);
         this.showToast(`Export ${format.toUpperCase()} completed`);
       } catch (e) {
         this.showToast('Export failed: ' + e.message, 'error');
@@ -1963,7 +2060,12 @@ createApp({
     },
 
     copyToClipboard(text) {
-      navigator.clipboard.writeText(text).then(() => this.showToast('Copied to clipboard'));
+      navigator.clipboard.writeText(text)
+        .then(() => this.showToast('Copied to clipboard'))
+        .catch((error) => {
+          console.debug('[clipboard] failed:', error?.message || error);
+          this.showToast('Copy failed', 'error');
+        });
     },
 
     // ── Resizable columns ────────────────────────────────────────────────────────

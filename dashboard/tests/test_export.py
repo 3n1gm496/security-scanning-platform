@@ -129,6 +129,27 @@ def test_export_to_sarif():
     assert "text" in result["message"]
 
 
+def test_export_to_sarif_uses_title_and_existing_cve_fields():
+    """SARIF export should preserve existing title/cve fields from DB-shaped findings."""
+    findings = [
+        {
+            "tool": "bandit",
+            "severity": "high",
+            "title": "Weak crypto",
+            "description": "Uses insecure algorithm",
+            "category": "crypto",
+            "cve": "CVE-2026-0001",
+            "cwe": "CWE-327",
+        }
+    ]
+
+    sarif = json.loads(export_to_sarif(findings))
+    result = sarif["runs"][0]["results"][0]
+    assert result["message"]["text"] == "Weak crypto"
+    assert result["properties"]["cve"] == "CVE-2026-0001"
+    assert result["properties"]["cwe"] == "CWE-327"
+
+
 def test_export_to_sarif_severity_mapping():
     """Test that SARIF severity mapping is correct."""
     findings = [
@@ -203,3 +224,18 @@ def test_export_to_html_severity_grouping():
     assert "CRITICAL Severity (1)" in result
     assert "HIGH Severity (1)" in result
     assert "MEDIUM Severity (1)" in result
+
+
+def test_export_to_html_prefers_title():
+    """HTML export should use the finding title when present."""
+    findings = [
+        {
+            "title": "Canonical Title",
+            "message": "Legacy message",
+            "description": "Long description",
+            "severity": "high",
+            "tool": "test",
+        }
+    ]
+    result = export_to_html(findings)
+    assert "Canonical Title" in result

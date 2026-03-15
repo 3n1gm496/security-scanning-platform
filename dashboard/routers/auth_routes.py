@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import secrets
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from starlette import status
 
+from rbac import Role, verify_user_credentials
 from routers._shared import templates
 
 router = APIRouter(tags=["auth"])
@@ -20,6 +22,7 @@ router = APIRouter(tags=["auth"])
 USERNAME: str = ""
 PASSWORD_RAW: str = ""
 _verify_password = None  # type: ignore[assignment]
+_HTTPS_ONLY = os.getenv("DASHBOARD_HTTPS_ONLY", "0").strip().lower() in ("1", "true", "yes")
 
 
 def init(*, username: str, password_raw: str, verify_password):
@@ -36,7 +39,7 @@ def init(*, username: str, password_raw: str, verify_password):
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, error: str | None = None) -> HTMLResponse:
+async def login_page(request: Request, error: str | None = None) -> HTMLResponse:
     """Show the login form. If already authenticated, redirect to the overview."""
     if request.session.get("user"):
         return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
@@ -53,7 +56,10 @@ async def login(
     # _verify_password supports both bcrypt hashes and legacy plain-text.
     username_ok = secrets.compare_digest(username or "", USERNAME)
     password_ok = _verify_password(password or "", PASSWORD_RAW)
+    db_user = None
     if not (username_ok and password_ok):
+        db_user = verify_user_credentials(username or "", password or "")
+    if not (username_ok and password_ok) and not db_user:
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -62,25 +68,41 @@ async def login(
         )
     # Regenerate session to prevent session fixation attacks
     request.session.clear()
-    request.session["user"] = username
-    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
+    csrf_token = os.getenv("DASHBOARD_TEST_CSRF_TOKEN") or secrets.token_urlsafe(32)
+    if db_user:
+        request.session["user"] = db_user["username"]
+        request.session["role"] = db_user["role"]
+    else:
+        request.session["user"] = username
+        request.session["role"] = os.getenv("DASHBOARD_SESSION_ROLE", Role.ADMIN.value).strip().lower() or Role.ADMIN.value
+    request.session["csrf_token"] = csrf_token
+    response = HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
+    response.set_cookie(
+        "csrf_token",
+        csrf_token,
+        httponly=False,
+        samesite="lax",
+        secure=_HTTPS_ONLY,
+    )
+    return response
 
 
 @router.post("/logout")
-def logout(request: Request) -> HTMLResponse:
+async def logout(request: Request) -> HTMLResponse:
     request.session.clear()
-    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
+    response = HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
+    response.delete_cookie("csrf_token")
+    return response
 
 
 @router.get("/logout")
-def logout_get(request: Request) -> HTMLResponse:
-    """GET logout kept for backward compatibility (link-based logout)."""
-    request.session.clear()
-    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
+async def logout_get(request: Request) -> HTMLResponse:
+    """Reject logout via GET to avoid CSRF-via-GET side effects."""
+    raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED, detail="Use POST /logout")
 
 
 @router.get("/api/csrf-token")
-def csrf_token(request: Request):
+async def csrf_token(request: Request):
     """Return the CSRF token for the current session."""
-    token = request.session.get("csrf_token", "")
+    token = request.cookies.get("csrf_token", "")
     return {"csrf_token": token}

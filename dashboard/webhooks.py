@@ -3,6 +3,7 @@ Webhook system for sending notifications on scan events.
 """
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import ipaddress
@@ -19,14 +20,16 @@ from logging_config import get_logger
 from urllib.parse import urlparse
 
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 
 from db import get_connection
-from db_adapter import is_postgres
+from db_adapter import adapt_schema, is_postgres
 
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 WEBHOOK_RETRY_COUNT = int(os.getenv("WEBHOOK_RETRY_COUNT", "3"))
 WEBHOOK_CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("WEBHOOK_CIRCUIT_BREAKER_THRESHOLD", "5"))
+WEBHOOK_SECRET_PREFIX = "enc:v1:"
 
 # ---------------------------------------------------------------------------
 # SSRF protection — blocked IP ranges
@@ -108,6 +111,56 @@ def validate_webhook_url(url: str, *, resolve_dns: bool = True) -> None:
 logger = get_logger(__name__)
 
 
+def _get_webhook_cipher() -> Fernet:
+    """Build the app-level cipher used for webhook secret at-rest encryption."""
+    key_material = (
+        os.getenv("DASHBOARD_WEBHOOK_SECRET_KEY")
+        or os.getenv("DASHBOARD_SESSION_SECRET")
+        or "please-change-this"
+    )
+    digest = hashlib.sha256(key_material.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _encrypt_secret(secret: Optional[str]) -> Optional[str]:
+    """Encrypt a webhook secret before persisting it."""
+    if not secret:
+        return None
+    token = _get_webhook_cipher().encrypt(secret.encode()).decode()
+    return f"{WEBHOOK_SECRET_PREFIX}{token}"
+
+
+def _decrypt_secret(secret: Optional[str], webhook_id: Optional[int] = None) -> Optional[str]:
+    """Decrypt a persisted webhook secret, lazily migrating legacy plaintext values."""
+    if not secret:
+        return None
+
+    if not secret.startswith(WEBHOOK_SECRET_PREFIX):
+        if webhook_id is not None:
+            with get_connection(DASHBOARD_DB_PATH) as conn:
+                conn.execute(
+                    "UPDATE webhooks SET secret = ? WHERE id = ?",
+                    (_encrypt_secret(secret), webhook_id),
+                )
+        return secret
+
+    token = secret[len(WEBHOOK_SECRET_PREFIX) :]
+    try:
+        return _get_webhook_cipher().decrypt(token.encode()).decode()
+    except InvalidToken as exc:
+        raise ValueError("Webhook secret could not be decrypted with the current encryption key") from exc
+
+
+def _hydrate_webhook(row, *, include_secret: bool) -> dict:
+    """Convert a DB row to API/internal shape while hiding secrets by default."""
+    webhook = dict(row)
+    if include_secret:
+        webhook["secret"] = _decrypt_secret(webhook.get("secret"), webhook.get("id"))
+    else:
+        webhook.pop("secret", None)
+    return webhook
+
+
 class WebhookEvent(str, Enum):
     """Available webhook events."""
 
@@ -120,7 +173,7 @@ class WebhookEvent(str, Enum):
 def init_webhook_tables():
     """Initialize webhook tables in the database."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS webhooks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -134,7 +187,7 @@ def init_webhook_tables():
                 failure_count INTEGER DEFAULT 0,
                 consecutive_failures INTEGER DEFAULT 0
             )
-        """)
+        """))
 
         # Migrate: add column if missing (safe for SQLite)
         try:
@@ -142,7 +195,7 @@ def init_webhook_tables():
         except Exception:
             conn.execute("ALTER TABLE webhooks ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
 
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS webhook_deliveries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 webhook_id INTEGER NOT NULL,
@@ -155,7 +208,7 @@ def init_webhook_tables():
                 duration_ms INTEGER,
                 FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
             )
-        """)
+        """))
 
 
 def create_webhook(name: str, url: str, events: list[WebhookEvent], secret: Optional[str] = None) -> int:
@@ -173,23 +226,23 @@ def create_webhook(name: str, url: str, events: list[WebhookEvent], secret: Opti
         sql += " RETURNING id"
 
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        cursor = conn.execute(sql, (name, url, secret, events_str, created_at))
+        cursor = conn.execute(sql, (name, url, _encrypt_secret(secret), events_str, created_at))
         webhook_id = cursor.fetchone()[0] if is_postgres() else cursor.lastrowid
 
     logger.info("webhook.created", webhook_id=webhook_id, name=name, url=url)
     return webhook_id
 
 
-def list_webhooks() -> list[dict]:
-    """List all webhooks."""
+def list_webhooks(*, include_secret: bool = False) -> list[dict]:
+    """List all webhooks, excluding decrypted secrets unless explicitly requested."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
         rows = conn.execute("""
-            SELECT id, name, url, events, is_active, created_at, last_triggered_at,
+            SELECT id, name, url, secret, events, is_active, created_at, last_triggered_at,
                    success_count, failure_count, consecutive_failures
             FROM webhooks
             ORDER BY created_at DESC
         """).fetchall()
-    return [dict(row) for row in rows]
+    return [_hydrate_webhook(row, include_secret=include_secret) for row in rows]
 
 
 def delete_webhook(webhook_id: int) -> bool:
@@ -219,7 +272,7 @@ def rotate_webhook_secret(webhook_id: int, new_secret: str) -> bool:
     with get_connection(DASHBOARD_DB_PATH) as conn:
         cursor = conn.execute(
             "UPDATE webhooks SET secret = ?, consecutive_failures = 0 WHERE id = ?",
-            (new_secret, webhook_id),
+            (_encrypt_secret(new_secret), webhook_id),
         )
     if cursor.rowcount > 0:
         logger.info("webhook.secret_rotated", webhook_id=webhook_id)
@@ -251,8 +304,9 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
 
     headers = {"Content-Type": "application/json", "User-Agent": "SecurityScanning-Webhook/1.0"}
 
-    if webhook.get("secret"):
-        signature = _generate_signature(payload_str, webhook["secret"])
+    decrypted_secret = _decrypt_secret(webhook.get("secret"), webhook.get("id"))
+    if decrypted_secret:
+        signature = _generate_signature(payload_str, decrypted_secret)
         headers["X-Webhook-Signature"] = f"sha256={signature}"
 
     error_msg = None
@@ -400,7 +454,7 @@ def _update_webhook_stats(webhook_id: int, success: bool):
 
 async def notify_scan_completed(scan_id: int, scan_data: dict):
     """Notify all webhooks about a completed scan."""
-    webhooks = list_webhooks()
+    webhooks = list_webhooks(include_secret=True)
 
     for webhook in webhooks:
         if not webhook["is_active"]:
@@ -425,7 +479,7 @@ async def notify_critical_finding(finding_data: dict):
     else:
         return  # Not critical or high
 
-    webhooks = list_webhooks()
+    webhooks = list_webhooks(include_secret=True)
 
     for webhook in webhooks:
         if not webhook["is_active"]:

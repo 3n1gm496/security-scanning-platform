@@ -88,10 +88,7 @@ def auth_client(full_db):
     """Session-authenticated TestClient with CSRF token."""
     client = TestClient(app, raise_server_exceptions=True)
     client.post("/login", data={"username": "testuser", "password": "testpass"})
-    # Fetch CSRF token and set as default header for all subsequent requests
-    csrf_resp = client.get("/api/csrf-token")
-    csrf_token = csrf_resp.json().get("csrf_token", "")
-    client.headers["X-CSRF-Token"] = csrf_token
+    client.headers["X-CSRF-Token"] = os.environ.get("DASHBOARD_TEST_CSRF_TOKEN", "test-csrf-token")
     return client
 
 

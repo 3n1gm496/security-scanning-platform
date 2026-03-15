@@ -1,9 +1,18 @@
 """Unit tests for email notifications."""
 
+import os
 import sys
+import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+if "bcrypt" not in sys.modules:
+    fake_bcrypt = types.ModuleType("bcrypt")
+    fake_bcrypt.gensalt = lambda: b"salt"
+    fake_bcrypt.hashpw = lambda value, salt: b"$2b$stubbed-hash"
+    fake_bcrypt.checkpw = lambda plain, hashed: True
+    sys.modules["bcrypt"] = fake_bcrypt
 
 from db_adapter import get_connection
 from notifications import EmailNotificationEngine, NotificationPreferencesManager
@@ -48,26 +57,82 @@ def test_get_subscribers():
     assert "user2@example.com" not in subscribers
 
 
-import os
-from fastapi.testclient import TestClient
-
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 
 from app import app  # noqa: E402
+from conftest import SyncASGITestClient  # noqa: E402
+
+
+def test_notification_links_escape_identifier_in_href():
+    """Finding IDs embedded in hrefs must be URL-encoded, not raw HTML."""
+    engine = EmailNotificationEngine()
+    captured = {}
+
+    def fake_send(_to_email, _subject, _text_body, html_body):
+        captured["html"] = html_body
+        return True
+
+    engine._send_email = fake_send  # type: ignore[method-assign]
+    finding = {"id": 'abc" onclick="alert(1)"', "title": "Injected", "description": "desc"}
+
+    assert engine.send_critical_finding_alert("test@example.com", finding, "https://dashboard.example.com")
+    assert 'onclick=' not in captured["html"]
+    assert "abc%22+onclick%3D%22alert%281%29%22" in captured["html"]
+
+
+def test_send_email_skips_starttls_when_server_does_not_support_it(monkeypatch):
+    """SMTP delivery should not fail just because STARTTLS is unavailable."""
+    calls = {"starttls": 0, "login": 0, "send": 0}
+
+    class FakeSMTP:
+        def __init__(self, host, port):
+            self.host = host
+            self.port = port
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def ehlo(self):
+            return None
+
+        def has_extn(self, name):
+            return False
+
+        def starttls(self):
+            calls["starttls"] += 1
+
+        def login(self, user, password):
+            calls["login"] += 1
+
+        def send_message(self, msg):
+            calls["send"] += 1
+
+    monkeypatch.setattr("notifications.smtplib.SMTP", FakeSMTP)
+    engine = EmailNotificationEngine()
+    engine.smtp_user = "user"
+    engine.smtp_password = "pass"
+
+    assert engine._send_email("test@example.com", "Subject", "plain", "<b>html</b>") is True
+    assert calls["starttls"] == 0
+    assert calls["login"] == 1
+    assert calls["send"] == 1
 
 
 def test_notification_preferences_api_flow(isolated_db):
     """Test the full API flow for saving and retrieving notification preferences."""
     test_prefs = {
-        "user_email": "test.user@example.com",
         "critical_alerts": False,
         "high_alerts": True,
         "scan_summaries": True,
         "weekly_digest": False,
+        "preferred_channel": "email",
     }
 
-    with TestClient(app) as client:
+    with SyncASGITestClient(app) as client:
         # Authenticate with CSRF
         from conftest import login_with_csrf
 
@@ -90,3 +155,4 @@ def test_notification_preferences_api_flow(isolated_db):
         assert retrieved_prefs["high_alerts"] == test_prefs["high_alerts"]
         assert retrieved_prefs["scan_summaries"] == test_prefs["scan_summaries"]
         assert retrieved_prefs["weekly_digest"] == test_prefs["weekly_digest"]
+        assert retrieved_prefs["preferred_channel"] == test_prefs["preferred_channel"]

@@ -18,6 +18,7 @@ import os
 import re
 import sqlite3
 import threading
+import atexit
 from pathlib import Path
 
 from logging_config import get_logger
@@ -48,11 +49,18 @@ def _adapt_sql(sql: str) -> str:
     result = []
     in_quote = False
     quote_char = None
-    for ch in sql:
+    idx = 0
+    while idx < len(sql):
+        ch = sql[idx]
         if in_quote:
             result.append(ch)
             if ch == quote_char:
-                in_quote = False
+                next_ch = sql[idx + 1] if idx + 1 < len(sql) else None
+                if next_ch == quote_char:
+                    result.append(next_ch)
+                    idx += 1
+                else:
+                    in_quote = False
         elif ch in ("'", '"'):
             in_quote = True
             quote_char = ch
@@ -61,7 +69,43 @@ def _adapt_sql(sql: str) -> str:
             result.append("%s")
         else:
             result.append(ch)
+        idx += 1
     return "".join(result)
+
+
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split a multi-statement script on semicolons outside quoted strings."""
+    statements: list[str] = []
+    current: list[str] = []
+    in_quote = False
+    quote_char = None
+    idx = 0
+
+    while idx < len(sql):
+        ch = sql[idx]
+        current.append(ch)
+        if in_quote:
+            if ch == quote_char:
+                next_ch = sql[idx + 1] if idx + 1 < len(sql) else None
+                if next_ch == quote_char:
+                    current.append(next_ch)
+                    idx += 1
+                else:
+                    in_quote = False
+        elif ch in ("'", '"'):
+            in_quote = True
+            quote_char = ch
+        elif ch == ";":
+            statement = "".join(current[:-1]).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+        idx += 1
+
+    tail = "".join(current).strip()
+    if tail:
+        statements.append(tail)
+    return statements
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +152,12 @@ def _get_sqlite_pooled(db_path: str) -> sqlite3.Connection:
         except Exception:
             pass  # Stale connection — recreate below.
 
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
     # Create and cache a fresh connection.
     conn = _sqlite_connect(db_path)
     _thread_local.sqlite_conn = conn
@@ -125,6 +175,9 @@ def reset_pool() -> None:
             pass
     _thread_local.sqlite_conn = None
     _thread_local.sqlite_path = None
+
+
+atexit.register(reset_pool)
 
 
 # ---------------------------------------------------------------------------
@@ -257,9 +310,9 @@ class _CursorWrapper:
     def executescript(self, sql: str):
         """Execute a multi-statement SQL script."""
         if self._is_pg:
-            # psycopg2 does not have executescript; split and execute each statement
-            for stmt in sql.split(";"):
-                stmt = stmt.strip()
+            # psycopg2 does not have executescript; split carefully so quoted
+            # semicolons inside string literals are not treated as statement terminators.
+            for stmt in _split_sql_statements(sql):
                 if stmt:
                     self._cur.execute(stmt)
         else:
@@ -404,7 +457,29 @@ def adapt_schema(schema_sql: str) -> str:
     sql = schema_sql
     # AUTOINCREMENT → SERIAL
     sql = re.sub(r"INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY", sql, flags=re.IGNORECASE)
-    # INSERT OR REPLACE → INSERT ... ON CONFLICT DO UPDATE (basic transformation)
-    # This handles the common pattern used in notification_preferences etc.
-    sql = re.sub(r"INSERT\s+OR\s+REPLACE\s+INTO", "INSERT INTO", sql, flags=re.IGNORECASE)
+    # INSERT OR REPLACE → INSERT ... ON CONFLICT DO UPDATE
+    # Heuristic: use the first inserted column as conflict target, which matches
+    # the project's current upsert style for single-key tables.
+    replace_match = re.search(
+        r"INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if replace_match:
+        table_name = replace_match.group(1)
+        columns = [c.strip() for c in replace_match.group(2).split(",")]
+        values = replace_match.group(3).strip()
+        conflict_column = columns[0]
+        update_columns = [col for col in columns if col != conflict_column]
+        if update_columns:
+            update_set = ", ".join(f"{col} = EXCLUDED.{col}" for col in update_columns)
+            sql = (
+                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "
+                f"ON CONFLICT ({conflict_column}) DO UPDATE SET {update_set}"
+            )
+        else:
+            sql = (
+                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "
+                f"ON CONFLICT ({conflict_column}) DO NOTHING"
+            )
     return sql

@@ -19,6 +19,7 @@ TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_NAME="ssp-backup-${TIMESTAMP}"
 BACKUP_PATH="${BACKUP_DIR}/${BACKUP_NAME}"
 RETAIN_DAYS="${BACKUP_RETAIN_DAYS:-0}"
+INCLUDE_DOT_ENV="${BACKUP_INCLUDE_DOT_ENV:-0}"
 
 # Paths
 DATA_DIR="${PROJECT_ROOT}/data"
@@ -27,6 +28,8 @@ REPORTS_DIR="${DATA_DIR}/reports"
 
 # PostgreSQL env vars (from .env or environment)
 PG_URL="${DATABASE_URL:-}"
+PG_USER="${POSTGRES_USER:-security}"
+PG_DB="${POSTGRES_DB:-security_scans}"
 
 mkdir -p "${BACKUP_PATH}"
 
@@ -45,7 +48,7 @@ if [ -n "${PG_URL}" ]; then
     else
         echo "[db] WARNING: pg_dump not found — attempting via docker..."
         docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T postgres \
-            pg_dump -U postgres -Fc security_scans > "${BACKUP_PATH}/database.pgdump" 2>/dev/null \
+            pg_dump -U "${PG_USER}" -Fc "${PG_DB}" > "${BACKUP_PATH}/database.pgdump" 2>/dev/null \
             && echo "[db] PostgreSQL dump saved via docker" \
             || echo "[db] ERROR: Could not dump PostgreSQL database"
     fi
@@ -75,9 +78,11 @@ if [ -d "${PROJECT_ROOT}/config" ]; then
     echo "[config] Configuration copied"
 fi
 
-if [ -f "${PROJECT_ROOT}/.env" ]; then
+if [ -f "${PROJECT_ROOT}/.env" ] && [ "${INCLUDE_DOT_ENV}" = "1" ]; then
     cp "${PROJECT_ROOT}/.env" "${BACKUP_PATH}/dot-env"
-    echo "[config] .env copied (as dot-env)"
+    echo "[config] .env copied (as dot-env) because BACKUP_INCLUDE_DOT_ENV=1"
+elif [ -f "${PROJECT_ROOT}/.env" ]; then
+    echo "[config] Skipping .env backup by default to avoid archiving plaintext secrets"
 fi
 
 # ── Compress the backup ─────────────────────────────────────────────────────

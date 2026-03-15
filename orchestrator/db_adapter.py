@@ -63,6 +63,7 @@ def _sqlite_connect(db_path: str) -> sqlite3.Connection:
     # synchronous=NORMAL is safe with WAL: durable after each checkpoint, not each commit.
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 

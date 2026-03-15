@@ -33,8 +33,13 @@ LOGGER = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["findings"])
 
 
+def _actor(auth: AuthContext) -> str:
+    """Return the best available actor identifier for audit/history fields."""
+    return auth.user_id or auth.api_key_prefix or "unknown"
+
+
 @router.get("/findings")
-def api_findings(
+async def api_findings(
     limit: int = Query(500, ge=1, le=5000),
     severity: str | None = None,
     tool: str | None = None,
@@ -88,7 +93,7 @@ def api_findings(
 
 
 @router.get("/findings/status-counts")
-def api_findings_status_counts(auth: AuthContext = Depends(require_auth)) -> dict:
+async def api_findings_status_counts(auth: AuthContext = Depends(require_auth)) -> dict:
     """Return finding counts grouped by triage status in a single query."""
     with get_connection(DB_PATH) as conn:
         rows = conn.execute("""
@@ -101,7 +106,7 @@ def api_findings_status_counts(auth: AuthContext = Depends(require_auth)) -> dic
 
 
 @router.get("/findings/paginated")
-def paginate_findings(
+async def paginate_findings(
     search: str = Query(""),
     severity: str = Query(""),
     tool: str = Query(""),
@@ -148,13 +153,13 @@ def paginate_findings(
 
 
 @router.get("/findings/triage-summary")
-def api_triage_summary(auth: AuthContext = Depends(require_auth)) -> dict:
+async def api_triage_summary(auth: AuthContext = Depends(require_auth)) -> dict:
     """Comprehensive triage summary: status counts, expired risk, overdue findings."""
     return get_triage_summary()
 
 
 @router.get("/findings/{finding_id}")
-def api_get_finding(
+async def api_get_finding(
     finding_id: int,
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
@@ -174,7 +179,7 @@ def api_get_finding(
 
 
 @router.get("/findings/{finding_id}/state")
-def api_get_finding_state(finding_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
+async def api_get_finding_state(finding_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Get finding management state."""
     state = get_finding_state(finding_id)
     if not state:
@@ -186,7 +191,7 @@ def api_get_finding_state(finding_id: int, auth: AuthContext = Depends(require_a
     "/findings/{finding_id}/status",
     dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
 )
-def api_update_finding_status(
+async def api_update_finding_status(
     finding_id: int,
     status_value: str = Form(...),
     notes: str | None = Form(None),
@@ -202,7 +207,7 @@ def api_update_finding_status(
     result = update_finding_status(
         finding_id,
         finding_status,
-        user=auth.api_key_prefix or "unknown",
+        user=_actor(auth),
         notes=notes,
         assigned_to=assigned_to,
     )
@@ -214,13 +219,13 @@ def api_update_finding_status(
     "/findings/{finding_id}/assign",
     dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
 )
-def api_assign_finding(
+async def api_assign_finding(
     finding_id: int,
     assigned_to: str = Form(...),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Assign finding to a user."""
-    result = assign_finding(finding_id, assigned_to, assigned_by=auth.api_key_prefix or "unknown")
+    result = assign_finding(finding_id, assigned_to, assigned_by=_actor(auth))
     return result
 
 
@@ -228,13 +233,13 @@ def api_assign_finding(
     "/findings/{finding_id}/false-positive",
     dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
 )
-def api_mark_false_positive(
+async def api_mark_false_positive(
     finding_id: int,
     reason: str = Form(...),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Mark finding as false positive."""
-    result = mark_false_positive(finding_id, reason, user=auth.api_key_prefix or "unknown")
+    result = mark_false_positive(finding_id, reason, user=_actor(auth))
     return result
 
 
@@ -242,14 +247,14 @@ def api_mark_false_positive(
     "/findings/{finding_id}/accept-risk",
     dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
 )
-def api_accept_risk(
+async def api_accept_risk(
     finding_id: int,
     justification: str = Form(...),
     expires_at: str = Form(...),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Accept risk for finding with expiration date."""
-    result = accept_risk(finding_id, justification, expires_at, user=auth.api_key_prefix or "unknown")
+    result = accept_risk(finding_id, justification, expires_at, user=_actor(auth))
     return result
 
 
@@ -257,18 +262,18 @@ def api_accept_risk(
     "/findings/{finding_id}/comment",
     dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
 )
-def api_add_finding_comment(
+async def api_add_finding_comment(
     finding_id: int,
     comment: str = Form(...),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Add comment to finding."""
-    comment_id = add_finding_comment(finding_id, user=auth.api_key_prefix or "unknown", comment=comment)
+    comment_id = add_finding_comment(finding_id, user=_actor(auth), comment=comment)
     return {"comment_id": comment_id, "finding_id": finding_id}
 
 
 @router.get("/findings/{finding_id}/comments")
-def api_get_finding_comments(finding_id: int, auth: AuthContext = Depends(require_auth)) -> list[dict]:
+async def api_get_finding_comments(finding_id: int, auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """Get all comments for a finding."""
     return get_finding_comments(finding_id)
 
@@ -277,7 +282,7 @@ def api_get_finding_comments(finding_id: int, auth: AuthContext = Depends(requir
     "/findings/bulk/update-status",
     dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
 )
-def api_bulk_update_status(
+async def api_bulk_update_status(
     finding_ids: list[int],
     status_value: str = Query(..., alias="status"),
     auth: AuthContext = Depends(require_auth),
@@ -288,12 +293,12 @@ def api_bulk_update_status(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status_value}")
 
-    result = bulk_update_status(finding_ids, finding_status, user=auth.api_key_prefix or "unknown")
+    result = bulk_update_status(finding_ids, finding_status, user=_actor(auth))
     return result
 
 
 @router.get("/badge/{target_name}.svg")
-def generate_badge(target_name: str, auth: AuthContext = Depends(require_auth)) -> Response:
+async def generate_badge(target_name: str, auth: AuthContext = Depends(require_auth)) -> Response:
     """Generate SVG badge for scan status."""
     # Get latest scan for target
     with get_connection(DB_PATH) as conn:

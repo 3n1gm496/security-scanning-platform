@@ -1,5 +1,3 @@
-import json
-import pytest
 from orchestrator.normalizer import (
     normalize_bandit,
     normalize_nuclei,

@@ -19,8 +19,6 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -33,7 +31,6 @@ from orchestrator.main import (  # noqa: E402
     evaluate_policy,
     run_single_scan,
     run_targets_concurrently,
-    resolve_settings,
 )
 from orchestrator.models import TargetSpec  # noqa: E402
 from orchestrator.storage import init_db  # noqa: E402

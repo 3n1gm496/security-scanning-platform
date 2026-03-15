@@ -5,7 +5,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/security-scanner
-ExecStart=/opt/security-scanner/scripts/schedule_retention.sh
+WorkingDirectory=/opt/security-scanning-platform
+ExecStart=/opt/security-scanning-platform/scripts/schedule_retention.sh
 User=securityscan
 Group=securityscan

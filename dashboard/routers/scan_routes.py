@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api", tags=["scans"])
 
 
 @router.get("/scans")
-def api_scans(
+async def api_scans(
     limit: int = 100,
     target: str | None = None,
     status_value: str | None = Query(default=None, alias="status"),
@@ -49,7 +49,7 @@ def api_scans(
 
 
 @router.post("/scan/trigger", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def trigger_scan(
+async def trigger_scan(
     target_type: str = Form(...),
     target: str = Form(...),
     name: str = Form(...),
@@ -129,7 +129,7 @@ def trigger_scan(
 
 
 @router.get("/scans/compare")
-def compare_scans(
+async def compare_scans(
     scan_id_1: str,
     scan_id_2: str,
     auth: AuthContext = Depends(require_auth),
@@ -199,7 +199,7 @@ def compare_scans(
 
 
 @router.get("/scans/paginated")
-def paginate_scans(
+async def paginate_scans(
     search: str = Query(""),
     target: str = Query(""),
     status: str = Query(""),
@@ -236,44 +236,11 @@ def paginate_scans(
         )
 
 
-@router.get("/scans/{scan_id}")
-def api_get_scan(
-    scan_id: str,
-    auth: AuthContext = Depends(require_auth),
-) -> dict:
-    """Get a single scan by ID with its findings summary and per-tool execution results."""
-    with get_connection(DB_PATH) as conn:
-        scan = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
-        if not scan:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
-        scan_dict = dict(scan)
-        rows = conn.execute(
-            "SELECT severity, COUNT(*) as count FROM findings WHERE scan_id = ? GROUP BY severity",
-            (scan_id,),
-        ).fetchall()
-        scan_dict["severity_breakdown"] = {r["severity"]: r["count"] for r in rows}
-        rows = conn.execute(
-            "SELECT tool, COUNT(*) as count FROM findings WHERE scan_id = ? GROUP BY tool",
-            (scan_id,),
-        ).fetchall()
-        scan_dict["tool_breakdown"] = {r["tool"]: r["count"] for r in rows}
-        # Deserialize per-tool execution results from tools_json
-        raw_tools = scan_dict.get("tools_json")
-        if raw_tools:
-            try:
-                scan_dict["tool_results"] = json.loads(raw_tools)
-            except (json.JSONDecodeError, TypeError):
-                scan_dict["tool_results"] = []
-        else:
-            scan_dict["tool_results"] = []
-    return scan_dict
-
-
 @router.get(
     "/scanners/health",
     dependencies=[Depends(require_permission(Permission.SCAN_WRITE))],
 )
-def scanners_health(auth: AuthContext = Depends(require_auth)) -> dict:
+async def scanners_health(auth: AuthContext = Depends(require_auth)) -> dict:
     """Return availability and version info for all known scanner binaries."""
     from orchestrator.compatibility import scanner_health_check
 
@@ -318,3 +285,36 @@ async def scan_events_stream(request: Request, auth: AuthContext = Depends(requi
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── Parameterized routes MUST be registered LAST to avoid shadowing ──────
+@router.get("/scans/{scan_id}")
+async def api_get_scan(
+    scan_id: str,
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Get a single scan by ID with its findings summary and per-tool execution results."""
+    with get_connection(DB_PATH) as conn:
+        scan = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
+        if not scan:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+        scan_dict = dict(scan)
+        rows = conn.execute(
+            "SELECT severity, COUNT(*) as count FROM findings WHERE scan_id = ? GROUP BY severity",
+            (scan_id,),
+        ).fetchall()
+        scan_dict["severity_breakdown"] = {r["severity"]: r["count"] for r in rows}
+        rows = conn.execute(
+            "SELECT tool, COUNT(*) as count FROM findings WHERE scan_id = ? GROUP BY tool",
+            (scan_id,),
+        ).fetchall()
+        scan_dict["tool_breakdown"] = {r["tool"]: r["count"] for r in rows}
+        raw_tools = scan_dict.get("tools_json")
+        if raw_tools:
+            try:
+                scan_dict["tool_results"] = json.loads(raw_tools)
+            except (json.JSONDecodeError, TypeError):
+                scan_dict["tool_results"] = []
+        else:
+            scan_dict["tool_results"] = []
+    return scan_dict

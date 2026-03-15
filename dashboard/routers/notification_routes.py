@@ -3,18 +3,32 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
-from auth import require_auth, AuthContext
+from auth import require_auth, require_permission, AuthContext
 from db import get_connection
 from notifications import NotificationPreferencesManager
+from rbac import Permission
 
 from routers._shared import DB_PATH, notification_engine
 
 router = APIRouter(prefix="/api", tags=["notifications"])
 
 
-@router.post("/notifications/send-alert")
-def send_notification_alert(
+class NotificationPreferencesPayload(BaseModel):
+    """Validated notification preferences payload."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    critical_alerts: bool = True
+    high_alerts: bool = True
+    scan_summaries: bool = True
+    weekly_digest: bool = False
+    preferred_channel: str = Field(default="email", pattern="^(email)$")
+
+
+@router.post("/notifications/send-alert", dependencies=[Depends(require_permission(Permission.FINDING_WRITE))])
+async def send_notification_alert(
     to_email: str = Form(...),
     finding_id: int = Form(...),
     auth: AuthContext = Depends(require_auth),
@@ -33,21 +47,21 @@ def send_notification_alert(
 
 
 @router.post("/notifications/preferences")
-def save_notification_preferences(
-    preferences: dict,
+async def save_notification_preferences(
+    preferences: NotificationPreferencesPayload,
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Save notification preferences for the authenticated user."""
     user_identifier = auth.user_id or auth.api_key_prefix or "unknown"
     with get_connection(DB_PATH) as conn:
-        saved = NotificationPreferencesManager.save_preferences(conn, user_identifier, preferences)
+        saved = NotificationPreferencesManager.save_preferences(conn, user_identifier, preferences.model_dump())
         if not saved:
             raise HTTPException(status_code=500, detail="Failed to save preferences")
     return {"status": "saved", "user": user_identifier}
 
 
 @router.get("/notifications/preferences")
-def get_notification_preferences(auth: AuthContext = Depends(require_auth)) -> dict:
+async def get_notification_preferences(auth: AuthContext = Depends(require_auth)) -> dict:
     """Get notification preferences for the authenticated user."""
     user_identifier = auth.user_id or auth.api_key_prefix or "unknown"
     with get_connection(DB_PATH) as conn:

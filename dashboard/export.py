@@ -4,7 +4,6 @@ Export findings in multiple formats: JSON, CSV, SARIF, HTML, PDF.
 
 import csv
 import json
-import os
 from datetime import datetime, timezone
 from html import escape as html_escape
 from io import StringIO, BytesIO
@@ -100,12 +99,13 @@ def export_to_sarif(
         for finding in tool_findings:
             severity = finding.get("severity", "info").lower()
             level = severity_map.get(severity, "warning")
+            message_text = finding.get("message") or finding.get("title") or finding.get("description") or ""
 
             # Create result
             result = {
                 "ruleId": finding.get("rule_id", finding.get("category", "unknown")),
                 "level": level,
-                "message": {"text": finding.get("message", finding.get("description", ""))},
+                "message": {"text": message_text},
                 "locations": [],
             }
 
@@ -127,7 +127,7 @@ def export_to_sarif(
 
             # Add properties with additional metadata
             properties = {}
-            for key in ["cve_id", "cwe_id", "cvss_score", "confidence", "scan_id"]:
+            for key in ["cve", "cve_id", "cwe", "cwe_id", "cvss_score", "confidence", "scan_id"]:
                 if key in finding:
                     properties[key] = finding[key]
 
@@ -327,12 +327,12 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
 """
 
         for finding in findings_list:
-            title = html_escape(str(finding.get("message", finding.get("description", "Unknown issue"))))
+            title = html_escape(str(finding.get("title") or finding.get("message") or "Unknown issue"))
             tool = html_escape(str(finding.get("tool", "unknown")))
             target = html_escape(str(finding.get("target", finding.get("file", ""))))
             category = html_escape(str(finding.get("category", "")))
-            cve_id = html_escape(str(finding.get("cve_id", "")))
-            cwe_id = html_escape(str(finding.get("cwe_id", "")))
+            cve_id = html_escape(str(finding.get("cve_id") or finding.get("cve") or ""))
+            cwe_id = html_escape(str(finding.get("cwe_id") or finding.get("cwe") or ""))
             cvss_score = html_escape(str(finding.get("cvss_score", "")))
 
             # Build metadata line
@@ -399,11 +399,11 @@ def export_to_pdf(
     """
     try:
         from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+        from reportlab.lib.enums import TA_CENTER
     except ImportError:
         raise ImportError("reportlab is required for PDF export. Install with: pip install reportlab")
 

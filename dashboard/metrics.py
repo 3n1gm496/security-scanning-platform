@@ -10,7 +10,6 @@ Metrics:
 """
 
 from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
-import time
 
 
 class MetricsCollector:

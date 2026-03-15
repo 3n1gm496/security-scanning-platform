@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from common.schema import SCHEMA_SQL, MIGRATIONS as _MIGRATIONS
-from db_adapter import get_connection, adapt_schema
+from db_adapter import get_connection, adapt_schema, is_postgres
 from logging_config import get_logger
 
 LOGGER = get_logger(__name__)
@@ -21,6 +22,89 @@ LOGGER = get_logger(__name__)
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _date_days_ago(days: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+
+
+def _severity_order_sql(column: str = "severity") -> str:
+    return (
+        f"CASE UPPER({column}) "
+        "WHEN 'CRITICAL' THEN 5 "
+        "WHEN 'HIGH' THEN 4 "
+        "WHEN 'MEDIUM' THEN 3 "
+        "WHEN 'LOW' THEN 2 "
+        "WHEN 'INFO' THEN 1 "
+        "ELSE 0 END"
+    )
+
+
+_ADD_COLUMN_RE = re.compile(
+    r"^\s*ALTER\s+TABLE\s+(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<column>[A-Za-z_][A-Za-z0-9_]*)",
+    re.IGNORECASE,
+)
+
+
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split SQL script statements on semicolons outside quoted strings."""
+    statements: list[str] = []
+    current: list[str] = []
+    in_quote = False
+    quote_char = None
+    idx = 0
+
+    while idx < len(sql):
+        ch = sql[idx]
+        current.append(ch)
+        if in_quote:
+            if ch == quote_char:
+                next_ch = sql[idx + 1] if idx + 1 < len(sql) else None
+                if next_ch == quote_char:
+                    current.append(next_ch)
+                    idx += 1
+                else:
+                    in_quote = False
+        elif ch in ("'", '"'):
+            in_quote = True
+            quote_char = ch
+        elif ch == ";":
+            statement = "".join(current[:-1]).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+        idx += 1
+
+    tail = "".join(current).strip()
+    if tail:
+        statements.append(tail)
+    return statements
+
+
+def _column_exists(conn, table: str, column: str) -> bool:
+    if is_postgres():
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = ?
+              AND column_name = ?
+            """,
+            (table, column),
+        ).fetchone()
+        return row is not None
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()  # nosec B608
+    return any(row["name"] == column for row in rows)
+
+
+def _execute_migration_script(conn, sql: str) -> None:
+    """Execute migration SQL, skipping ADD COLUMN statements that are already satisfied."""
+    for statement in _split_sql_statements(adapt_schema(sql)):
+        match = _ADD_COLUMN_RE.match(statement)
+        if match and _column_exists(conn, match.group("table"), match.group("column")):
+            continue
+        conn.execute(statement)
 
 
 # Re-export get_connection so existing callers (app.py etc.) continue to work
@@ -34,6 +118,7 @@ def _conn(db_path: str | None = None, *, read_only: bool = False):
 
 
 def fetch_kpis(db_path: str) -> dict[str, Any]:
+    cutoff = _date_days_ago(7)
     with _conn(db_path, read_only=True) as conn:
         total_scans = conn.execute("SELECT COUNT(*) AS value FROM scans").fetchone()["value"]
         total_findings = conn.execute("SELECT COUNT(*) AS value FROM findings").fetchone()["value"]
@@ -43,16 +128,18 @@ def fetch_kpis(db_path: str) -> dict[str, Any]:
         high_findings = conn.execute("SELECT COUNT(*) AS value FROM findings WHERE severity = 'HIGH'").fetchone()[
             "value"
         ]
-        open_targets = conn.execute("SELECT COUNT(DISTINCT target_name) AS value FROM scans").fetchone()["value"]
+        distinct_targets = conn.execute("SELECT COUNT(DISTINCT target_name) AS value FROM scans").fetchone()["value"]
         last_7d_scans = conn.execute(
-            "SELECT COUNT(*) AS value FROM scans" " WHERE substr(created_at, 1, 10) >= date('now', '-7 day')"
+            "SELECT COUNT(*) AS value FROM scans WHERE substr(created_at, 1, 10) >= ?",
+            (cutoff,),
         ).fetchone()["value"]
     return {
         "total_scans": total_scans,
         "total_findings": total_findings,
         "critical_findings": critical_findings,
         "high_findings": high_findings,
-        "open_targets": open_targets,
+        "active_targets": distinct_targets,
+        "open_targets": distinct_targets,
         "last_7d_scans": last_7d_scans,
     }
 
@@ -135,7 +222,10 @@ def list_findings(
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
-    query = f"SELECT * FROM findings {clause} ORDER BY timestamp DESC, severity DESC LIMIT ? OFFSET ?"  # nosec B608
+    query = (
+        f"SELECT * FROM findings {clause} "
+        f"ORDER BY timestamp DESC, {_severity_order_sql()} DESC, severity DESC LIMIT ? OFFSET ?"
+    )  # nosec B608
     params.extend([limit, offset])
     with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(query, params).fetchall()
@@ -165,6 +255,7 @@ def target_breakdown(db_path: str) -> dict[str, int]:
 
 
 def scans_trend(db_path: str, days: int = 30) -> list[dict[str, Any]]:
+    cutoff = _date_days_ago(days)
     with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(
             """
@@ -172,11 +263,11 @@ def scans_trend(db_path: str, days: int = 30) -> list[dict[str, Any]]:
                    COUNT(*) AS scans,
                    SUM(findings_count) AS findings
             FROM scans
-            WHERE substr(created_at, 1, 10) >= date('now', ?)
+            WHERE substr(created_at, 1, 10) >= ?
             GROUP BY substr(created_at, 1, 10)
             ORDER BY day ASC
             """,
-            (f"-{days} day",),
+            (cutoff,),
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -271,17 +362,18 @@ def cache_hit_stats(db_path: str, limit_scans: int = 200) -> dict[str, Any]:
 
 
 def cache_hit_trend(db_path: str, days: int = 14) -> list[dict[str, Any]]:
+    cutoff = _date_days_ago(days)
     query = """
         SELECT substr(created_at, 1, 10) AS day, tools_json
         FROM scans
-        WHERE substr(created_at, 1, 10) >= date('now', ?)
+        WHERE substr(created_at, 1, 10) >= ?
         ORDER BY day ASC
     """
 
     day_totals: dict[str, dict[str, int]] = {}
 
     with _conn(db_path, read_only=True) as conn:
-        rows = conn.execute(query, (f"-{days} day",)).fetchall()
+        rows = conn.execute(query, (cutoff,)).fetchall()
 
     for row in rows:
         day = str(row["day"])
@@ -335,7 +427,17 @@ def _run_migrations(db_path: str) -> None:
     for version, description, sql in pending:
         with _conn(db_path) as conn:
             if sql.strip():
-                conn.executescript(adapt_schema(sql))
+                try:
+                    _execute_migration_script(conn, sql)
+                except Exception as exc:
+                    message = str(exc).lower()
+                    ignorable = (
+                        "duplicate column" in message
+                        or "already exists" in message
+                        or ("duplicate_object" in message)
+                    )
+                    if not ignorable:
+                        raise
             conn.execute(
                 "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
                 (version, description, _utc_now()),
@@ -380,7 +482,16 @@ def deduplicated_findings(
     query += """
             GROUP BY fingerprint
         ) dedup ON f.fingerprint = dedup.fingerprint AND f.timestamp = dedup.latest_ts
-        ORDER BY f.timestamp DESC, f.severity DESC
+        WHERE 1=1
+    """
+    if target_name:
+        query += " AND f.target_name = ?"
+        params.append(target_name)
+    if severity:
+        query += " AND f.severity = ?"
+        params.append(severity)
+    query += f"""
+        ORDER BY f.timestamp DESC, {_severity_order_sql('f.severity')} DESC, f.severity DESC
         LIMIT ?
     """
     params.append(limit)

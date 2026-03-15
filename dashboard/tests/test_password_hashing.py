@@ -28,7 +28,6 @@ os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
 from fastapi.testclient import TestClient
 
-import app as _app
 from app import _is_bcrypt_hash, _verify_password, app
 from routers import auth_routes as _auth_routes
 

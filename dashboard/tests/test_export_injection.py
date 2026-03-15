@@ -2,7 +2,6 @@
 Regression tests for export injection sanitisation (CSV, HTML/XSS, PDF markup).
 """
 
-import json
 import sys
 from pathlib import Path
 

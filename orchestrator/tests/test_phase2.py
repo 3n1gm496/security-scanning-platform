@@ -13,10 +13,8 @@ from __future__ import annotations
 import sqlite3
 from unittest.mock import patch
 
-import pytest
-
 from orchestrator.cache import build_cache_key
-from orchestrator.models import ScanResult, TargetSpec
+from orchestrator.models import ScanResult
 from orchestrator.storage import _MIGRATIONS, init_db, run_migrations, save_scan_result
 
 # ---------------------------------------------------------------------------

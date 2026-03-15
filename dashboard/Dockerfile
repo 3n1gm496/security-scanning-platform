@@ -20,6 +20,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+ARG TRIVY_VERSION=0.69.3
+ARG GITLEAKS_VERSION=8.30.0
+ARG SYFT_VERSION=1.42.2
+ARG NUCLEI_VERSION=3.7.1
+ARG GRYPE_VERSION=0.109.1
+
 # ── Python dependencies ────────────────────────────────────────────────────────
 # Install dashboard and orchestrator Python deps in one layer
 COPY dashboard/requirements.txt /tmp/requirements-dashboard.txt
@@ -33,33 +39,18 @@ RUN pip install --no-cache-dir \
 # ── External scanner binaries ──────────────────────────────────────────────────
 # Versions pinned for reproducible builds — update periodically.
 # All binaries are placed in /usr/local/bin for PATH availability.
-
-# gitleaks v8.30.0 — secret scanning
-RUN curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz" \
-    | tar -xz -C /usr/local/bin gitleaks \
-    && chmod +x /usr/local/bin/gitleaks
-
-# trivy v0.69.3 — container/filesystem vulnerability scanner
-RUN curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz" \
-    | tar -xz -C /usr/local/bin trivy \
-    && chmod +x /usr/local/bin/trivy
-
-# syft v1.42.2 — SBOM generator
-RUN curl -sSfL "https://github.com/anchore/syft/releases/download/v1.42.2/syft_1.42.2_linux_amd64.tar.gz" \
-    | tar -xz -C /usr/local/bin syft \
-    && chmod +x /usr/local/bin/syft
-
-# grype v0.109.1 — SBOM vulnerability scanner
-RUN curl -sSfL "https://github.com/anchore/grype/releases/download/v0.109.1/grype_0.109.1_linux_amd64.tar.gz" \
-    | tar -xz -C /usr/local/bin grype \
-    && chmod +x /usr/local/bin/grype
-
-# nuclei v3.7.1 — pattern-based vulnerability scanner
-RUN curl -sSfL "https://github.com/projectdiscovery/nuclei/releases/download/v3.7.1/nuclei_3.7.1_linux_amd64.zip" \
-    -o /tmp/nuclei.zip \
-    && unzip -q /tmp/nuclei.zip nuclei -d /usr/local/bin \
-    && chmod +x /usr/local/bin/nuclei \
-    && rm /tmp/nuclei.zip
+COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
+RUN python /tmp/fetch_binaries.py \
+      --trivy-version "${TRIVY_VERSION}" \
+      --gitleaks-version "${GITLEAKS_VERSION}" \
+      --syft-version "${SYFT_VERSION}" \
+      --grype-version "${GRYPE_VERSION}" \
+      --nuclei-version "${NUCLEI_VERSION}" && \
+    trivy --version && \
+    gitleaks version && \
+    syft version && \
+    grype version && \
+    nuclei -version
 
 # ── Application code ───────────────────────────────────────────────────────────
 # Copy dashboard code to /app

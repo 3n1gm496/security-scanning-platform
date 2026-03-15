@@ -33,7 +33,8 @@
     <!-- ================================================================
          SIDEBAR
     ================================================================ -->
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }" role="complementary" aria-label="Sidebar navigation">
+    <div v-if="mobileNavOpen" class="mobile-nav-backdrop" @click="closeMobileNav" aria-hidden="true"></div>
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed, 'mobile-open': mobileNavOpen }" role="complementary" aria-label="Sidebar navigation">
       <div class="sidebar-header">
         <div class="sidebar-logo" v-if="!sidebarCollapsed">
           <svg class="logo-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -89,12 +90,12 @@
           <div class="user-avatar">{{ currentUser ? currentUser[0].toUpperCase() : 'U' }}</div>
           <div class="user-info">
             <span class="user-name">{{ currentUser }}</span>
-            <span class="user-role">Administrator</span>
+            <span class="user-role">{{ currentUserRoleLabel }}</span>
           </div>
         </div>
-        <a href="/logout" class="logout-link" title="Sign out">
+        <button type="button" @click="logout" class="logout-link" title="Sign out" aria-label="Sign out">
           <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </a>
+        </button>
       </div>
     </aside>
 
@@ -105,6 +106,11 @@
       <!-- Top bar -->
       <header class="topbar-slim" role="banner">
         <div class="topbar-left">
+          <button type="button" class="mobile-nav-toggle" @click="toggleMobileNav" aria-label="Open navigation menu" :aria-expanded="mobileNavOpen ? 'true' : 'false'">
+            <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+              <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
           <h1 class="page-heading">{{ pageTitle }}</h1>
           <span class="page-subtitle">{{ pageSubtitle }}</span>
         </div>
@@ -129,8 +135,8 @@
       </header>
 
       <!-- Toast notifications -->
-      <div class="toast-container">
-        <div v-for="toast in toasts" :key="toast.id" class="toast" :class="'toast-' + toast.type">
+      <div class="toast-container" aria-live="polite" aria-atomic="true">
+        <div v-for="toast in toasts" :key="toast.id" class="toast" :class="'toast-' + toast.type" role="status">
           <svg v-if="toast.type === 'success'" viewBox="0 0 24 24" fill="none" width="16" height="16" style="flex-shrink:0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <svg v-else-if="toast.type === 'error'" viewBox="0 0 24 24" fill="none" width="16" height="16" style="flex-shrink:0"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <span>{{ toast.message }}</span>
@@ -138,7 +144,7 @@
       </div>
 
       <!-- Loading overlay -->
-      <div class="loading-overlay" v-if="loading">
+      <div class="loading-overlay" v-if="loading" role="status" aria-live="polite" aria-label="Loading content">
         <div class="spinner"></div>
       </div>
 
@@ -156,7 +162,7 @@
         <div class="alert-banner alert-critical" v-if="kpis.critical_findings > 0">
           <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <span><strong>{{ kpis.critical_findings }} critical finding(s)</strong> require immediate attention.</span>
-          <button class="btn-alert" @click="navigate('findings'); findingsFilter.severity = 'CRITICAL'; loadFindings(true)">View now</button>
+          <button class="btn-alert" @click="viewCriticalFindings()">View now</button>
         </div>
 
         <!-- KPI Cards -->
@@ -266,10 +272,10 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Target</th>
-                    <th>Status</th>
-                    <th>Findings</th>
-                    <th>Date</th>
+                    <th scope="col">Target</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Findings</th>
+                    <th scope="col">Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -355,19 +361,19 @@
             <table>
               <thead>
                 <tr>
-                  <th class="th-check">
-                    <input type="checkbox" disabled title="Select to compare">
+                  <th scope="col" class="th-check">
+                    <input type="checkbox" disabled title="Select to compare" aria-label="Selection unavailable for this scan row">
                   </th>
-                  <th v-if="colVisible('id')" class="th-sortable" @click="sortScans('id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
-                  <th v-if="colVisible('target_name')" class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
-                  <th v-if="colVisible('target_type')" class="th-sortable" @click="sortScans('target_type')">Type <span class="sort-icon">{{ sortIcon('scans', 'target_type') }}</span></th>
-                  <th v-if="colVisible('status')" class="th-sortable" @click="sortScans('status')">Status <span class="sort-icon">{{ sortIcon('scans', 'status') }}</span></th>
-                  <th v-if="colVisible('policy_status')" class="th-sortable" @click="sortScans('policy_status')">Policy <span class="sort-icon">{{ sortIcon('scans', 'policy_status') }}</span></th>
-                  <th v-if="colVisible('findings_count')" class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
-                  <th v-if="colVisible('critical_count')" class="th-sortable" @click="sortScans('critical_count')" title="Critical findings">Critical <span class="sort-icon">{{ sortIcon('scans', 'critical_count') }}</span></th>
-                  <th v-if="colVisible('high_count')" class="th-sortable" @click="sortScans('high_count')" title="High findings">High <span class="sort-icon">{{ sortIcon('scans', 'high_count') }}</span></th>
-                  <th v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
-                  <th class="th-actions">Actions</th>
+                  <th scope="col" v-if="colVisible('id')" class="th-sortable" @click="sortScans('id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
+                  <th scope="col" v-if="colVisible('target_name')" class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
+                  <th scope="col" v-if="colVisible('target_type')" class="th-sortable" @click="sortScans('target_type')">Type <span class="sort-icon">{{ sortIcon('scans', 'target_type') }}</span></th>
+                  <th scope="col" v-if="colVisible('status')" class="th-sortable" @click="sortScans('status')">Status <span class="sort-icon">{{ sortIcon('scans', 'status') }}</span></th>
+                  <th scope="col" v-if="colVisible('policy_status')" class="th-sortable" @click="sortScans('policy_status')">Policy <span class="sort-icon">{{ sortIcon('scans', 'policy_status') }}</span></th>
+                  <th scope="col" v-if="colVisible('findings_count')" class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
+                  <th scope="col" v-if="colVisible('critical_count')" class="th-sortable" @click="sortScans('critical_count')" title="Critical findings">Critical <span class="sort-icon">{{ sortIcon('scans', 'critical_count') }}</span></th>
+                  <th scope="col" v-if="colVisible('high_count')" class="th-sortable" @click="sortScans('high_count')" title="High findings">High <span class="sort-icon">{{ sortIcon('scans', 'high_count') }}</span></th>
+                  <th scope="col" v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
+                  <th scope="col" class="th-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -382,7 +388,7 @@
                 </tr>
                 <tr v-for="scan in scans" :key="scan.id" class="row-clickable" :class="{ 'row-selected': selectedScans.includes(scan.id) }">
                   <td class="th-check" @click.stop>
-                    <input type="checkbox" :value="scan.id" v-model="selectedScans" :disabled="selectedScans.length >= 2 && !selectedScans.includes(scan.id)">
+                    <input type="checkbox" :value="scan.id" v-model="selectedScans" :disabled="selectedScans.length >= 2 && !selectedScans.includes(scan.id)" :aria-label="`Select scan ${scan.id} for comparison`">
                   </td>
                   <td v-if="colVisible('id')" @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
                   <td v-if="colVisible('target_name')" @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
@@ -471,7 +477,7 @@
             <div class="filter-group" v-if="findingsFilter.scan_id">
               <label class="filter-label">Scan ID</label>
               <div class="filter-scan-id">
-                <code class="scan-id-badge" :title="findingsFilter.scan_id">{{ findingsFilter.scan_id.substring(0, 8) }}…</code>
+                <code class="scan-id-badge" :title="findingsFilter.scan_id">{{ String(findingsFilter.scan_id).slice(0, 8) }}…</code>
                 <button class="btn-icon-sm" @click="findingsFilter.scan_id = ''; loadFindings(true)" title="Remove scan filter">✕</button>
               </div>
             </div>
@@ -516,17 +522,17 @@
             <table>
               <thead>
                 <tr>
-                  <th class="th-check">
-                    <input type="checkbox" @change="toggleSelectAll" :checked="allSelected">
+                  <th scope="col" class="th-check">
+                    <input type="checkbox" @change="toggleSelectAll" :checked="allSelected" aria-label="Select all findings on this page">
                   </th>
-                  <th v-if="colVisibleF('severity')" class="th-sortable" @click="sortFindings('severity')">Severity <span class="sort-icon">{{ sortIcon('findings', 'severity') }}</span></th>
-                  <th v-if="colVisibleF('tool')" class="th-sortable" @click="sortFindings('tool')">Tool <span class="sort-icon">{{ sortIcon('findings', 'tool') }}</span></th>
-                  <th v-if="colVisibleF('target')" class="th-sortable" @click="sortFindings('target_name')">Target <span class="sort-icon">{{ sortIcon('findings', 'target_name') }}</span></th>
-                  <th v-if="colVisibleF('title')" class="th-sortable" @click="sortFindings('title')">Title <span class="sort-icon">{{ sortIcon('findings', 'title') }}</span></th>
-                  <th v-if="colVisibleF('cve')">CVE / ID</th>
-                  <th v-if="colVisibleF('file')">File</th>
-                  <th v-if="colVisibleF('status')" class="th-sortable" @click="sortFindings('mgmt_status')">Status <span class="sort-icon">{{ sortIcon('findings', 'mgmt_status') }}</span></th>
-                  <th class="th-actions">Actions</th>
+                  <th scope="col" v-if="colVisibleF('severity')" class="th-sortable" @click="sortFindings('severity')">Severity <span class="sort-icon">{{ sortIcon('findings', 'severity') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('tool')" class="th-sortable" @click="sortFindings('tool')">Tool <span class="sort-icon">{{ sortIcon('findings', 'tool') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('target')" class="th-sortable" @click="sortFindings('target_name')">Target <span class="sort-icon">{{ sortIcon('findings', 'target_name') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('title')" class="th-sortable" @click="sortFindings('title')">Title <span class="sort-icon">{{ sortIcon('findings', 'title') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('cve')">CVE / ID</th>
+                  <th scope="col" v-if="colVisibleF('file')">File</th>
+                  <th scope="col" v-if="colVisibleF('status')" class="th-sortable" @click="sortFindings('mgmt_status')">Status <span class="sort-icon">{{ sortIcon('findings', 'mgmt_status') }}</span></th>
+                  <th scope="col" class="th-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -541,7 +547,7 @@
                 </tr>
                 <tr v-for="finding in findings" :key="finding.id" class="row-clickable" :class="{ 'row-selected': selectedFindings.includes(finding.id) }">
                   <td class="th-check" @click.stop>
-                    <input type="checkbox" :value="finding.id" v-model="selectedFindings">
+                    <input type="checkbox" :value="finding.id" v-model="selectedFindings" :aria-label="`Select finding ${finding.id}`">
                   </td>
                   <td v-if="colVisibleF('severity')" @click="openFindingDetail(finding)">
                     <span class="severity-badge" :class="'sev-' + (finding.severity || 'unknown').toLowerCase()">{{ finding.severity }}</span>
@@ -550,7 +556,7 @@
                   <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap">{{ finding.target_name }}</td>
                   <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title">{{ finding.title }}</td>
                   <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-nowrap">
-                    <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" class="cve-link" @click.stop>{{ finding.cve }}</a>
+                    <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop>{{ finding.cve }}</a>
                     <span v-else-if="finding.cve" class="text-muted">{{ finding.cve }}</span>
                     <span v-else class="text-muted">—</span>
                   </td>
@@ -655,14 +661,14 @@
             <div class="card-header"><h2>OWASP Top 10 2021 Mapping</h2></div>
             <div class="table-wrap" v-if="analyticsData.compliance">
               <table class="owasp-table">
-                <thead><tr><th class="owasp-category-col">Category</th><th>Findings</th><th>Distribution</th></tr></thead>
+                <thead><tr><th scope="col" class="owasp-category-col">Category</th><th scope="col">Findings</th><th scope="col">Distribution</th></tr></thead>
                 <tbody>
                   <tr v-for="item in analyticsData.compliance.owasp_top_10" :key="item.category">
                     <td class="owasp-category-cell" :title="item.category">{{ item.category }}</td>
                     <td><strong>{{ item.count }}</strong></td>
                     <td>
                       <div class="mini-bar-wrap">
-                        <div class="mini-bar" :style="{ width: owaspBarWidth(item.count) + '%' }"></div>
+                        <div class="mini-bar" :style="{ width: owaspBarWidth(item.count, 'owasp') + '%' }"></div>
                       </div>
                     </td>
                   </tr>
@@ -677,14 +683,14 @@
           <div class="card-header"><h2>CWE Top 10</h2></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>CWE</th><th>Findings</th><th>Distribution</th></tr></thead>
+              <thead><tr><th scope="col">CWE</th><th scope="col">Findings</th><th scope="col">Distribution</th></tr></thead>
               <tbody>
                 <tr v-for="item in analyticsData.compliance.cwe_top" :key="item.cwe">
-                  <td><a :href="'https://cwe.mitre.org/data/definitions/' + item.cwe.replace('CWE-', '') + '.html'" target="_blank" class="cve-link">{{ item.cwe }}</a></td>
+                  <td><a :href="'https://cwe.mitre.org/data/definitions/' + item.cwe.replace('CWE-', '') + '.html'" target="_blank" rel="noopener noreferrer" class="cve-link">{{ item.cwe }}</a></td>
                   <td><strong>{{ item.count }}</strong></td>
                   <td>
                     <div class="mini-bar-wrap">
-                      <div class="mini-bar mini-bar-cwe" :style="{ width: owaspBarWidth(item.count) + '%' }"></div>
+                      <div class="mini-bar mini-bar-cwe" :style="{ width: owaspBarWidth(item.count, 'cwe') + '%' }"></div>
                     </div>
                   </td>
                 </tr>
@@ -721,7 +727,7 @@
               </select>
             </div>
             <button class="btn-primary" @click="runCompare" :disabled="!compareIdA || !compareIdB || compareIdA === compareIdB || compareLoading">
-              <span v-if="compareLoading"><div class="spinner-sm u-inline-block u-mr-6"></div>Analyzing...</span>
+              <span v-if="compareLoading"><span class="spinner-sm u-inline-block u-mr-6"></span>Analyzing...</span>
               <span v-else>Compare</span>
             </button>
           </div>
@@ -754,7 +760,7 @@
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Severity</th><th>Tool</th><th>Title</th><th>File</th></tr></thead>
+                <thead><tr><th scope="col">Severity</th><th scope="col">Tool</th><th scope="col">Title</th><th scope="col">File</th></tr></thead>
                 <tbody>
                   <tr v-for="f in compareResult.new_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
@@ -774,7 +780,7 @@
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Severity</th><th>Tool</th><th>Title</th><th>File</th></tr></thead>
+                <thead><tr><th scope="col">Severity</th><th scope="col">Tool</th><th scope="col">Title</th><th scope="col">File</th></tr></thead>
                 <tbody>
                   <tr v-for="f in compareResult.resolved_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
@@ -814,7 +820,7 @@
           <p class="section-hint">Manage API keys for programmatic platform access. Each key has a role and specific permissions.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Prefix</th><th>Role</th><th>Created by</th><th>Created at</th><th>Expires</th><th class="th-actions">Actions</th></tr></thead>
+              <thead><tr><th scope="col">Name</th><th scope="col">Prefix</th><th scope="col">Role</th><th scope="col">Created by</th><th scope="col">Created at</th><th scope="col">Expires</th><th scope="col" class="th-actions">Actions</th></tr></thead>
               <tbody>
                 <tr v-if="apiKeys.length === 0"><td colspan="7" class="empty-state">No API keys</td></tr>
                 <tr v-for="key in apiKeys" :key="key.prefix">
@@ -842,7 +848,7 @@
           <p class="section-hint">Receive real-time notifications for events such as scan completion or critical findings.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>URL</th><th>Events</th><th>Active</th><th class="th-actions">Actions</th></tr></thead>
+              <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Active</th><th scope="col" class="th-actions">Actions</th></tr></thead>
               <tbody>
                 <tr v-if="webhooks.length === 0"><td colspan="5" class="empty-state">No webhooks configured</td></tr>
                 <tr v-for="wh in webhooks" :key="wh.id">
@@ -851,7 +857,7 @@
                   <td><span class="badge badge-neutral u-mr-4" v-for="ev in (wh.events || '').split(',')" :key="ev">{{ ev.trim() }}</span></td>
                   <td>
                     <label class="toggle-switch">
-                      <input type="checkbox" :checked="wh.is_active" @change="toggleWebhook(wh.id, $event.target.checked)">
+                      <input type="checkbox" :checked="wh.is_active" @change="toggleWebhook(wh.id, $event.target.checked)" :aria-label="`Toggle webhook ${wh.name}`">
                       <span class="toggle-slider"></span>
                     </label>
                   </td>
@@ -869,7 +875,7 @@
           <div class="card-header">
             <h2>Notification Preferences</h2>
           </div>
-          <div class="settings-form">
+          <form class="settings-form" @submit.prevent="saveNotificationPrefs">
             <!-- Delivery -->
             <p class="settings-section-heading">Delivery</p>
             <div class="form-input-group">
@@ -886,7 +892,7 @@
                 <span class="form-label-hint">Immediate notification when a critical severity finding is detected.</span>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.critical_alerts">
+                <input type="checkbox" v-model="notifPrefs.critical_alerts" aria-label="Enable critical alert emails">
                 <span class="toggle-slider"></span>
               </label>
             </div>
@@ -896,7 +902,7 @@
                 <span class="form-label-hint">Notification when high severity findings are detected.</span>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.high_alerts">
+                <input type="checkbox" v-model="notifPrefs.high_alerts" aria-label="Enable high severity alert emails">
                 <span class="toggle-slider"></span>
               </label>
             </div>
@@ -909,7 +915,7 @@
                 <span class="form-label-hint">Receive a weekly summary of findings and scan activity.</span>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.weekly_digest">
+                <input type="checkbox" v-model="notifPrefs.weekly_digest" aria-label="Enable weekly digest emails">
                 <span class="toggle-slider"></span>
               </label>
             </div>
@@ -919,15 +925,15 @@
                 <span class="form-label-hint">Email summary after each scan completes.</span>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="notifPrefs.scan_summaries">
+                <input type="checkbox" v-model="notifPrefs.scan_summaries" aria-label="Enable scan summary emails">
                 <span class="toggle-slider"></span>
               </label>
             </div>
 
             <div class="settings-actions">
-              <button class="btn-primary" @click="saveNotificationPrefs">Save preferences</button>
+              <button type="submit" class="btn-primary">Save preferences</button>
             </div>
-          </div>
+          </form>
         </div>
 
       </div>
@@ -970,7 +976,7 @@
                   <div class="detail-row" v-if="selectedFinding.cve">
                     <span class="detail-key">CVE</span>
                     <span class="detail-val">
-                      <a v-if="isValidCve(selectedFinding.cve)" :href="cveUrl(selectedFinding.cve)" target="_blank" class="cve-link">{{ selectedFinding.cve }}</a>
+                      <a v-if="isValidCve(selectedFinding.cve)" :href="cveUrl(selectedFinding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link">{{ selectedFinding.cve }}</a>
                       <span v-else>{{ selectedFinding.cve }}</span>
                     </span>
                   </div>
@@ -1030,7 +1036,7 @@
                 <h4>References</h4>
                 <ul class="references-list">
                   <li v-for="(ref, idx) in selectedFinding.remediation_guide.references" :key="idx">
-                    <a :href="ref" target="_blank" class="cve-link">{{ ref }}</a>
+                    <a :href="safeExternalUrl(ref)" target="_blank" rel="noopener noreferrer" class="cve-link">{{ ref }}</a>
                   </li>
                 </ul>
               </div>
@@ -1162,11 +1168,11 @@
             <table class="resizable-table" style="width:100%;font-size:0.85rem">
               <thead>
                 <tr>
-                  <th>Tool</th>
-                  <th>Status</th>
-                  <th>Findings</th>
-                  <th>Cache</th>
-                  <th>Note</th>
+                  <th scope="col">Tool</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Findings</th>
+                  <th scope="col">Cache</th>
+                  <th scope="col">Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -1200,7 +1206,7 @@
           <h2 class="modal-title">New Scan</h2>
           <button class="modal-close" @click="showScanModal = false">&#x2715;</button>
         </div>
-        <div class="modal-body">
+        <form class="modal-body" @submit.prevent="triggerScan">
           <p class="modal-subtitle">Configure and start a new security scan.</p>
           <div class="form-group">
             <label class="form-label" for="new-scan-name">Scan name</label>
@@ -1225,12 +1231,12 @@
           </div>
           <div class="modal-actions">
             <button class="btn-secondary" @click="showScanModal = false">Cancel</button>
-            <button class="btn-primary" @click="triggerScan" :disabled="!newScanForm.name || !newScanForm.target || scanTriggering">
-              <span v-if="scanTriggering"><div class="spinner-sm u-inline-block u-mr-6"></div>Starting...</span>
+            <button type="submit" class="btn-primary" :disabled="!newScanForm.name || !newScanForm.target || scanTriggering">
+              <span v-if="scanTriggering"><span class="spinner-sm u-inline-block u-mr-6"></span>Starting...</span>
               <span v-else>Start scan</span>
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
 
@@ -1243,10 +1249,10 @@
           <h2 class="modal-title">New API Key</h2>
           <button class="modal-close" @click="showCreateKeyModal = false">&#x2715;</button>
         </div>
-        <div class="modal-body">
+        <form class="modal-body" @submit.prevent="createApiKey">
           <div class="form-group">
             <label class="form-label" for="api-key-name">Name</label>
-            <input id="api-key-name" name="api_key_name" type="text" v-model="newKeyForm.name" class="filter-input" placeholder="e.g. ci-runner">
+            <input id="api-key-name" name="api_key_name" type="text" v-model="newKeyForm.name" class="filter-input" placeholder="e.g. ci-runner" required>
           </div>
           <div class="form-group">
             <label class="form-label" for="api-key-role">Role</label>
@@ -1266,13 +1272,13 @@
             <button class="btn-secondary btn-sm" @click="copyToClipboard(newKeyResult)">Copy</button>
           </div>
           <div class="modal-actions" v-if="!newKeyResult">
-            <button class="btn-secondary" @click="showCreateKeyModal = false">Cancel</button>
-            <button class="btn-primary" @click="createApiKey" :disabled="!newKeyForm.name">Create</button>
+            <button type="button" class="btn-secondary" @click="showCreateKeyModal = false">Cancel</button>
+            <button type="submit" class="btn-primary" :disabled="!newKeyForm.name">Create</button>
           </div>
           <div class="modal-actions" v-else>
-            <button class="btn-primary" @click="showCreateKeyModal = false; newKeyResult = ''">Close</button>
+            <button type="button" class="btn-primary" @click="showCreateKeyModal = false; newKeyResult = ''">Close</button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
 
@@ -1285,14 +1291,14 @@
           <h2 class="modal-title">New Webhook</h2>
           <button class="modal-close" @click="showCreateWebhookModal = false">&#x2715;</button>
         </div>
-        <div class="modal-body">
+        <form class="modal-body" @submit.prevent="createWebhook">
           <div class="form-group">
             <label class="form-label" for="webhook-name">Name</label>
-            <input id="webhook-name" name="webhook_name" type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="e.g. slack-alerts">
+            <input id="webhook-name" name="webhook_name" type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="e.g. slack-alerts" required>
           </div>
           <div class="form-group">
             <label class="form-label" for="webhook-url">URL</label>
-            <input id="webhook-url" name="webhook_url" type="url" v-model="newWebhookForm.url" class="filter-input" placeholder="https://...">
+            <input id="webhook-url" name="webhook_url" type="url" v-model="newWebhookForm.url" class="filter-input" placeholder="https://..." required>
           </div>
           <div class="form-group">
             <label class="form-label" for="webhook-events">Events (comma-separated)</label>
@@ -1303,10 +1309,10 @@
             <input id="webhook-secret" name="webhook_secret" type="password" v-model="newWebhookForm.secret" class="filter-input">
           </div>
           <div class="modal-actions">
-            <button class="btn-secondary" @click="showCreateWebhookModal = false">Cancel</button>
-            <button class="btn-primary" @click="createWebhook" :disabled="!newWebhookForm.name || !newWebhookForm.url">Create</button>
+            <button type="button" class="btn-secondary" @click="showCreateWebhookModal = false">Cancel</button>
+            <button type="submit" class="btn-primary" :disabled="!newWebhookForm.name || !newWebhookForm.url">Create</button>
           </div>
-        </div>
+        </form>
       </div>
      </div>
 
@@ -1316,6 +1322,7 @@
   <script nonce="{{ csp_nonce }}">
     window.__INIT_DATA__ = {
       user: {{ user | tojson }},
+      userRole: {{ user_role | tojson }},
       kpis: {{ kpis | tojson }},
       recentScans: {{ recent_scans | tojson }},
       severityBreakdown: {{ severity_breakdown | tojson }},

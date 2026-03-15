@@ -160,7 +160,7 @@ class TestSessionCookieLifecycle:
 
     def test_logout_redirects_to_login(self, logged_in_client):  # noqa: D102
         """After logout, accessing a protected page must redirect to /login."""
-        logged_in_client.get("/logout", follow_redirects=True)
+        logged_in_client.post("/logout", follow_redirects=True)
         response = logged_in_client.get("/", follow_redirects=False)
         assert response.status_code in (302, 303), "After logout, protected page should redirect"
         location = response.headers.get("location", "")

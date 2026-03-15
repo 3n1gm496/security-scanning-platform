@@ -1,7 +1,8 @@
 """
-Tests for CSRF middleware.
+Unit tests for CSRF middleware.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -11,121 +12,127 @@ root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 sys.path.insert(0, str(root.parent))
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.testclient import TestClient
-
 from csrf import CSRFMiddleware
 
 
-def _make_app():
-    """Create a minimal FastAPI app with session + CSRF middleware."""
-    app = FastAPI()
-    app.add_middleware(
-        CSRFMiddleware,
-        exempt_paths={"/login", "/health"},
+async def _dummy_app(scope, receive, send):
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [(b"content-type", b"application/json")],
+        }
     )
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key="test-secret-key",
-    )
-
-    @app.get("/csrf-token")
-    def get_csrf(request: Request):
-        return {"csrf_token": request.session.get("csrf_token", "")}
-
-    @app.post("/protected")
-    def protected():
-        return {"status": "ok"}
-
-    @app.post("/login")
-    def login():
-        return {"status": "logged in"}
-
-    @app.get("/health")
-    def health():
-        return {"status": "healthy"}
-
-    @app.delete("/resource")
-    def delete_resource():
-        return {"status": "deleted"}
-
-    return app
+    await send({"type": "http.response.body", "body": b'{"status":"ok"}'})
 
 
-@pytest.fixture
-def client():
-    return TestClient(_make_app())
+async def _call_middleware(method="GET", path="/protected", headers=None, session=None):
+    app = CSRFMiddleware(_dummy_app, exempt_paths={"/login", "/health"})
+    raw_headers = []
+    for key, value in (headers or {}).items():
+        raw_headers.append((key.lower().encode(), value.encode()))
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "headers": raw_headers,
+        "query_string": b"",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 12345),
+        "session": session or {},
+    }
+
+    started = {}
+    body = bytearray()
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            started["status"] = message["status"]
+            started["headers"] = message.get("headers", [])
+        elif message["type"] == "http.response.body":
+            body.extend(message.get("body", b""))
+
+    await app(scope, receive, send)
+    payload = json.loads(body.decode() or "{}")
+    return started["status"], payload, scope
 
 
+@pytest.mark.asyncio
 class TestCSRFMiddleware:
+    async def test_get_requests_pass_without_token(self):
+        status, payload, _scope = await _call_middleware(method="GET")
+        assert status == 200
+        assert payload["status"] == "ok"
 
-    def test_get_requests_pass_without_token(self, client):
-        """GET requests should not require CSRF token."""
-        resp = client.get("/csrf-token")
-        assert resp.status_code == 200
+    async def test_post_without_csrf_token_rejected(self):
+        status, payload, _scope = await _call_middleware(method="POST")
+        assert status == 403
+        assert "CSRF" in payload["detail"]
 
-    def test_post_without_csrf_token_rejected(self, client):
-        """POST to a protected endpoint without CSRF token returns 403."""
-        resp = client.post("/protected")
-        assert resp.status_code == 403
-        assert "CSRF" in resp.json()["detail"]
+    async def test_post_with_valid_csrf_token_accepted(self):
+        status, payload, _scope = await _call_middleware(
+            method="POST",
+            headers={"x-csrf-token": "valid-token"},
+            session={"csrf_token": "valid-token"},
+        )
+        assert status == 200
+        assert payload["status"] == "ok"
 
-    def test_post_with_valid_csrf_token_accepted(self, client):
-        """POST with valid X-CSRF-Token header should succeed."""
-        # First GET to establish session and get CSRF token
-        get_resp = client.get("/csrf-token")
-        token = get_resp.json()["csrf_token"]
-        assert token  # Should not be empty
+    async def test_post_with_invalid_csrf_token_rejected(self):
+        status, payload, _scope = await _call_middleware(
+            method="POST",
+            headers={"x-csrf-token": "wrong-token"},
+            session={"csrf_token": "valid-token"},
+        )
+        assert status == 403
+        assert "CSRF" in payload["detail"]
 
-        # POST with the token
-        resp = client.post("/protected", headers={"X-CSRF-Token": token})
-        assert resp.status_code == 200
+    async def test_exempt_path_allows_post_without_token(self):
+        status, payload, _scope = await _call_middleware(method="POST", path="/login")
+        assert status == 200
+        assert payload["status"] == "ok"
 
-    def test_post_with_invalid_csrf_token_rejected(self, client):
-        """POST with wrong CSRF token returns 403."""
-        # Establish session
-        client.get("/csrf-token")
-        resp = client.post("/protected", headers={"X-CSRF-Token": "wrong-token"})
-        assert resp.status_code == 403
+    async def test_delete_requires_csrf_token(self):
+        status, payload, _scope = await _call_middleware(method="DELETE")
+        assert status == 403
+        assert "CSRF" in payload["detail"]
 
-    def test_exempt_path_allows_post_without_token(self, client):
-        """Exempt paths (like /login) should not require CSRF token."""
-        resp = client.post("/login")
-        assert resp.status_code == 200
+    async def test_delete_with_valid_csrf_succeeds(self):
+        status, payload, _scope = await _call_middleware(
+            method="DELETE",
+            headers={"x-csrf-token": "valid-token"},
+            session={"csrf_token": "valid-token"},
+        )
+        assert status == 200
+        assert payload["status"] == "ok"
 
-    def test_delete_requires_csrf_token(self, client):
-        """DELETE requests should also require CSRF token."""
-        resp = client.delete("/resource")
-        assert resp.status_code == 403
-
-    def test_delete_with_valid_csrf_succeeds(self, client):
-        get_resp = client.get("/csrf-token")
-        token = get_resp.json()["csrf_token"]
-        resp = client.delete("/resource", headers={"X-CSRF-Token": token})
-        assert resp.status_code == 200
-
-    def test_bearer_auth_bypasses_csrf(self, client, monkeypatch):
-        """API-key-authenticated requests with a valid Bearer token should bypass CSRF."""
+    async def test_bearer_auth_bypasses_csrf_and_caches_key_info(self, monkeypatch):
         import rbac
 
         monkeypatch.setattr(
-            rbac, "verify_api_key", lambda key: {"id": 1, "role": "admin"} if key == "valid-key" else None
+            rbac,
+            "verify_api_key",
+            lambda key: {"id": 1, "role": "admin", "key_prefix": "ssp_test"} if key == "valid-key" else None,
         )
-        resp = client.post(
-            "/protected",
-            headers={"Authorization": "Bearer valid-key"},
+        status, payload, scope = await _call_middleware(
+            method="POST",
+            headers={"authorization": "Bearer valid-key"},
         )
-        assert resp.status_code == 200
+        assert status == 200
+        assert payload["status"] == "ok"
+        assert scope["auth_api_key_info"]["key_prefix"] == "ssp_test"
 
-    def test_bearer_auth_invalid_key_requires_csrf(self, client, monkeypatch):
-        """Bearer header with an invalid key should NOT bypass CSRF."""
+    async def test_bearer_auth_invalid_key_requires_csrf(self, monkeypatch):
         import rbac
 
         monkeypatch.setattr(rbac, "verify_api_key", lambda key: None)
-        resp = client.post(
-            "/protected",
-            headers={"Authorization": "Bearer invalid-key"},
+        status, payload, _scope = await _call_middleware(
+            method="POST",
+            headers={"authorization": "Bearer invalid-key"},
         )
-        assert resp.status_code == 403
+        assert status == 403
+        assert "CSRF" in payload["detail"]

@@ -45,6 +45,11 @@ REQUIRED_BINARIES: dict[str, str] = {
     # not a CLI binary.  Preflight handles this as a special case below.
 }
 
+_TOOL_BINARY_KEYS: dict[str, str] = {
+    "trivy_fs": "trivy",
+    "trivy_image": "trivy",
+}
+
 
 def get_compatible_scanners(target_type: str, settings: dict[str, Any]) -> list[str]:
     """Return a list of enabled and compatible scanners for the given target type."""
@@ -99,7 +104,7 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
             continue
 
         # Trivy is a special case, as both trivy_fs and trivy_image use the same binary
-        binary_name = REQUIRED_BINARIES.get(tool.replace("_fs", "").replace("_image", ""))
+        binary_name = REQUIRED_BINARIES.get(_TOOL_BINARY_KEYS.get(tool, tool))
         if not binary_name:
             LOGGER.warning("preflight.no_binary_defined", tool=tool)
             runnable.append(tool)

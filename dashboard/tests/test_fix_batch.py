@@ -16,8 +16,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
@@ -105,7 +103,7 @@ def _scans_conn_with_data(n: int = 15) -> sqlite3.Connection:
 
 class TestRevokeApiKey:
     def test_revoke_nonexistent_returns_false(self, isolated_db):
-        from rbac import Role, create_api_key, init_rbac_tables, revoke_api_key
+        from rbac import init_rbac_tables, revoke_api_key
 
         init_rbac_tables()
         result = revoke_api_key("ssp_doesnotexist")
@@ -223,6 +221,34 @@ class TestAddFindingCommentReturnsId:
         id1 = add_finding_comment(1, "tester", "Comment A")
         id2 = add_finding_comment(1, "tester", "Comment B")
         assert id1 != id2
+
+
+class TestBulkUpdateStatusReporting:
+    def _insert_parent_rows(self):
+        from db import get_connection
+
+        db_path = __import__("os").environ["DASHBOARD_DB_PATH"]
+        with get_connection(db_path) as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO scans (id, created_at, finished_at, target_type, target_name, target_value, status, policy_status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("scan-bulk", "2026-01-01T00:00:00", "2026-01-01T00:01:00", "git", "t", "v", "COMPLETED_CLEAN", "PASSED"),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO findings (id, scan_id, timestamp, target_type, target_name, tool, category, severity, title, description) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (1, "scan-bulk", "2026-01-01T00:00:00", "git", "t", "tool", "cat", "HIGH", "title", "desc"),
+            )
+
+    def test_bulk_update_reports_failures_instead_of_swallowing(self, isolated_db):
+        from finding_management import FindingStatus, bulk_update_status, init_finding_management_tables
+
+        init_finding_management_tables()
+        self._insert_parent_rows()
+        result = bulk_update_status([1, 999999], FindingStatus.RESOLVED, user="tester")
+        assert result["updated_count"] == 1
+        assert result["failed_ids"] == [999999]
+        assert result["partial_success"] is True
 
 
 # ---------------------------------------------------------------------------

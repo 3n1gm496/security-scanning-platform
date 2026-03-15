@@ -5,13 +5,15 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
 from auth import require_auth, require_permission, AuthContext
 from db import get_connection
+from db_adapter import is_postgres
+from export import _sanitize_csv_value
 from rbac import Permission, purge_audit_log, log_audit
 
 from routers._shared import DB_PATH
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/api", tags=["audit"])
 
 
 @router.get("/audit", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
-def get_audit_log(
+async def get_audit_log(
     limit: int = Query(100, ge=1, le=1000),
     action: str | None = Query(None),
     auth: AuthContext = Depends(require_auth),
@@ -45,7 +47,7 @@ def get_audit_log(
 
 
 @router.get("/audit/export", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
-def export_audit_log(
+async def export_audit_log(
     format: str = Query("csv", pattern="^(csv|json)$"),
     limit: int = Query(5000, ge=1, le=50000),
     action: str | None = Query(None),
@@ -79,7 +81,7 @@ def export_audit_log(
         w = csv.DictWriter(buf, fieldnames=fieldnames)
         w.writeheader()
         for row in rows:
-            w.writerow(row)
+            w.writerow({key: _sanitize_csv_value(value) for key, value in row.items()})
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",
@@ -88,7 +90,7 @@ def export_audit_log(
 
 
 @router.post("/audit/purge", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
-def purge_audit(
+async def purge_audit(
     retention_days: int = Query(90, ge=1, le=3650),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
@@ -102,11 +104,18 @@ def purge_audit(
     # Also purge old webhook delivery records
     webhook_deleted = 0
     try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
         with get_connection(DB_PATH) as conn:
-            cursor = conn.execute(
-                "DELETE FROM webhook_deliveries WHERE delivered_at < date('now', ?)",
-                (f"-{retention_days} day",),
-            )
+            if is_postgres():
+                cursor = conn.execute(
+                    "DELETE FROM webhook_deliveries WHERE delivered_at < ?",
+                    (cutoff.isoformat(),),
+                )
+            else:
+                cursor = conn.execute(
+                    "DELETE FROM webhook_deliveries WHERE delivered_at < ?",
+                    (cutoff.date().isoformat(),),
+                )
             webhook_deleted = cursor.rowcount
     except Exception:
         pass

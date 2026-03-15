@@ -152,6 +152,23 @@ def test_scans_paginator_policy_filter():
     conn.close()
 
 
+def test_scans_paginator_total_count_not_affected_by_cursor():
+    """total_count must reflect filters only, not the current page cursor."""
+    conn = _make_scans_db(15)
+    paginator = ScansPaginator(per_page=5)
+    first_page = paginator.paginate(conn, sort_by="id", sort_order="ASC")
+    second_page = paginator.paginate(
+        conn,
+        sort_by="id",
+        sort_order="ASC",
+        cursor=first_page["pagination"]["next_cursor"],
+    )
+
+    assert first_page["pagination"]["total_count"] == 15
+    assert second_page["pagination"]["total_count"] == 15
+    conn.close()
+
+
 def test_pagination_cursor_invalid():
     """Test cursor validation."""
     cursor = PaginationCursor("test")

@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
-from queue import SimpleQueue
 
 from fastapi.templating import Jinja2Templates
 
@@ -98,4 +97,8 @@ def cached(key: str, fn, ttl: int = ANALYTICS_CACHE_TTL):
         result = fn()
         with _ttl_lock:
             _ttl_cache[key] = (now + ttl, result)
+    with _ttl_inflight_lock:
+        existing = _ttl_inflight.get(key)
+        if existing is key_lock and not key_lock.locked():
+            _ttl_inflight.pop(key, None)
     return result

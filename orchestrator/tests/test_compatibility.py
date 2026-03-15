@@ -157,6 +157,22 @@ class TestPreflightCheck:
         assert "trivy_image" in runnable
         assert skipped == []
 
+    def test_only_explicit_trivy_variants_share_trivy_binary(self):
+        """Binary lookup should use explicit aliases, not fragile suffix stripping."""
+
+        seen = []
+
+        def _exists(binary: str) -> bool:
+            seen.append(binary)
+            return False
+
+        with patch("orchestrator.compatibility.command_exists", side_effect=_exists):
+            runnable, skipped = preflight_check(["trivy_fs", "trivy_image", "nuclei"])
+
+        assert runnable == []
+        assert [item["tool"] for item in skipped] == ["trivy_fs", "trivy_image", "nuclei"]
+        assert seen == ["trivy", "trivy", "nuclei"]
+
     def test_tool_without_required_binary_entry_is_runnable(self):
         """A tool with no entry in REQUIRED_BINARIES must not be blocked."""
         with patch("orchestrator.compatibility.command_exists", return_value=False):
@@ -197,6 +213,22 @@ class TestTargetSpecUrl:
             TargetSpec.from_dict({"type": "ftp", "url": "ftp://example.com"})
 
     def test_all_valid_types_accepted(self):
-        for t in ("git", "local", "image", "url"):
-            spec = TargetSpec.from_dict({"type": t})
+        valid_inputs = {
+            "git": {"type": "git", "repo": "https://example.com/repo.git"},
+            "local": {"type": "local", "path": "/tmp/project"},
+            "image": {"type": "image", "image": "nginx:latest"},
+            "url": {"type": "url", "url": "https://example.com"},
+        }
+        for t, payload in valid_inputs.items():
+            spec = TargetSpec.from_dict(payload)
             assert spec.type == t
+
+    def test_required_target_field_enforced_per_type(self):
+        with pytest.raises(ValueError, match="requires a non-empty 'repo'"):
+            TargetSpec.from_dict({"type": "git"})
+        with pytest.raises(ValueError, match="requires a non-empty 'path'"):
+            TargetSpec.from_dict({"type": "local"})
+        with pytest.raises(ValueError, match="requires a non-empty 'image'"):
+            TargetSpec.from_dict({"type": "image"})
+        with pytest.raises(ValueError, match="requires a non-empty 'url'"):
+            TargetSpec.from_dict({"type": "url"})

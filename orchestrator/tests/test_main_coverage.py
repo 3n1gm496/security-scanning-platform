@@ -290,6 +290,74 @@ class TestRunTargetsConcurrentlyPolicyBlock:
 
         assert exit_code == 3
 
+    def test_failed_scan_is_persisted_when_target_raises(self, tmp_path, monkeypatch):
+        settings = _minimal_settings(tmp_path)
+        target_dir = tmp_path / "src"
+        target_dir.mkdir()
+        target = TargetSpec.from_dict(
+            {
+                "name": "broken-svc",
+                "type": "local",
+                "path": str(target_dir),
+                "enabled": True,
+            }
+        )
+
+        monkeypatch.setattr("orchestrator.main.run_single_scan", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+        results, exit_code = run_targets_concurrently(
+            targets=[target],
+            settings=settings,
+            fail_on_policy_block=False,
+            scan_id_override="11111111-1111-1111-1111-111111111111",
+        )
+
+        assert exit_code == 4
+        assert results[0]["status"] == "FAILED"
+
+        import sqlite3
+
+        conn = sqlite3.connect(settings["paths"]["db_path"])
+        row = conn.execute(
+            "SELECT status, error_message FROM scans WHERE id = ?",
+            ("11111111-1111-1111-1111-111111111111",),
+        ).fetchone()
+        conn.close()
+        assert row[0] == "FAILED"
+        assert "boom" in row[1]
+
+    def test_scan_timeout_is_persisted_as_failed(self, tmp_path, monkeypatch):
+        settings = _minimal_settings(tmp_path)
+        settings["execution"]["scan_timeout_seconds"] = 1
+        target_dir = tmp_path / "src"
+        target_dir.mkdir()
+        target = TargetSpec.from_dict(
+            {
+                "name": "slow-svc",
+                "type": "local",
+                "path": str(target_dir),
+                "enabled": True,
+            }
+        )
+
+        def fake_as_completed(_futures, timeout=None):
+            from concurrent.futures import TimeoutError as FuturesTimeoutError
+
+            raise FuturesTimeoutError()
+
+        monkeypatch.setattr("orchestrator.main.as_completed", fake_as_completed)
+
+        results, exit_code = run_targets_concurrently(
+            targets=[target],
+            settings=settings,
+            fail_on_policy_block=False,
+            scan_id_override="22222222-2222-2222-2222-222222222222",
+        )
+
+        assert exit_code == 4
+        assert results[0]["status"] == "FAILED"
+        assert "timeout" in results[0]["error_message"].lower()
+
 
 # ---------------------------------------------------------------------------
 # Tests: main() CLI — additional flags

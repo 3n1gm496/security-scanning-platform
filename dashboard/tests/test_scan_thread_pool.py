@@ -9,6 +9,7 @@ Covers:
 
 import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -17,13 +18,19 @@ import pytest
 root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 
+if "bcrypt" not in sys.modules:
+    fake_bcrypt = types.ModuleType("bcrypt")
+    fake_bcrypt.gensalt = lambda: b"salt"
+    fake_bcrypt.hashpw = lambda value, salt: b"$2b$stubbed-hash"
+    fake_bcrypt.checkpw = lambda plain, hashed: True
+    sys.modules["bcrypt"] = fake_bcrypt
+
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
 from fastapi.testclient import TestClient
 
-import app as _app
 from app import app
 from routers._shared import scan_executor as _scan_executor, MAX_SCAN_WORKERS as _MAX_SCAN_WORKERS
 
@@ -114,12 +121,11 @@ def test_csp_nonce_present(client):
     assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
 
 
-def test_hsts_header_present(client):
-    """Strict-Transport-Security header must be present on all responses."""
+def test_hsts_header_absent_over_http(client):
+    """Strict-Transport-Security must not be sent on plain HTTP responses."""
     resp = client.get("/api/health")
     hsts = resp.headers.get("Strict-Transport-Security", "")
-    assert "max-age=" in hsts
-    assert "includeSubDomains" in hsts
+    assert hsts == ""
 
 
 def test_x_content_type_options_header(client):

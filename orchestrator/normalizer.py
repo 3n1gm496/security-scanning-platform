@@ -41,7 +41,8 @@ SEVERITY_MAP = {
 def _severity(value: str | None, default: str = "MEDIUM") -> str:
     if not value:
         return default
-    return SEVERITY_MAP.get(str(value).upper(), str(value).upper())
+    normalized = str(value).upper()
+    return SEVERITY_MAP.get(normalized, default)
 
 
 def _fingerprint(*parts: Any) -> str:
@@ -55,7 +56,7 @@ def _rel_path(base_path: str | None, file_path: str | None) -> str | None:
     try:
         if base_path:
             return str(Path(file_path).resolve().relative_to(Path(base_path).resolve()))
-    except Exception:
+    except (OSError, RuntimeError, ValueError):
         pass
     return file_path
 
@@ -361,13 +362,19 @@ def _nuclei_category(info: dict[str, Any]) -> str:
 def normalize_nuclei(
     scan_id: str,
     target: TargetSpec,
-    raw: list[dict[str, Any]],
+    raw: list[dict[str, Any]] | dict[str, Any],
     raw_reference: str,
     base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return findings
     # nuclei outputs list of JSON objects; parser may load lines into list
     for item in raw:
+        if not isinstance(item, dict):
+            continue
         severity = _severity(item.get("severity"), "MEDIUM")
         info = item.get("info", {})
 

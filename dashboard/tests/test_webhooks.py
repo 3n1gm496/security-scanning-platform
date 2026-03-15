@@ -2,10 +2,10 @@
 Test per il sistema di webhooks.
 """
 
-import asyncio
 import os
 import sqlite3
 import sys
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -15,8 +15,16 @@ import pytest
 root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 
+if "bcrypt" not in sys.modules:
+    fake_bcrypt = types.ModuleType("bcrypt")
+    fake_bcrypt.gensalt = lambda: b"salt"
+    fake_bcrypt.hashpw = lambda value, salt: b"$2b$stubbed-hash"
+    fake_bcrypt.checkpw = lambda plain, hashed: True
+    sys.modules["bcrypt"] = fake_bcrypt
+
 from webhooks import (
     WebhookEvent,
+    WEBHOOK_SECRET_PREFIX,
     init_webhook_tables,
     create_webhook,
     list_webhooks,
@@ -68,6 +76,74 @@ def test_create_and_list_webhooks(db_setup):
     assert "scan.completed" in webhooks[0]["events"]
     assert "finding.critical" in webhooks[0]["events"]
     assert webhooks[0]["is_active"] == 1
+    assert "secret" not in webhooks[0]
+
+
+def test_webhook_secret_is_encrypted_at_rest(db_setup):
+    """Webhook secrets should not be stored in plaintext in the database."""
+    webhook_id = create_webhook(
+        name="Encrypted Secret",
+        url="https://example.com/webhook",
+        events=[WebhookEvent.SCAN_COMPLETED],
+        secret="super-secret-value",
+    )
+
+    conn = sqlite3.connect(os.environ["DASHBOARD_DB_PATH"])
+    cursor = conn.cursor()
+    cursor.execute("SELECT secret FROM webhooks WHERE id = ?", (webhook_id,))
+    stored_secret = cursor.fetchone()[0]
+    conn.close()
+
+    assert stored_secret != "super-secret-value"
+    assert stored_secret.startswith(WEBHOOK_SECRET_PREFIX)
+
+
+def test_list_webhooks_can_include_decrypted_secret_for_internal_use(db_setup):
+    """Internal callers may request the decrypted secret explicitly."""
+    create_webhook(
+        name="Internal Secret",
+        url="https://example.com/webhook",
+        events=[WebhookEvent.SCAN_COMPLETED],
+        secret="internal-secret",
+    )
+
+    webhook = list_webhooks(include_secret=True)[0]
+    assert webhook["secret"] == "internal-secret"
+
+
+def test_legacy_plaintext_webhook_secret_is_migrated_on_read(db_setup):
+    """Existing plaintext secrets are read and rewritten encrypted transparently."""
+    conn = sqlite3.connect(os.environ["DASHBOARD_DB_PATH"])
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO webhooks (name, url, secret, events, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            "Legacy Hook",
+            "https://example.com/legacy",
+            "legacy-plaintext-secret",
+            WebhookEvent.SCAN_COMPLETED.value,
+            "2026-01-01T00:00:00+00:00",
+        ),
+    )
+    webhook_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    webhook = list_webhooks(include_secret=True)[0]
+    assert webhook["id"] == webhook_id
+    assert webhook["secret"] == "legacy-plaintext-secret"
+
+    conn = sqlite3.connect(os.environ["DASHBOARD_DB_PATH"])
+    cursor = conn.cursor()
+    cursor.execute("SELECT secret FROM webhooks WHERE id = ?", (webhook_id,))
+    migrated_secret = cursor.fetchone()[0]
+    conn.close()
+
+    assert migrated_secret != "legacy-plaintext-secret"
+    assert migrated_secret.startswith(WEBHOOK_SECRET_PREFIX)
 
 
 def test_delete_webhook(db_setup):

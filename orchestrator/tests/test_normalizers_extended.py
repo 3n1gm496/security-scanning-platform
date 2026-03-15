@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from orchestrator.models import TargetSpec
 from orchestrator.normalizer import (
@@ -48,9 +44,13 @@ def test_severity_none_returns_default():
 
 
 def test_severity_passthrough_unknown_value():
-    # Unknown values are uppercased and returned as-is
+    # Unknown values fall back to the caller-provided default.
     result = _severity("EXTREME")
-    assert result == "EXTREME"
+    assert result == "MEDIUM"
+
+
+def test_severity_unknown_value_uses_custom_default():
+    assert _severity("EXTREME", "LOW") == "LOW"
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +99,15 @@ def test_rel_path_outside_base():
     # File outside base → fallback to original path
     result = _rel_path("/tmp/repo", "/etc/passwd")
     assert result == "/etc/passwd"
+
+
+def test_rel_path_swallows_expected_resolution_errors(monkeypatch):
+    class BrokenPath:
+        def resolve(self):
+            raise OSError("boom")
+
+    monkeypatch.setattr("orchestrator.normalizer.Path", lambda *_args, **_kwargs: BrokenPath())
+    assert _rel_path("/tmp/repo", "/tmp/repo/src/app.py") == "/tmp/repo/src/app.py"
 
 
 # ---------------------------------------------------------------------------

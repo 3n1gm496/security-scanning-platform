@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import sys
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -46,7 +47,7 @@ from orchestrator.scanners import (
     run_grype,
     run_owasp_zap,
 )
-from orchestrator.storage import init_db, save_scan_result, write_json_file
+from orchestrator.storage import init_db, save_scan_result, write_json_file, get_last_scan_sha
 from orchestrator.policy_engine import load_policy_engine
 
 LOGGER = logging.getLogger(__name__)
@@ -113,6 +114,12 @@ def resolve_settings(path: str) -> dict[str, Any]:
     settings["policy"].setdefault("block_on_secret_categories", True)
     settings["execution"].setdefault(
         "max_concurrent_targets", _safe_int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2"), 2)
+    )
+    settings["execution"].setdefault(
+        "max_concurrent_scanners", _safe_int(os.getenv("ORCH_MAX_CONCURRENT_SCANNERS", "4"), 4)
+    )
+    settings["execution"].setdefault(
+        "incremental", os.getenv("ORCH_INCREMENTAL", "false").lower() in {"1", "true", "yes", "on"}
     )
     # git_clone_depth: 0 = full history (recommended for secret scanning via gitleaks).
     # Set to a positive integer for shallow clones in bandwidth-constrained environments.
@@ -242,8 +249,40 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
     artifacts: dict[str, str] = {}
     status = "COMPLETED_CLEAN"
     error_messages: list[str] = []
+    # Lock protects shared mutable state when scanners run in parallel
+    _state_lock = threading.Lock()
 
     target_input, target_value, git_sha = prepare_target(target, settings, scan_id)
+
+    # Incremental scanning: if the git SHA hasn't changed since the last successful
+    # scan for this target, skip the scan entirely and return a lightweight result.
+    incremental = bool(settings.get("execution", {}).get("incremental", False))
+    if incremental and git_sha and db_path:
+        last_sha = get_last_scan_sha(db_path, target.name)
+        if last_sha and last_sha == git_sha:
+            LOGGER.info(
+                "incremental.skip target=%s sha=%s (unchanged since last scan)",
+                target.name,
+                git_sha,
+            )
+            finished_at = utc_now_iso()
+            return ScanResult(
+                scan_id=scan_id,
+                started_at=started_at,
+                finished_at=finished_at,
+                target_name=target.name,
+                target_type=target.type,
+                target_value=target_value,
+                status="SKIPPED_UNCHANGED",
+                policy_status="PASS",
+                tools=[],
+                findings=[],
+                artifacts={},
+                raw_report_dir=str(raw_dir),
+                normalized_report_path="",
+                error_message=None,
+                git_sha=git_sha,
+            )
 
     compatible_scanners = get_compatible_scanners(target.type, settings)
     runnable_scanners, skipped_scanners = preflight_check(compatible_scanners)
@@ -304,39 +343,41 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
 
             raw_payload = load_json(output_path)
             new_findings = parser(raw_payload, output_path, **parser_kwargs)
-            findings.extend(new_findings)
-            tools.append(
-                ToolExecutionResult(
-                    tool=tool_name,
-                    enabled=True,
-                    success=True,
-                    exit_code=int(result.get("exit_code", 0)),
-                    started_at=started_tool,
-                    finished_at=utc_now_iso(),
-                    raw_output_path=output_path,
-                    stderr=result.get("stderr"),
-                    finding_count=len(new_findings),
-                    cache_hit=cache_hit,
+            with _state_lock:
+                findings.extend(new_findings)
+                tools.append(
+                    ToolExecutionResult(
+                        tool=tool_name,
+                        enabled=True,
+                        success=True,
+                        exit_code=int(result.get("exit_code", 0)),
+                        started_at=started_tool,
+                        finished_at=utc_now_iso(),
+                        raw_output_path=output_path,
+                        stderr=result.get("stderr"),
+                        finding_count=len(new_findings),
+                        cache_hit=cache_hit,
+                    )
                 )
-            )
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Tool %s failed for target %s", tool_name, target.name)
-            status = "PARTIAL_FAILED"
-            error_messages.append(str(exc))
-            tools.append(
-                ToolExecutionResult(
-                    tool=tool_name,
-                    enabled=True,
-                    success=False,
-                    exit_code=2,
-                    started_at=started_tool,
-                    finished_at=utc_now_iso(),
-                    raw_output_path=output_path if Path(output_path).exists() else None,
-                    error=str(exc),
-                    finding_count=0,
-                    cache_hit=False,
+            with _state_lock:
+                status = "PARTIAL_FAILED"
+                error_messages.append(str(exc))
+                tools.append(
+                    ToolExecutionResult(
+                        tool=tool_name,
+                        enabled=True,
+                        success=False,
+                        exit_code=2,
+                        started_at=started_tool,
+                        finished_at=utc_now_iso(),
+                        raw_output_path=output_path if Path(output_path).exists() else None,
+                        error=str(exc),
+                        finding_count=0,
+                        cache_hit=False,
+                    )
                 )
-            )
 
     def execute_syft() -> None:
         nonlocal status
@@ -344,169 +385,214 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
         output_path = str(raw_dir / "syft.spdx.json")
         try:
             result = run_syft(target_input, output_path)
-            artifacts["sbom_spdx_json"] = output_path
             meta = sbom_metadata(output_path)
-            tools.append(
-                ToolExecutionResult(
-                    tool="syft",
-                    enabled=True,
-                    success=True,
-                    exit_code=int(result.get("exit_code", 0)),
-                    started_at=started_tool,
-                    finished_at=utc_now_iso(),
-                    raw_output_path=output_path,
-                    stderr=result.get("stderr"),
-                    finding_count=meta.get("package_count", 0),
+            with _state_lock:
+                artifacts["sbom_spdx_json"] = output_path
+                tools.append(
+                    ToolExecutionResult(
+                        tool="syft",
+                        enabled=True,
+                        success=True,
+                        exit_code=int(result.get("exit_code", 0)),
+                        started_at=started_tool,
+                        finished_at=utc_now_iso(),
+                        raw_output_path=output_path,
+                        stderr=result.get("stderr"),
+                        finding_count=meta.get("package_count", 0),
+                    )
                 )
-            )
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Tool syft failed for target %s", target.name)
-            status = "PARTIAL_FAILED"
-            error_messages.append(str(exc))
-            tools.append(
-                ToolExecutionResult(
-                    tool="syft",
-                    enabled=True,
-                    success=False,
-                    exit_code=2,
-                    started_at=started_tool,
-                    finished_at=utc_now_iso(),
-                    raw_output_path=output_path if Path(output_path).exists() else None,
-                    error=str(exc),
-                    finding_count=0,
+            with _state_lock:
+                status = "PARTIAL_FAILED"
+                error_messages.append(str(exc))
+                tools.append(
+                    ToolExecutionResult(
+                        tool="syft",
+                        enabled=True,
+                        success=False,
+                        exit_code=2,
+                        started_at=started_tool,
+                        finished_at=utc_now_iso(),
+                        raw_output_path=output_path if Path(output_path).exists() else None,
+                        error=str(exc),
+                        finding_count=0,
+                    )
                 )
-            )
 
+    # Build a list of callables — one per scanner — then run them in parallel.
+    scanner_tasks: list = []
     for tool in runnable_scanners:
         if tool == "semgrep":
-            execute_tool(
-                "semgrep",
-                lambda output_path: run_semgrep(
-                    target_input, output_path, settings["scanners"]["semgrep"].get("configs", ["p/default"])
-                ),
-                lambda raw_payload, output_path, **_: normalize_semgrep(
-                    scan_id, target, raw_payload, output_path, base_path=target_input
-                ),
-                cache_context={
-                    "configs": settings["scanners"]["semgrep"].get("configs", ["p/default"]),
-                    **_git_ctx,
-                },
+            scanner_tasks.append(
+                lambda: execute_tool(
+                    "semgrep",
+                    lambda output_path: run_semgrep(
+                        target_input, output_path, settings["scanners"]["semgrep"].get("configs", ["p/default"])
+                    ),
+                    lambda raw_payload, output_path, **_: normalize_semgrep(
+                        scan_id, target, raw_payload, output_path, base_path=target_input
+                    ),
+                    cache_context={
+                        "configs": settings["scanners"]["semgrep"].get("configs", ["p/default"]),
+                        **_git_ctx,
+                    },
+                )
             )
         elif tool == "bandit":
-            execute_tool(
-                "bandit",
-                lambda output_path: run_bandit(target_input, output_path),
-                lambda raw_payload, output_path, **_: normalize_bandit(
-                    scan_id, target, raw_payload, output_path, base_path=target_input
-                ),
-                cache_context={"mode": "bandit", **_git_ctx},
+            scanner_tasks.append(
+                lambda: execute_tool(
+                    "bandit",
+                    lambda output_path: run_bandit(target_input, output_path),
+                    lambda raw_payload, output_path, **_: normalize_bandit(
+                        scan_id, target, raw_payload, output_path, base_path=target_input
+                    ),
+                    cache_context={"mode": "bandit", **_git_ctx},
+                )
             )
         elif tool == "nuclei":
             _nuclei_cfg = settings["scanners"]["nuclei"]
             _nuclei_ttype = target.type
-            execute_tool(
-                "nuclei",
-                lambda output_path, _cfg=_nuclei_cfg, _tt=_nuclei_ttype: run_nuclei(
-                    target_input,
-                    output_path,
-                    _cfg.get("templates") or [],
-                    _cfg.get("severity"),
-                    _cfg.get("tags"),
-                    target_type=_tt,
-                ),
-                lambda raw_payload, output_path, **_: normalize_nuclei(
-                    scan_id, target, raw_payload, output_path, base_path=target_input
-                ),
-                cache_context={
-                    "templates": _nuclei_cfg.get("templates"),
-                    "severity": _nuclei_cfg.get("severity"),
-                    "tags": _nuclei_cfg.get("tags"),
-                    "target_type": target.type,
-                    **_git_ctx,
-                },
+            scanner_tasks.append(
+                lambda _cfg=_nuclei_cfg, _tt=_nuclei_ttype: execute_tool(
+                    "nuclei",
+                    lambda output_path, __cfg=_cfg, __tt=_tt: run_nuclei(
+                        target_input,
+                        output_path,
+                        __cfg.get("templates") or [],
+                        __cfg.get("severity"),
+                        __cfg.get("tags"),
+                        target_type=__tt,
+                    ),
+                    lambda raw_payload, output_path, **_: normalize_nuclei(
+                        scan_id, target, raw_payload, output_path, base_path=target_input
+                    ),
+                    cache_context={
+                        "templates": _cfg.get("templates"),
+                        "severity": _cfg.get("severity"),
+                        "tags": _cfg.get("tags"),
+                        "target_type": _tt,
+                        **_git_ctx,
+                    },
+                )
             )
         elif tool == "trivy_fs":
-            execute_tool(
-                "trivy_fs",
-                lambda output_path: run_trivy_fs(
-                    target_input,
-                    output_path,
-                    settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
-                    bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
-                ),
-                lambda raw_payload, output_path, **_: normalize_trivy(
-                    scan_id, target, raw_payload, output_path, base_path=target_input, category="sca"
-                ),
-                cache_context={
-                    "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
-                    "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
-                    **_git_ctx,
-                },
+            scanner_tasks.append(
+                lambda: execute_tool(
+                    "trivy_fs",
+                    lambda output_path: run_trivy_fs(
+                        target_input,
+                        output_path,
+                        settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
+                        bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                    ),
+                    lambda raw_payload, output_path, **_: normalize_trivy(
+                        scan_id, target, raw_payload, output_path, base_path=target_input, category="sca"
+                    ),
+                    cache_context={
+                        "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
+                        "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                        **_git_ctx,
+                    },
+                )
             )
         elif tool == "trivy_image":
-            execute_tool(
-                "trivy_image",
-                lambda output_path: run_trivy_image(
-                    target_input,
-                    output_path,
-                    settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
-                    bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
-                ),
-                lambda raw_payload, output_path, **_: normalize_trivy(
-                    scan_id, target, raw_payload, output_path, category="container"
-                ),
-                cache_context={
-                    "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
-                    "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
-                },
+            scanner_tasks.append(
+                lambda: execute_tool(
+                    "trivy_image",
+                    lambda output_path: run_trivy_image(
+                        target_input,
+                        output_path,
+                        settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
+                        bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                    ),
+                    lambda raw_payload, output_path, **_: normalize_trivy(
+                        scan_id, target, raw_payload, output_path, category="container"
+                    ),
+                    cache_context={
+                        "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
+                        "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                    },
+                )
             )
         elif tool == "gitleaks":
-            use_git = Path(target_input, ".git").exists()
-            execute_tool(
-                "gitleaks",
-                lambda output_path: run_gitleaks(target_input, output_path, use_git_history=use_git),
-                lambda raw_payload, output_path, **_: normalize_gitleaks(
-                    scan_id, target, raw_payload, output_path, base_path=target_input
-                ),
-                cache_context={"use_git_history": use_git, **_git_ctx},
+            _use_git = Path(target_input, ".git").exists()
+            scanner_tasks.append(
+                lambda _ug=_use_git: execute_tool(
+                    "gitleaks",
+                    lambda output_path, __ug=_ug: run_gitleaks(target_input, output_path, use_git_history=__ug),
+                    lambda raw_payload, output_path, **_: normalize_gitleaks(
+                        scan_id, target, raw_payload, output_path, base_path=target_input
+                    ),
+                    cache_context={"use_git_history": _ug, **_git_ctx},
+                )
             )
         elif tool == "checkov":
-            execute_tool(
-                "checkov",
-                lambda output_path: run_checkov(target_input, output_path),
-                lambda raw_payload, output_path, **_: normalize_checkov(
-                    scan_id, target, raw_payload, output_path, base_path=target_input
-                ),
-                cache_context={"mode": "checkov", **_git_ctx},
+            scanner_tasks.append(
+                lambda: execute_tool(
+                    "checkov",
+                    lambda output_path: run_checkov(target_input, output_path),
+                    lambda raw_payload, output_path, **_: normalize_checkov(
+                        scan_id, target, raw_payload, output_path, base_path=target_input
+                    ),
+                    cache_context={"mode": "checkov", **_git_ctx},
+                )
             )
         elif tool == "grype":
-            execute_tool(
-                "grype",
-                lambda output_path: run_grype(target_input, output_path),
-                lambda raw_payload, output_path, **_: normalize_grype(
-                    scan_id, target, raw_payload, output_path, base_path=target_input
-                ),
-                cache_context={"mode": "grype", **_git_ctx},
+            scanner_tasks.append(
+                lambda: execute_tool(
+                    "grype",
+                    lambda output_path: run_grype(target_input, output_path),
+                    lambda raw_payload, output_path, **_: normalize_grype(
+                        scan_id, target, raw_payload, output_path, base_path=target_input
+                    ),
+                    cache_context={"mode": "grype", **_git_ctx},
+                )
             )
         elif tool == "zap":
             _zap_cfg = settings["scanners"].get("owasp_zap", {})
-            execute_tool(
-                "zap",
-                lambda output_path, _cfg=_zap_cfg: run_owasp_zap(
-                    target_input,
-                    output_path,
-                    zap_api_url=_cfg.get("api_url", "http://localhost:8090"),
-                    zap_api_key=_cfg.get("api_key", ""),
-                    spider_timeout=int(_cfg.get("spider_timeout", 120)),
-                    scan_timeout=int(_cfg.get("scan_timeout", 600)),
-                ),
-                lambda raw_payload, output_path, **_: normalize_zap(
-                    scan_id, target, raw_payload, output_path, base_path=target_input
-                ),
-                cache_context={"mode": "zap", **_git_ctx},
+            scanner_tasks.append(
+                lambda _cfg=_zap_cfg: execute_tool(
+                    "zap",
+                    lambda output_path, __cfg=_cfg: run_owasp_zap(
+                        target_input,
+                        output_path,
+                        zap_api_url=__cfg.get("api_url", "http://localhost:8090"),
+                        zap_api_key=__cfg.get("api_key", ""),
+                        spider_timeout=int(__cfg.get("spider_timeout", 120)),
+                        scan_timeout=int(__cfg.get("scan_timeout", 600)),
+                    ),
+                    lambda raw_payload, output_path, **_: normalize_zap(
+                        scan_id, target, raw_payload, output_path, base_path=target_input
+                    ),
+                    cache_context={"mode": "zap", **_git_ctx},
+                )
             )
         elif tool == "syft":
-            execute_syft()
+            scanner_tasks.append(execute_syft)
+
+    # Execute all scanners in parallel (bounded by max_concurrent_scanners).
+    max_scanner_workers = max(1, int(settings.get("execution", {}).get("max_concurrent_scanners", 4)))
+    if len(scanner_tasks) <= 1:
+        # Single scanner — no need for thread pool overhead
+        for task in scanner_tasks:
+            task()
+    else:
+        LOGGER.info(
+            "Running %d scanners in parallel (max_workers=%d) for target=%s",
+            len(scanner_tasks),
+            max_scanner_workers,
+            target.name,
+        )
+        with ThreadPoolExecutor(max_workers=max_scanner_workers, thread_name_prefix="scanner") as executor:
+            futures = [executor.submit(task) for task in scanner_tasks]
+            for future in as_completed(futures):
+                # Exceptions are already handled inside execute_tool/execute_syft,
+                # so future.result() should not raise. Belt-and-suspenders check:
+                try:
+                    future.result()
+                except Exception:  # noqa: BLE001
+                    LOGGER.exception("Unexpected scanner task failure for target=%s", target.name)
 
     if not findings and status == "COMPLETED_CLEAN":
         status = "COMPLETED_CLEAN"
@@ -534,6 +620,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
         raw_report_dir=str(raw_dir),
         normalized_report_path=normalized_report_path,
         error_message="; ".join(error_messages) if error_messages else None,
+        git_sha=git_sha,
     )
 
     if db_path:
@@ -661,6 +748,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--scan-id",
         help="Pre-assigned scan UUID (used by the dashboard to correlate the RUNNING placeholder row)",
     )
+    parser.add_argument(
+        "--incremental",
+        action="store_true",
+        help="Skip targets whose git SHA has not changed since the last successful scan",
+    )
     return parser
 
 
@@ -670,6 +762,8 @@ def main() -> int:
     args = parser.parse_args()
     setup_logging(args.log_level)
     settings = resolve_settings(args.settings)
+    if getattr(args, "incremental", False):
+        settings["execution"]["incremental"] = True
     retention_result = apply_retention(settings, dry_run=args.retention_dry_run)
     LOGGER.info(
         "Retention cleanup: reports=%s workspaces=%s cache=%s dry_run=%s",

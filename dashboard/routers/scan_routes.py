@@ -1,9 +1,10 @@
-"""Scan-related routes: trigger, list, compare, paginate, detail."""
+"""Scan-related routes: trigger, list, compare, paginate, detail, scanner health."""
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,11 @@ from pagination import ScansPaginator
 from scan_runner import run_scan
 
 from routers._shared import DB_PATH, scan_queue_submit
+
+# Ensure orchestrator package is importable
+_project_root = str(Path(__file__).resolve().parent.parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 router = APIRouter(prefix="/api", tags=["scans"])
 
@@ -258,3 +264,16 @@ def api_get_scan(
         else:
             scan_dict["tool_results"] = []
     return scan_dict
+
+
+@router.get(
+    "/scanners/health",
+    dependencies=[Depends(require_permission(Permission.SCAN_WRITE))],
+)
+def scanners_health(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Return availability and version info for all known scanner binaries."""
+    from orchestrator.compatibility import scanner_health_check
+
+    results = scanner_health_check()
+    available = sum(1 for r in results if r["available"])
+    return {"scanners": results, "available_count": available, "total_count": len(results)}

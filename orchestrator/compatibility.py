@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 import importlib
+import subprocess
 from typing import Any
 
 from orchestrator.logging_config import get_logger
@@ -125,3 +126,68 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
         skipped=len(skipped),
     )
     return runnable, skipped
+
+
+# Version-command map for each scanner binary.
+_VERSION_COMMANDS: dict[str, list[str]] = {
+    "semgrep": ["semgrep", "--version"],
+    "trivy": ["trivy", "--version"],
+    "gitleaks": ["gitleaks", "version"],
+    "checkov": ["checkov", "--version"],
+    "bandit": ["bandit", "--version"],
+    "nuclei": ["nuclei", "-version"],
+    "grype": ["grype", "version"],
+    "syft": ["syft", "version"],
+}
+
+
+def scanner_health_check() -> list[dict[str, Any]]:
+    """Run a health check on all known scanner binaries.
+
+    Returns a list of dicts, one per scanner, with keys:
+    - tool: scanner name
+    - available: True if the binary/module is present
+    - version: version string (or None)
+    - error: error message if unavailable
+    """
+    results: list[dict[str, Any]] = []
+
+    for tool, binary in REQUIRED_BINARIES.items():
+        entry: dict[str, Any] = {"tool": tool, "available": False, "version": None, "error": None}
+
+        if not command_exists(binary):
+            entry["error"] = f"Binary '{binary}' not found in PATH"
+            results.append(entry)
+            continue
+
+        entry["available"] = True
+
+        # Try to get version
+        version_cmd = _VERSION_COMMANDS.get(tool)
+        if version_cmd:
+            try:
+                proc = subprocess.run(  # noqa: S603
+                    version_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                version_str = (proc.stdout.strip() or proc.stderr.strip()).split("\n")[0]
+                entry["version"] = version_str if version_str else None
+            except Exception as exc:  # noqa: BLE001
+                entry["version"] = None
+                LOGGER.debug("health_check.version_failed", tool=tool, error=str(exc))
+
+        results.append(entry)
+
+    # ZAP is a Python package, not a binary
+    zap_entry: dict[str, Any] = {"tool": "owasp_zap", "available": False, "version": None, "error": None}
+    try:
+        mod = importlib.import_module("zapv2")
+        zap_entry["available"] = True
+        zap_entry["version"] = getattr(mod, "__version__", None)
+    except ImportError:
+        zap_entry["error"] = "Python package 'python-owasp-zap-v2.4' is not installed"
+    results.append(zap_entry)
+
+    return results

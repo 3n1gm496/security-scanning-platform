@@ -216,4 +216,12 @@ CREATE INDEX IF NOT EXISTS idx_findings_scan_fingerprint
     ON findings(scan_id, fingerprint);
 """,
     ),
+    (
+        5,
+        "add git_sha column to scans for incremental scanning",
+        """
+ALTER TABLE scans ADD COLUMN git_sha TEXT;
+CREATE INDEX IF NOT EXISTS idx_scans_target_name ON scans(target_name);
+""",
+    ),
 ]

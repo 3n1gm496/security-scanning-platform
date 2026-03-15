@@ -73,8 +73,8 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
                 id, created_at, finished_at, target_type, target_name, target_value,
                 status, policy_status, findings_count, critical_count, high_count,
                 medium_count, low_count, info_count, unknown_count, raw_report_dir,
-                normalized_report_path, artifacts_json, tools_json, error_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                normalized_report_path, artifacts_json, tools_json, error_message, git_sha
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 finished_at             = excluded.finished_at,
                 status                  = excluded.status,
@@ -90,7 +90,8 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
                 normalized_report_path  = excluded.normalized_report_path,
                 artifacts_json          = excluded.artifacts_json,
                 tools_json              = excluded.tools_json,
-                error_message           = excluded.error_message
+                error_message           = excluded.error_message,
+                git_sha                 = excluded.git_sha
             """,
             (
                 result.scan_id,
@@ -113,6 +114,7 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
                 json.dumps(result.artifacts, ensure_ascii=False),
                 json.dumps([tool.to_dict() for tool in result.tools], ensure_ascii=False),
                 result.error_message,
+                result.git_sha,
             ),
         )
         conn.execute("DELETE FROM findings WHERE scan_id = ?", (result.scan_id,))
@@ -156,3 +158,20 @@ def write_json_file(path: str | Path, payload: dict | list) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=False)
+
+
+def get_last_scan_sha(db_path: str, target_name: str) -> str | None:
+    """Return the git_sha of the most recent successful scan for a target, or None."""
+    with get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT git_sha FROM scans
+            WHERE target_name = ? AND git_sha IS NOT NULL
+              AND status IN ('COMPLETED_CLEAN', 'COMPLETED_WITH_FINDINGS')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (target_name,),
+        ).fetchone()
+    if row:
+        return row["git_sha"] or row[0]
+    return None

@@ -118,6 +118,7 @@ class ScanResult:
     raw_report_dir: str
     normalized_report_path: str
     error_message: str | None = None
+    git_sha: str | None = None
 
     def severity_counts(self) -> dict[str, int]:
         counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0, "UNKNOWN": 0}
@@ -145,4 +146,5 @@ class ScanResult:
             "normalized_report_path": self.normalized_report_path,
             "findings": [finding.to_dict() for finding in self.findings],
             "error_message": self.error_message,
+            "git_sha": self.git_sha,
         }

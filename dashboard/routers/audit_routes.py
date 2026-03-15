@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from auth import require_auth, require_permission, AuthContext
 from db import get_connection
 from rbac import Permission, purge_audit_log, log_audit
+from export import _sanitize_csv_row
 
 from routers._shared import DB_PATH
 
@@ -79,7 +80,7 @@ def export_audit_log(
         w = csv.DictWriter(buf, fieldnames=fieldnames)
         w.writeheader()
         for row in rows:
-            w.writerow(row)
+            w.writerow(_sanitize_csv_row(row))
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",

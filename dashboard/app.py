@@ -254,13 +254,55 @@ app.include_router(notification_router)
 app.include_router(audit_router)
 
 
+# ---------------------------------------------------------------------------
+# Trusted proxy configuration for rate-limiting
+# ---------------------------------------------------------------------------
+# When the dashboard is deployed behind a reverse proxy (nginx, traefik, etc.),
+# set TRUSTED_PROXY_CIDR to the proxy's IP or CIDR block so that the real
+# client IP from the X-Forwarded-For header is used for rate limiting.
+# Leave empty (default) to use the direct connecting IP and ignore
+# X-Forwarded-For (safe for direct Internet exposure).
+#
+# Example:  TRUSTED_PROXY_CIDR=172.16.0.0/12  (internal Docker network)
+#
+# Production recommendation: configure Uvicorn with --forwarded-allow-ips
+# rather than relying on this env var — see the README for details.
+_TRUSTED_PROXY_CIDR_STR: str = os.getenv("TRUSTED_PROXY_CIDR", "").strip()
+_TRUSTED_PROXY_NET = None
+if _TRUSTED_PROXY_CIDR_STR:
+    import ipaddress as _ipaddress
+    try:
+        _TRUSTED_PROXY_NET = _ipaddress.ip_network(_TRUSTED_PROXY_CIDR_STR, strict=False)
+    except ValueError:
+        LOGGER.warning(
+            "security.invalid_trusted_proxy_cidr",
+            cidr=_TRUSTED_PROXY_CIDR_STR,
+            detail="TRUSTED_PROXY_CIDR is not a valid IP network; X-Forwarded-For will be ignored.",
+        )
+
+
 def _client_key(request: Request) -> str:
-    """Return the client IP, preferring X-Forwarded-For when behind a reverse proxy."""
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    if request.client and request.client.host:
-        return request.client.host
+    """Return the client IP to use for rate limiting.
+
+    X-Forwarded-For is only trusted when the direct connecting IP falls within
+    the TRUSTED_PROXY_CIDR range (configured via env var).  When no trusted
+    proxy is configured, the direct connecting IP is always used, preventing
+    trivial rate-limit bypass via header spoofing.
+    """
+    direct_ip = request.client.host if request.client else None
+
+    if _TRUSTED_PROXY_NET and direct_ip:
+        try:
+            import ipaddress as _ipaddress
+            if _ipaddress.ip_address(direct_ip) in _TRUSTED_PROXY_NET:
+                forwarded_for = request.headers.get("x-forwarded-for")
+                if forwarded_for:
+                    return forwarded_for.split(",")[0].strip()
+        except ValueError:
+            pass  # Malformed IP — fall through to direct_ip
+
+    if direct_ip:
+        return direct_ip
     return "unknown"
 
 

@@ -2,361 +2,361 @@
 
 **Repository:** `3n1gm496/security-scanning-platform`
 **Reviewer:** Senior Security Engineer / Staff Architect (automated review via Claude)
-**Review Date:** 2026-03-14
-**Branch:** `claude/complete-claude-md-tasks-sV7d1`
-**Commit:** `f91f284`
-**Previous Review:** 2026-03-11 on branch `claude/security-platform-review-MqdAz`
+**Review Date:** 2026-03-15
+**Branch:** `copilot/unknown-repository-path`
+**Previous Reviews:** 2026-03-14 (`claude/complete-claude-md-tasks-sV7d1`), 2026-03-11 (`claude/security-platform-review-MqdAz`)
 
 ---
 
 ## 1. Executive Summary
 
-The platform has undergone **significant hardening** since the March 11 review. All six
-critical/high-severity findings from the previous review (#1–#6) have been properly addressed:
-WAL mode enabled, dashboard runs non-root, OPERATOR privilege escalation fixed, healthchecks
-added, git clone depth configurable, and SSRF protection implemented with DNS-rebinding
-mitigation.
+The platform has reached a **mature security baseline**. All ten original findings from the
+March 11 review and all six "new findings" from the March 14 review have been fully or
+substantially resolved. In particular:
 
-Prometheus metrics are now integrated (`prometheus_client` in requirements, `/metrics`
-endpoint serving OpenMetrics format). The migration system is in place with a
-`schema_migrations` table and idempotent `run_migrations()`. The orchestrator and dashboard
-are production-viable for single-server deployments.
+- CSV injection, HTML/XSS injection, and PDF markup injection in exports are **all fixed**
+  (`html_escape`, `xml_escape`, `_sanitize_csv_value` now applied throughout `export.py`).
+- Schema duplication is **fully resolved** — both orchestrator and dashboard now import from
+  `common/schema.py` as the single source of truth.
+- CSRF protection is **implemented** via `CSRFMiddleware` with API-key exemption.
+- `app.py` god-class is **resolved** — all routes decomposed into `dashboard/routers/`.
 
-**However, new findings emerged in this review:**
+**Three new, concrete issues remain as of this review:**
 
-- **Export injection vulnerabilities** (CSV injection, HTML/XSS injection, PDF markup injection)
-  are the most impactful new findings. These affect all export formats and have no sanitization.
-- **Schema duplication persists** with new divergence (DEFAULT value mismatches between
-  orchestrator and dashboard schemas).
-- **PostgreSQL `INSERT OR REPLACE` adaptation** remains unimplemented — PostgreSQL deployments
-  will crash on notification preference writes.
-- **No CSRF token protection** on form-based mutation endpoints (mitigated by SameSite=Lax).
+1. **Rate-limiting bypass via X-Forwarded-For spoofing** — any unauthenticated client can
+   bypass brute-force and API rate limits by forging the `X-Forwarded-For` header.
+2. **`INSERT OR IGNORE` syntax breaks PostgreSQL** — `scan_runner.py:36` uses SQLite-only
+   syntax that will raise a syntax error on any PostgreSQL deployment, breaking all scan
+   triggering.
+3. **Audit log CSV export has no injection sanitization** — `audit_routes.py` exports raw
+   values (including attacker-influenced IP addresses and key names) without formula escaping.
 
-The platform is **safe for internal use behind a firewall** with the current fixes. It is
-**not safe for Internet exposure** until export injection vulnerabilities are resolved, as
-any authenticated user can trigger XSS via HTML export download.
+The platform is **safe for internal use** behind a firewall or VPN. **Internet exposure
+remains inadvisable** until the X-Forwarded-For bypass is fixed (it allows brute-forcing
+the login from any IP). PostgreSQL deployments are non-functional for triggered scans until
+the `INSERT OR IGNORE` issue is resolved.
 
 ---
 
-## 2. Validation of Existing Review
+## 2. Architecture Summary
 
-### #1 — SQLite WAL mode not enabled
+- **Orchestrator** (`orchestrator/`): Python CLI run as subprocess by the dashboard. Clones
+  repos, runs scanners (semgrep, trivy, gitleaks, checkov, syft, bandit, nuclei, grype, ZAP),
+  normalizes results, stores findings to SQLite/PostgreSQL.
+- **Dashboard** (`dashboard/`): FastAPI + Starlette app. Session + API-key auth, RBAC
+  (admin/operator/viewer), SQLite or PostgreSQL backend, Prometheus metrics, CSRF middleware,
+  webhooks, exports, analytics, email notifications.
+- **Common** (`common/`): Single-source schema (`common/schema.py`).
+- **Storage**: SQLite (default, WAL mode enabled), PostgreSQL (optional via `DATABASE_URL`).
+- **Docker**: Non-root containers (`dashuser`, `scanuser`), health checks on all services,
+  separated `frontend`/`backend` networks.
+
+---
+
+## 3. Validation of Existing Review
+
+### From March 11 Review (Original Top-10)
+
+#### #1 — SQLite WAL mode not enabled
 - **Status:** `FULLY FIXED`
-- **Evidence:** `dashboard/db_adapter.py:63-64` and `orchestrator/db_adapter.py:42-43` both
-  execute `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL` in `_sqlite_connect()`.
-  Tests exist in `test_db_adapter.py`.
-- **What changed:** Two-line fix in both adapters, exactly as recommended.
+- **Evidence:** `dashboard/db_adapter.py` and `orchestrator/db_adapter.py` both execute
+  `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL` in `_sqlite_connect()`.
 
-### #2 — Dashboard container runs as root
+#### #2 — Dashboard container runs as root
 - **Status:** `FULLY FIXED`
-- **Evidence:** `dashboard/Dockerfile:9-10` creates `dashuser` (UID 1000), line 77 transfers
-  ownership, line 80 sets `USER dashuser`. Matches orchestrator's `scanuser` pattern.
-- **What changed:** Non-root user added with proper directory ownership.
+- **Evidence:** `dashboard/Dockerfile` creates `dashuser` (UID 1000), sets `USER dashuser`.
+  Orchestrator similarly uses `scanuser`.
 
-### #3 — OPERATOR role has API_KEY_MANAGE permission
+#### #3 — OPERATOR role has API_KEY_MANAGE permission
 - **Status:** `FULLY FIXED`
-- **Evidence:** `dashboard/rbac.py:51-58` — `API_KEY_MANAGE` removed from OPERATOR role with
-  explicit comment explaining the privilege escalation risk. `dashboard/app.py:520-529` adds
-  a role-ceiling check (`_ROLE_RANK` dictionary) preventing any user from creating keys with
-  roles above their own.
-- **What changed:** Permission removed + role-ceiling enforcement added. Double protection.
+- **Evidence:** `dashboard/rbac.py:52-58` — `API_KEY_MANAGE` removed from OPERATOR role with
+  explicit comment. `dashboard/routers/api_keys.py:33-39` enforces a role-ceiling check
+  (`_ROLE_RANK`) preventing any principal from creating keys above their own role.
 
-### #4 — Docker Compose: no healthcheck on dashboard
+#### #4 — No healthcheck on dashboard
 - **Status:** `FULLY FIXED`
-- **Evidence:** `docker-compose.yml:118-123` — healthcheck configured with `curl -f
-  http://localhost:8080/api/health`, 30s interval, 10s timeout, 3 retries, 40s start period.
-  All four services (postgres, zap, orchestrator, dashboard) now have healthchecks.
-- **What changed:** Healthcheck added exactly as recommended.
+- **Evidence:** All four services (postgres, zap, orchestrator, dashboard) have `healthcheck`
+  blocks in `docker-compose.yml`. Dashboard: `curl -f http://localhost:8080/api/health`,
+  30 s interval.
 
-### #5 — Shallow git clone defeats gitleaks history scanning
+#### #5 — Shallow git clone defeats gitleaks
 - **Status:** `FULLY FIXED`
-- **Evidence:** `orchestrator/scanners.py:79` — `clone_repo()` accepts `depth: int = 0`
-  (full clone by default). Lines 112-113: `--depth` flag only added when `depth > 0`.
-  `orchestrator/main.py:108-110` reads `ORCH_GIT_CLONE_DEPTH` env var, defaults to `0`.
-  Tests in `test_scanners.py:188-237` verify both full and shallow clone paths.
-- **What changed:** Configurable depth with secure default (full clone).
+- **Evidence:** `orchestrator/scanners.py` — `clone_repo()` defaults to `depth=0` (full
+  clone). Configurable via `ORCH_GIT_CLONE_DEPTH` with secure default.
 
-### #6 — Webhook SSRF — no URL validation
+#### #6 — Webhook SSRF
 - **Status:** `FULLY FIXED`
-- **Evidence:** `dashboard/webhooks.py:32-93` — comprehensive `validate_webhook_url()` with:
-  - Blocked networks: RFC 1918, loopback, link-local, AWS IMDS, RFC 6598, IPv6 ULA/link-local
-  - DNS resolution check with rebinding mitigation
-  - Scheme restriction to http/https
-  - Called in `create_webhook()` (line 154) before storing
-- **What changed:** Full SSRF validation with DNS-rebinding mitigation, exceeding original
-  recommendation.
+- **Evidence:** `dashboard/webhooks.py:35-93` — `validate_webhook_url()` blocks RFC 1918,
+  loopback, link-local, IMDS ranges, with IPv4-mapped IPv6 check and DNS rebinding
+  mitigation. Validated at both creation and delivery time.
 
-### #7 — Schema duplication + no migration system
+#### #7 — Schema duplication + no migration system
+- **Status:** `FULLY FIXED`
+- **Evidence:** Both `orchestrator/storage.py:13` and `dashboard/db.py:15` import
+  `SCHEMA_SQL, MIGRATIONS` from `common/schema.py`. Migration runner applies versioned
+  migrations idempotently in both components.
+
+#### #8 — Cache key ignores git SHA
+- **Status:** `FULLY FIXED`
+- **Evidence:** `orchestrator/scanners.py` — `get_git_commit_sha()` resolves HEAD after
+  clone. SHA injected into cache context, preventing stale-cache hits on new commits.
+
+#### #9 — No Prometheus metrics
+- **Status:** `FULLY FIXED`
+- **Evidence:** `prometheus-client` in requirements. `dashboard/monitoring.py` exposes
+  Counters/Gauges/Histograms. `/metrics` endpoint requires authentication.
+
+#### #10 — `app.py` god-class
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/routers/` — eight separate APIRouter modules (`auth_routes`,
+  `api_keys`, `webhook_routes`, `export_routes`, `analytics_routes`, `scan_routes`,
+  `finding_routes`, `notification_routes`, `audit_routes`). `app.py` is now a thin
+  orchestration layer.
+
+---
+
+### From March 14 Review (New Findings)
+
+#### CSV Injection in Export
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/export.py:19-32` — `_sanitize_csv_value()` prefixes formula
+  characters with `'`. Applied to all rows in `export_to_csv()` and the streaming CSV
+  path in `export_routes.py`.
+
+#### HTML/XSS Injection in HTML Export
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/export.py:9` imports `html_escape`. All interpolated finding
+  fields (`title`, `tool`, `target`, `category`, `cve_id`, `cwe_id`, `cvss_score`,
+  `description`) are wrapped with `html_escape()` at lines 330-336.
+
+#### PDF Markup Injection
+- **Status:** `FULLY FIXED`
+- **Evidence:** `dashboard/export.py:12` imports `xml_escape`. Applied to all ReportLab
+  `Paragraph` interpolations: `title`, `tool`, `category`, `file`, `description`
+  (lines 567-585).
+
+#### Schema Divergence Between Orchestrator and Dashboard
+- **Status:** `FULLY FIXED`
+- **Evidence:** `common/schema.py` is the single source of truth. Both components import
+  `SCHEMA_SQL` and `MIGRATIONS` from it. No independent schema definitions remain.
+
+#### PostgreSQL INSERT OR REPLACE Not Adapted
 - **Status:** `PARTIALLY FIXED`
 - **Evidence:**
-  - Migration system added: both `orchestrator/storage.py:70-108` and `dashboard/db.py:364-397`
-    have `schema_migrations` table and `run_migrations()` / `_run_migrations()` with baseline
-    migration. Tests exist in `orchestrator/tests/test_phase2.py:121-171`.
-  - **Schema still duplicated:** `orchestrator/storage.py:18-75` and `dashboard/db.py:314-369`
-    define SCHEMA_SQL independently.
-  - **New divergence introduced:** Dashboard adds `DEFAULT ''` / `DEFAULT '{}'` / `DEFAULT '[]'`
-    on `raw_report_dir`, `normalized_report_path`, `artifacts_json`, `tools_json` — orchestrator
-    does not. This causes schema drift.
-  - **`INSERT OR REPLACE` PostgreSQL adaptation still missing:** Both `adapt_schema()` functions
-    only handle `AUTOINCREMENT → SERIAL`. `dashboard/notifications.py:292` uses
-    `INSERT OR REPLACE INTO notification_preferences` which will crash on PostgreSQL.
-- **What changed:** Migration infrastructure added (good), but root cause (duplication) remains.
+  - `dashboard/notifications.py:302-309` — fixed: now uses portable
+    `INSERT INTO ... ON CONFLICT(user_email) DO UPDATE SET ...` syntax.
+  - `dashboard/scan_runner.py:36` — **NOT FIXED**: still uses `INSERT OR IGNORE INTO scans`
+    which is SQLite-specific and will fail on PostgreSQL (see new finding [N2]).
 
-### #8 — Cache key ignores git commit hash
+#### No CSRF Token Protection
 - **Status:** `FULLY FIXED`
-- **Evidence:** `orchestrator/scanners.py:67-76` — `get_git_commit_sha()` resolves HEAD SHA
-  after clone. `orchestrator/main.py:257-259` injects `git_sha` into cache context via
-  `_git_ctx`. All tool cache calls include `**_git_ctx` spread. Tests in
-  `test_phase2.py:94-113` and `test_main_coverage.py:162-173`.
-- **What changed:** Git SHA included in cache key, preventing stale results.
+- **Evidence:** `dashboard/csrf.py` — `CSRFMiddleware` validates `X-CSRF-Token` header on
+  all mutating requests. API-key-authenticated requests are exempt (verified via
+  `verify_api_key()`). Exempt paths include `/login`, health/readiness probes, SSE endpoint.
 
-### #9 — No Prometheus metrics
+#### app.py Route Decomposition
 - **Status:** `FULLY FIXED`
-- **Evidence:** `prometheus-client==0.24.1` in `dashboard/requirements.txt:69`.
-  `dashboard/monitoring.py:11` imports Counter, Gauge, Histogram from prometheus_client.
-  `dashboard/metrics.py:12` also uses prometheus_client. `dashboard/app.py:1539` exposes
-  `/metrics` endpoint. Rate-limited paths exclude `/metrics` (line 216).
-- **What changed:** Full Prometheus integration with counters, gauges, histograms.
-
-### #10 — `app.py` god-class (62 KB+)
-- **Status:** `PARTIALLY FIXED`
-- **Evidence:** `dashboard/app.py` is now 1551 lines (down from original). Significant
-  extraction has occurred: `rbac.py`, `webhooks.py`, `finding_management.py`, `pagination.py`,
-  `remediation.py`, `analytics.py`, `monitoring.py`, `metrics.py`, `export.py`, `auth.py`,
-  `db.py`, `db_adapter.py`, `notifications.py`. However, all route definitions still live in
-  `app.py` — no `APIRouter` decomposition yet.
-- **What changed:** Business logic extracted to modules; route registration not yet decomposed.
+- **Evidence:** All routes live in `dashboard/routers/`. `app.py` registers nine routers
+  and defines only page routes and simple top-level endpoints.
 
 ---
 
-## 3. New Findings
+## 4. New Findings
 
-### CSV Injection in Export
+### [N1] Rate-Limiting Bypass via X-Forwarded-For Spoofing
+
 - **Severity:** `HIGH`
 - **Category:** `SECURITY`
 - **Confidence:** `HIGH`
-- **Affected files:** `dashboard/export.py:29-49`, `dashboard/app.py:695-722`
-- **Why it matters:** Finding values (title, description, message, file path) are written
-  directly to CSV via `csv.DictWriter.writerow()` without sanitization. If a scanner produces
-  a finding whose message starts with `=`, `+`, `-`, `@`, `\t`, or `\r`, opening the exported
-  CSV in Excel/LibreOffice will execute the formula. An attacker who controls a scanned
-  repository could craft filenames or code comments that produce these findings, leading to
-  code execution on the security analyst's workstation.
-- **Proof / reasoning:** `export.py:47` — `writer.writerow(finding)` passes raw dict values.
-  No `html.escape`, no formula prefix stripping. Same pattern in `app.py:695-722` (streaming
-  CSV). Example payload: a file named `=cmd|'/C calc'!A1` in a scanned repo would appear
-  as a finding with that path, executing `calc.exe` when the CSV is opened.
-- **Minimal fix:** Sanitize all string values before CSV write:
+- **Affected files:** `dashboard/app.py:257-263`
+- **Why it matters:** The login brute-force limit (10 attempts per 60 s) and the API rate
+  limit (180 req/60 s) are keyed on the client IP returned by `_client_key()`. This function
+  unconditionally trusts the `X-Forwarded-For` header without any trusted-proxy allowlist.
+  Any HTTP client can forge `X-Forwarded-For: 192.0.2.1` to obtain a fresh rate-limit
+  bucket, bypassing both the login brute-force guard and the API throttle entirely.
+- **Proof / reasoning:**
   ```python
-  def _sanitize_csv_value(val):
-      if isinstance(val, str) and val and val[0] in ('=', '+', '-', '@', '\t', '\r'):
-          return "'" + val
-      return val
+  # app.py:257-263
+  def _client_key(request: Request) -> str:
+      forwarded_for = request.headers.get("x-forwarded-for")
+      if forwarded_for:
+          return forwarded_for.split(",")[0].strip()  # trusts any header unconditionally
+      ...
   ```
-  Apply to every value in every row before `writerow()`.
-- **Recommended regression test:** Test that `export_to_csv([{"message": "=1+1"}])` produces
-  a CSV where the cell value starts with `'=` (escaped) rather than `=`.
+  An attacker exhausts 10 login attempts under IP A, then retries with
+  `X-Forwarded-For: B` to get 10 more — indefinitely. The brute-force protection is
+  effectively bypassed against any remote adversary.
+- **Minimal fix:** Only trust `X-Forwarded-For` when the request arrives from a known
+  reverse proxy IP. Recommended approach: use Uvicorn's `--forwarded-allow-ips` flag in
+  production, and document this requirement in `.env.example`. Alternatively, add a
+  `TRUSTED_PROXY_CIDR` env var and validate against it in `_client_key()`.
+- **Recommended regression test:** Test that sending `X-Forwarded-For: 10.0.0.99` from an
+  untrusted connecting IP does NOT produce a different rate-limit bucket than the real IP.
 
-### HTML/XSS Injection in HTML Export
+---
+
+### [N2] `INSERT OR IGNORE` Syntax Breaks All PostgreSQL Scan Triggers
+
 - **Severity:** `HIGH`
-- **Category:** `SECURITY`
-- **Confidence:** `HIGH`
-- **Affected files:** `dashboard/export.py:266-340`
-- **Why it matters:** Finding fields (`title`, `tool`, `target`, `description`, `category`,
-  `cve_id`, `cwe_id`) are interpolated directly into HTML via f-strings without any escaping.
-  `html.escape` is not imported or used anywhere in `export.py`. An attacker controlling a
-  scanned repo can craft finding messages containing `<script>` tags or event handlers. When
-  a security analyst downloads and opens the HTML report, JavaScript executes in their browser.
-- **Proof / reasoning:** `export.py:329` — `<div class="finding-title">{title}</div>` where
-  `title = finding.get("message", ...)`. A finding with message
-  `<img src=x onerror=alert(document.cookie)>` would execute JavaScript. No CSP headers on
-  the HTML export either.
-- **Minimal fix:** Import `html.escape` and wrap all interpolated values:
-  ```python
-  from html import escape
-  title = escape(finding.get("message", finding.get("description", "Unknown issue")))
-  tool = escape(finding.get("tool", "unknown"))
-  # ... etc for all fields
-  ```
-- **Recommended regression test:** Test that `export_to_html([{"message": "<script>alert(1)</script>"}])`
-  contains `&lt;script&gt;` in the output, not literal `<script>`.
-
-### PDF Markup Injection
-- **Severity:** `MEDIUM`
-- **Category:** `SECURITY`
-- **Confidence:** `MEDIUM`
-- **Affected files:** `dashboard/export.py:548-554`
-- **Why it matters:** ReportLab's `Paragraph` class uses XML-like markup. Unescaped `<` and `>`
-  characters in finding fields (title, file, tool) can break PDF generation or inject unexpected
-  formatting. While this is not directly exploitable for code execution, it causes DoS
-  (report generation crashes) and potential content manipulation.
-- **Proof / reasoning:** `export.py:548` — `f"<b>{idx}. {title}</b><br/>"` where `title`
-  may contain `</b>` or `<para>` tags that ReportLab will interpret.
-- **Minimal fix:** Use `xml.sax.saxutils.escape()` on all interpolated values in PDF paragraphs.
-- **Recommended regression test:** Test that `export_to_pdf([{"message": "</b><i>injected</i>"}])`
-  does not crash and produces valid PDF output.
-
-### Schema Divergence Between Orchestrator and Dashboard
-- **Severity:** `MEDIUM`
-- **Category:** `CORRECTNESS`
-- **Confidence:** `HIGH`
-- **Affected files:** `orchestrator/storage.py:18-75`, `dashboard/db.py:314-369`
-- **Why it matters:** The dashboard schema adds `DEFAULT ''` and `DEFAULT '{}'` on four columns
-  (`raw_report_dir`, `normalized_report_path`, `artifacts_json`, `tools_json`) that the
-  orchestrator schema defines as bare `NOT NULL`. If the dashboard initializes the DB first and
-  the orchestrator inserts data without these fields, behavior differs. More critically, this
-  divergence will grow over time without a single source of truth.
-- **Proof / reasoning:** Direct comparison of SCHEMA_SQL strings in both files shows four
-  DEFAULT value mismatches. The schemas are maintained independently with no shared module.
-- **Minimal fix:** Extract schema to a shared `common/schema.py` or have one component import
-  from the other. Synchronize DEFAULT values.
-- **Recommended regression test:** Test that both components produce byte-identical schemas on
-  a fresh database (compare `sqlite_master` output).
-
-### PostgreSQL INSERT OR REPLACE Not Adapted
-- **Severity:** `MEDIUM`
 - **Category:** `BUG`
 - **Confidence:** `HIGH`
-- **Affected files:** `dashboard/db_adapter.py:247-265`, `orchestrator/db_adapter.py:187-198`,
-  `dashboard/notifications.py:292`
-- **Why it matters:** Both `adapt_schema()` functions only transform `AUTOINCREMENT → SERIAL`.
-  The docstring in `dashboard/db_adapter.py:253` claims to handle `INSERT OR REPLACE → INSERT
-  ... ON CONFLICT DO UPDATE` but the implementation does not. `notifications.py:292` uses
-  `INSERT OR REPLACE INTO notification_preferences` which will crash on PostgreSQL with a
-  syntax error.
-- **Proof / reasoning:** Reading `adapt_schema()` in both files — only one `re.sub` call for
-  AUTOINCREMENT exists. No transformation for `INSERT OR REPLACE`. PostgreSQL does not support
-  this SQLite-specific syntax.
-- **Minimal fix:** Add regex transformation in `adapt_schema()`, or rewrite the notification
-  query to use standard `INSERT ... ON CONFLICT DO UPDATE SET ...` syntax (which works on both
-  SQLite 3.24+ and PostgreSQL).
-- **Recommended regression test:** Test `adapt_schema("INSERT OR REPLACE INTO foo ...")` returns
-  valid PostgreSQL syntax.
+- **Affected files:** `dashboard/scan_runner.py:36`
+- **Why it matters:** When `DATABASE_URL` is set (PostgreSQL mode), every call to
+  `trigger_scan` raises a `psycopg2.errors.SyntaxError` because PostgreSQL does not support
+  `INSERT OR IGNORE INTO`. The error is silently swallowed by the `except Exception` block in
+  `insert_running_scan()`, so the HTTP response still returns 200 — but no RUNNING scan row
+  is created, and subsequent scan result storage may fail or produce orphaned findings.
+- **Proof / reasoning:** `scan_runner.py:36` executes `INSERT OR IGNORE INTO scans (...)`.
+  The `_ConnectionWrapper.execute()` path calls `_adapt_sql()` which only converts `?` to
+  `%s`; it does **not** transform SQLite keyword syntax. PostgreSQL receives
+  `INSERT OR IGNORE INTO scans ...` verbatim and rejects it with
+  `ERROR: syntax error at or near "OR"`.
+- **Minimal fix:** Replace the SQLite-only syntax with the portable upsert idiom:
+  ```sql
+  INSERT INTO scans (...) VALUES (...)
+  ON CONFLICT(id) DO NOTHING
+  ```
+  `ON CONFLICT(id) DO NOTHING` is supported by both SQLite 3.24+ and PostgreSQL 9.5+.
+- **Recommended regression test:** Test `insert_running_scan()` with `is_postgres()` returning
+  True (or against a real PostgreSQL backend) and verify it completes without raising.
 
-### No CSRF Token Protection
+---
+
+### [N3] Audit Log CSV Export Missing Injection Sanitization
+
+- **Severity:** `MEDIUM`
+- **Category:** `SECURITY`
+- **Confidence:** `HIGH`
+- **Affected files:** `dashboard/routers/audit_routes.py:70-83`
+- **Why it matters:** The audit log contains attacker-influenced fields: `ip_address` (taken
+  from `X-Forwarded-For` without validation), `api_key_prefix` (first 12 chars of a
+  submitted key), and `resource` (includes caller-controlled scan targets and key names).
+  When an admin exports the audit log as CSV and opens it in Excel or LibreOffice Calc, any
+  cell beginning with `=`, `+`, `-`, or `@` is interpreted as a formula, potentially
+  executing commands on the analyst's workstation (DDE injection / formula injection).
+- **Proof / reasoning:** An attacker sends login requests with
+  `X-Forwarded-For: =cmd|calc!A1`. The failed-login audit entry stores this as `ip_address`.
+  `audit_routes.py:78-82` writes rows with `w.writerow(row)` — no `_sanitize_csv_row` call.
+  The exports module already defines `_sanitize_csv_row` for this exact purpose.
+- **Minimal fix:**
+  ```python
+  from export import _sanitize_csv_row
+  # In export_audit_log():
+  for row in rows:
+      w.writerow(_sanitize_csv_row(row))
+  ```
+- **Recommended regression test:** Assert that `export_audit_log(format="csv")` for an audit
+  entry with `ip_address="=cmd|calc!A1"` produces a CSV where the value is prefixed with `'`.
+
+---
+
+### [N4] `adapt_schema()` Docstring Overstates INSERT OR REPLACE Transformation
+
+- **Severity:** `LOW`
+- **Category:** `CORRECTNESS`
+- **Confidence:** `HIGH`
+- **Affected files:** `dashboard/db_adapter.py:394-411`
+- **Why it matters:** The docstring claims `INSERT OR REPLACE → INSERT ... ON CONFLICT DO UPDATE`,
+  but the implementation only strips `OR REPLACE`, producing bare `INSERT INTO`. On conflict
+  this would raise a unique-constraint violation rather than updating. This is currently
+  harmless (function is only called on DDL, not DML), but the misleading comment risks future
+  misuse.
+- **Minimal fix:** Correct the docstring to describe the actual behavior, or remove the
+  `INSERT OR REPLACE` regex entirely and document that callers must use portable syntax.
+
+---
+
+### [N5] SMTP STARTTLS Without Explicit TLS Certificate Verification
+
 - **Severity:** `LOW`
 - **Category:** `SECURITY`
 - **Confidence:** `MEDIUM`
-- **Affected files:** `dashboard/app.py` (all POST/PATCH/DELETE endpoints)
-- **Why it matters:** No CSRF middleware is configured. Mutation endpoints like
-  `POST /api/scan/trigger`, `POST /api/keys`, `POST /api/webhooks` accept form-encoded data.
-  Without CSRF tokens, a malicious website could submit a form on behalf of an authenticated
-  user whose browser holds a valid session cookie.
-- **Proof / reasoning:** No import of any CSRF library. No CSRF token generation or validation
-  in any middleware or endpoint. Session cookie uses `SameSite=Lax` which provides significant
-  mitigation (blocks cross-origin POST from third-party sites in modern browsers), reducing
-  practical exploitability.
-- **Minimal fix:** Given `SameSite=Lax` is already set and the dashboard is typically accessed
-  by a single admin user, the residual risk is low. For defense-in-depth, add CSRF middleware
-  (e.g., `fastapi-csrf-protect` or custom `X-CSRF-Token` header validation).
-- **Recommended regression test:** Test that a POST request without a valid CSRF token (from a
-  different origin) returns 403.
+- **Affected files:** `dashboard/notifications.py:265`
+- **Why it matters:** `server.starttls()` is called without an explicit `ssl.SSLContext`.
+  While Python 3.10+ creates a verifying context by default, this is a fragile reliance on
+  implicit behavior. An environment running Python 3.9 or a downgraded TLS negotiation
+  could expose SMTP credentials over an unverified connection.
+- **Minimal fix:**
+  ```python
+  import ssl
+  ctx = ssl.create_default_context()
+  server.starttls(context=ctx)
+  ```
 
 ---
 
-## 4. Highest-ROI Improvements
+## 5. Highest-ROI Improvements
 
 | Priority | Title | Why | Effort | Risk if Ignored |
 |----------|-------|-----|--------|-----------------|
-| 1 | HTML escape all export outputs | XSS via HTML/PDF export download. Attacker controls scanned repo content. | 1h | HIGH — analyst workstation compromise |
-| 2 | CSV injection sanitization | Formula execution when CSV opened in Excel. Same attack vector. | 30min | HIGH — code execution on analyst machine |
-| 3 | Fix INSERT OR REPLACE for PostgreSQL | PostgreSQL deployments crash on notification preference writes. | 1h | MEDIUM — blocks PostgreSQL adoption |
-| 4 | Deduplicate SCHEMA_SQL | Schema drift already introduced (DEFAULT mismatches). Will compound. | 2h | MEDIUM — silent data inconsistencies |
-| 5 | Synchronize DEFAULT values | Four columns have different defaults between orchestrator/dashboard. | 30min | MEDIUM — insertion failures under edge cases |
-| 6 | PDF markup escaping | ReportLab crashes on findings with XML-like characters in message. | 30min | LOW — DoS on report generation |
-| 7 | CSRF middleware | Defense-in-depth for form-based mutations. SameSite=Lax mitigates most risk. | 2h | LOW — mitigated by SameSite=Lax |
-| 8 | APIRouter decomposition of app.py | 1551 lines still in one file. All routes defined here. DX friction. | 1 day | LOW — maintainability only |
-| 9 | Startup warning for insecure defaults | Warn if SESSION_SECRET is placeholder or HTTPS_ONLY not set. | 30min | LOW — operational oversight |
-| 10 | Structured logging adoption | `structlog` is a dependency but unused. JSON logs needed for prod. | 3h | LOW — observability gap |
+| 1 | Fix X-Forwarded-For rate-limit bypass (N1) | Login brute force trivially bypassed. Blocks safe Internet exposure. | 30 min | HIGH — auth bypass from any IP |
+| 2 | Fix INSERT OR IGNORE for PostgreSQL (N2) | All scan triggers silently fail on PostgreSQL. | 15 min | HIGH — PostgreSQL non-functional |
+| 3 | CSV injection sanitization in audit export (N3) | Attacker-influenced fields can execute code on analyst workstation. | 15 min | MEDIUM — analyst machine compromise |
+| 4 | Fix adapt_schema() docstring (N4) | Misleading comment risks future PostgreSQL adaptation bugs. | 10 min | LOW — currently dead code |
+| 5 | Explicit SMTP TLS verification (N5) | SMTP creds potentially exposed on Python < 3.10 or downgraded TLS. | 5 min | LOW — mitigated on Python 3.11 |
+| 6 | Document Uvicorn --forwarded-allow-ips in .env.example | Ops teams need to know how to configure proxy trust for rate limiting. | 20 min | LOW — ops guidance |
+| 7 | Length-cap `name` and `target` in scan trigger | No max-length validation; unbounded input stored in DB. | 10 min | LOW — DoS / log flooding |
+| 8 | Auto-prune webhook delivery log on startup | Webhook delivery rows grow unbounded unless admin manually calls purge. | 1 h | LOW — disk growth |
+| 9 | Explicit CORS allow_headers allowlist | Wildcard `allow_headers=["*"]` is permissive; explicit list is safer. | 5 min | LOW |
+| 10 | Content-Security-Policy in exported HTML | Defense-in-depth for HTML report downloads. | 10 min | LOW |
 
 ---
 
-## 5. Testing Gaps
+## 6. Testing Gaps
 
-The following security-sensitive behaviors lack dedicated test coverage:
+1. **X-Forwarded-For rate-limit bypass** — No test verifies that a forged
+   `X-Forwarded-For` header does NOT bypass rate limiting from an untrusted connecting IP.
 
-1. **CSV injection** — No test in `test_export.py` verifies formula character sanitization.
-   All test data uses benign values.
+2. **PostgreSQL INSERT OR IGNORE** — No test exercises `insert_running_scan()` against a
+   PostgreSQL backend. The bug is invisible in SQLite-only test environments.
 
-2. **HTML/XSS in exports** — No test verifies that HTML-special characters in findings are
-   escaped in HTML export output.
+3. **Audit log CSV injection** — No test verifies formula escaping on audit log CSV export.
 
-3. **PDF markup injection** — No test verifies that ReportLab Paragraph-breaking characters
-   in finding fields are handled safely.
+4. **`adapt_schema()` INSERT OR REPLACE** — No test verifies the actual (incomplete) behavior
+   vs. the documented behavior of the transformation.
 
-4. **CSRF** — No test verifies that cross-origin form submissions are rejected.
+5. **Role-ceiling on key deletion** — Tests verify creation ceiling, but no test explicitly
+   verifies that an operator cannot delete an admin key (currently blocked by the
+   `API_KEY_MANAGE` permission requirement, but worth an explicit regression test).
 
-5. **PostgreSQL INSERT OR REPLACE** — No test exercises `adapt_schema()` against
-   `INSERT OR REPLACE` SQL statements. The docstring claims the transformation exists but
-   the code does not implement it.
-
-6. **Schema consistency** — No test verifies that `orchestrator/storage.py` and
-   `dashboard/db.py` produce identical schemas.
-
-7. **Rate limiting bypass** — Tests verify rate limiting works, but no test checks for
-   bypass via `X-Forwarded-For` header spoofing or IPv4/IPv6 address variation.
-
-8. **Session fixation** — No test verifies that session ID is regenerated after login.
-
-9. **Concurrent SQLite access** — WAL mode is tested for enablement, but no integration test
-   simulates concurrent writer + reader to verify no `OperationalError`.
-
-10. **Webhook DNS rebinding over time** — Tests verify initial DNS resolution check, but no
-    test verifies that re-resolution at trigger time prevents TOCTOU DNS rebinding.
+6. **SMTP TLS certificate verification** — No test asserts that `starttls()` is called with
+   an explicit, verifying SSL context.
 
 ---
 
-## 6. Suggested Patch Plan
+## 7. Suggested Patch Plan
 
-### Today (< 4 hours)
-- [ ] Add `html.escape()` to all interpolated values in `export.py` HTML export
-- [ ] Add CSV injection sanitization (prefix-strip formula characters) in `export.py` and
-      streaming CSV in `app.py`
-- [ ] Add `xml.sax.saxutils.escape()` to PDF Paragraph values in `export.py`
-- [ ] Add regression tests for all three export injection types
-- [ ] Synchronize DEFAULT values between orchestrator and dashboard SCHEMA_SQL
+### Today (< 1 hour total)
+- **Fix N2**: Replace `INSERT OR IGNORE INTO scans` with `INSERT INTO ... ON CONFLICT(id) DO NOTHING`
+  in `dashboard/scan_runner.py:36`.
+- **Fix N3**: Import `_sanitize_csv_row` into `audit_routes.py` and apply to all CSV rows.
+- **Fix N4**: Correct `adapt_schema()` docstring to accurately describe actual behavior.
 
-### This week
-- [ ] Fix `adapt_schema()` to handle `INSERT OR REPLACE` → `INSERT ... ON CONFLICT DO UPDATE`
-- [ ] Deduplicate SCHEMA_SQL into a shared module importable by both components
-- [ ] Add startup warning when `SESSION_SECRET` is the default placeholder
-- [ ] Add startup warning when `DASHBOARD_HTTPS_ONLY` is not set and secret looks custom
-- [ ] Add test for schema consistency between orchestrator and dashboard
+### This Week
+- **Fix N1**: Add `TRUSTED_PROXY_CIDR` env var support to `_client_key()` and document
+  Uvicorn's `--forwarded-allow-ips` in `README.md` / `.env.example`.
+- **Fix N5**: Pass explicit `ssl.create_default_context()` to `server.starttls()`.
+- Add regression tests for N2 (PostgreSQL-mode scan trigger), N3 (audit CSV injection),
+  and N1 (rate-limit with spoofed header).
 
-### Next sprint
-- [ ] Add CSRF middleware for form-based mutation endpoints
-- [ ] Decompose `app.py` routes into FastAPI `APIRouter` modules
-- [ ] Adopt `structlog` for structured JSON logging
-- [ ] Add integration test for concurrent SQLite read/write under WAL mode
-- [ ] Add rate limiting bypass test (X-Forwarded-For spoofing)
+### Next Sprint
+- Bounded webhook delivery log (auto-prune on startup after configurable retention days).
+- `name` and `target` max-length validation in scan trigger endpoint.
+- Tighten CORS `allow_headers` to an explicit allowlist.
+- Add `Content-Security-Policy` meta tag to HTML exports.
 
 ---
 
-## 7. Overall Verdict
+## 8. Overall Verdict
 
-**Is this safe for personal use?**
-Yes. The platform is well-built with solid auth, proper password hashing (bcrypt), rate
-limiting, and now comprehensive SSRF protection. All critical findings from the prior review
-are fixed.
+| Question | Answer |
+|----------|--------|
+| Safe for personal use? | **Yes** |
+| Safe for internal company use (behind firewall/VPN)? | **Yes** — fix N2 before using PostgreSQL backend |
+| Safe for Internet exposure? | **No** — N1 allows brute-forcing login from any IP; fix before exposing publicly |
+| What must be fixed before production (internet-facing)? | N1 (rate-limit bypass), N2 (PostgreSQL scan trigger), N3 (audit CSV injection) |
 
-**Is this safe for internal company use?**
-Yes, with caveats. The export injection vulnerabilities mean that a scanned repository
-controlled by a malicious actor could produce findings that execute code when an analyst opens
-the CSV in Excel or views the HTML report. In an internal setting where all scanned repos are
-trusted, this risk is acceptable. Fix the export sanitization before scanning untrusted repos.
-
-**Is this safe for Internet exposure?**
-Not yet. The export injection vulnerabilities (CSV, HTML/XSS, PDF) must be fixed first. The
-`INSERT OR REPLACE` PostgreSQL bug would crash notification writes. CSRF protection should be
-added for defense-in-depth. After these fixes, the platform would be suitable for Internet
-exposure behind TLS with `DASHBOARD_HTTPS_ONLY=1`.
-
-**What must be fixed before production?**
-1. HTML/XSS escaping in all export outputs (export.py)
-2. CSV injection sanitization (export.py, app.py streaming CSV)
-3. PostgreSQL `INSERT OR REPLACE` adaptation (if PostgreSQL is used)
-4. Schema DEFAULT value synchronization
-
----
-
-*This review covers code as of commit `f91f284` on branch `claude/complete-claude-md-tasks-sV7d1`.*
+The platform is substantially better than at the start of the review cycle. Security
+fundamentals (CSRF, SSRF, export injection, RBAC, non-root containers, WAL mode, Prometheus,
+schema management) are all addressed. The remaining issues are localized, fixable in under
+an hour combined, and do not represent architectural flaws.

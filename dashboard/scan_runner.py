@@ -33,12 +33,13 @@ def insert_running_scan(scan_id: str, started_at: str, target_type: str, name: s
         with get_connection(_db_path()) as conn:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO scans (
+                INSERT INTO scans (
                     id, created_at, finished_at, target_type, target_name, target_value,
                     status, policy_status, findings_count, critical_count, high_count,
                     medium_count, low_count, info_count, unknown_count,
                     raw_report_dir, normalized_report_path, artifacts_json, tools_json
                 ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', 'PENDING', 0, 0, 0, 0, 0, 0, 0, '', '', '{}', '[]')
+                ON CONFLICT(id) DO NOTHING
                 """,
                 (scan_id, started_at, started_at, target_type, name, target),
             )

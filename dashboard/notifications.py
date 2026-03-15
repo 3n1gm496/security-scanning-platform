@@ -12,6 +12,7 @@ Supports:
 from __future__ import annotations
 
 import os
+import ssl
 import smtplib
 from html import escape as html_escape
 from urllib.parse import quote_plus
@@ -262,7 +263,7 @@ class EmailNotificationEngine:
 
             # Send email
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
+                server.starttls(context=ssl.create_default_context())
                 if self.smtp_user and self.smtp_password:
                     server.login(self.smtp_user, self.smtp_password)
                 server.send_message(msg)

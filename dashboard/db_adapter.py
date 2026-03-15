@@ -392,19 +392,20 @@ def adapt_schema(schema_sql: str) -> str:
     """
     Adapt a SQLite DDL schema to PostgreSQL syntax.
 
-    Transformations applied:
+    Transformations applied to DDL (CREATE TABLE statements):
     - INTEGER PRIMARY KEY AUTOINCREMENT  →  SERIAL PRIMARY KEY
     - TEXT PRIMARY KEY                   →  TEXT PRIMARY KEY (unchanged)
-    - INSERT OR REPLACE                  →  INSERT ... ON CONFLICT DO UPDATE
-    - date('now', ...)                   →  CURRENT_DATE (simplified)
+
+    Note: This function is intended for DDL only (CREATE TABLE / CREATE INDEX).
+    Runtime DML queries (INSERT, UPDATE, etc.) must use portable SQL syntax
+    directly — in particular, use ``ON CONFLICT(col) DO NOTHING`` instead of
+    ``INSERT OR IGNORE`` and ``ON CONFLICT(col) DO UPDATE SET ...`` instead of
+    ``INSERT OR REPLACE``, as both are supported by SQLite ≥3.24 and PostgreSQL.
     """
     if not _IS_POSTGRES:
         return schema_sql
 
     sql = schema_sql
-    # AUTOINCREMENT → SERIAL
+    # AUTOINCREMENT → SERIAL (DDL transformation)
     sql = re.sub(r"INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY", sql, flags=re.IGNORECASE)
-    # INSERT OR REPLACE → INSERT ... ON CONFLICT DO UPDATE (basic transformation)
-    # This handles the common pattern used in notification_preferences etc.
-    sql = re.sub(r"INSERT\s+OR\s+REPLACE\s+INTO", "INSERT INTO", sql, flags=re.IGNORECASE)
     return sql

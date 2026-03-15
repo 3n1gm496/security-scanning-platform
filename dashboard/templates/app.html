@@ -587,6 +587,9 @@
            PAGE: ANALYTICS
       ================================================================ -->
       <div v-if="currentPage === 'analytics'" class="page-content">
+        <!-- Subtle refreshing indicator (non-blocking) -->
+        <div v-if="analyticsRefreshing && analyticsData.riskDistribution" class="analytics-refreshing-bar"></div>
+
         <!-- Chart.js CDN failure notice -->
         <div v-if="!chartsAvailable" class="card chart-unavailable u-mb-16">
           <span class="u-text-lg">⚠️</span>
@@ -668,13 +671,13 @@
         </div>
 
         <!-- CWE Top 10 -->
-        <div class="card" v-if="analyticsData.compliance && analyticsData.compliance.cwe_top_10 && analyticsData.compliance.cwe_top_10.length > 0">
+        <div class="card" v-if="analyticsData.compliance && analyticsData.compliance.cwe_top && analyticsData.compliance.cwe_top.length > 0">
           <div class="card-header"><h2>CWE Top 10</h2></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>CWE</th><th>Findings</th><th>Distribution</th></tr></thead>
               <tbody>
-                <tr v-for="item in analyticsData.compliance.cwe_top_10" :key="item.cwe">
+                <tr v-for="item in analyticsData.compliance.cwe_top" :key="item.cwe">
                   <td><a :href="'https://cwe.mitre.org/data/definitions/' + item.cwe.replace('CWE-', '') + '.html'" target="_blank" class="cve-link">{{ item.cwe }}</a></td>
                   <td><strong>{{ item.count }}</strong></td>
                   <td>

@@ -1796,6 +1796,23 @@ code {
   z-index: 500;
 }
 
+/* Thin animated bar at the top of the analytics page during background refreshes */
+.analytics-refreshing-bar {
+  position: sticky;
+  top: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  background-size: 200% 100%;
+  animation: analytics-shimmer 1.2s ease-in-out infinite;
+  border-radius: 2px;
+  z-index: 10;
+  margin-bottom: var(--space-2, 8px);
+}
+@keyframes analytics-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
 .spinner {
   width: 32px; height: 32px;
   border: 3px solid var(--color-border);

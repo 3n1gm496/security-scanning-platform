@@ -201,7 +201,6 @@ createApp({
       },
       analyticsDays: 30,
       analyticsRefreshing: false,
-      _analyticsRefreshPromise: null,
       _analyticsRefreshSeq: 0,
 
       // ── Settings page
@@ -398,6 +397,20 @@ createApp({
         this.startScanPolling(runningScans[0].created_at);
       }
     } catch (_) {}
+
+    // Pre-warm the analytics backend cache in the background so the first
+    // visit to the Analytics tab doesn't trigger 6 un-cached DB queries.
+    if (initialPage !== 'analytics') {
+      const warmup = [
+        '/api/analytics/risk-distribution',
+        '/api/analytics/compliance',
+        '/api/analytics/trends?days=30',
+        '/api/analytics/target-risk',
+        '/api/analytics/tool-effectiveness',
+        '/api/chart/severity-breakdown',
+      ];
+      Promise.allSettled(warmup.map(u => fetch(u))).catch(() => {});
+    }
   },
   beforeUnmount() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
@@ -632,7 +645,6 @@ createApp({
         this.buildTrendChart();
         this.buildSeverityChart(sevData);
         this.buildRemediationChart();
-        this.forceResizeCharts();
       } finally {
         this._chartsBuilding = false;
       }
@@ -1218,8 +1230,8 @@ createApp({
     // ── Analytics ─────────────────────────────────────────────────────────────
 
     async loadAnalytics() {
-      // Show loading overlay only on first load; dismiss it before chart
-      // building so the fixed overlay doesn't give canvases zero dimensions.
+      // Show loading overlay only on first load; for subsequent loads the
+      // analyticsRefreshing flag drives a subtle inline indicator instead.
       const isFirstLoad = !this.analyticsData.riskDistribution;
       if (isFirstLoad) this.loading = true;
       try {
@@ -1231,27 +1243,38 @@ createApp({
       }
     },
 
-    async _refreshAnalyticsData() {
-      if (this._analyticsRefreshPromise) return this._analyticsRefreshPromise;
+    /** Build analytics charts if the analytics page is currently visible. */
+    _buildAnalyticsCharts(sevData) {
+      if (!this.chartsAvailable) return;
+      if (this.currentPage !== 'analytics') return;
+      this.buildRiskChart();
+      this.buildOwaspChart();
+      this.buildAnalyticsTrendChart();
+      this.buildToolEffChart();
+      this.buildSeverityDistChart(sevData);
+    },
 
+    async _refreshAnalyticsData() {
+      // Cancel any in-flight refresh — always use the latest request so that
+      // chart builders run with fresh $refs after navigation.
       const refreshSeq = ++this._analyticsRefreshSeq;
       this.analyticsRefreshing = true;
 
-      this._analyticsRefreshPromise = (async () => {
-        const stale = () => refreshSeq !== this._analyticsRefreshSeq;
+      const stale = () => refreshSeq !== this._analyticsRefreshSeq;
 
-        // Helper: parse severity-breakdown response into { CRITICAL: N, ... }
-        const parseSev = (fresh) => {
-          const d = {};
-          if (fresh && Array.isArray(fresh.labels)) {
-            fresh.labels.forEach((k, i) => { d[k.toUpperCase()] = fresh.values[i]; });
-          } else if (fresh && typeof fresh === 'object') {
-            Object.assign(d, fresh);
-          }
-          return d;
-        };
+      // Helper: parse severity-breakdown response into { CRITICAL: N, ... }
+      const parseSev = (fresh) => {
+        const d = {};
+        if (fresh && Array.isArray(fresh.labels)) {
+          fresh.labels.forEach((k, i) => { d[k.toUpperCase()] = fresh.values[i]; });
+        } else if (fresh && typeof fresh === 'object') {
+          Object.assign(d, fresh);
+        }
+        return d;
+      };
 
-        // Fire all requests in parallel; build each chart as its data arrives.
+      try {
+        // Fire all requests in parallel.
         let sevData = {};
         const results = await Promise.allSettled([
           apiFetch('/api/analytics/risk-distribution').then(d => {
@@ -1285,23 +1308,13 @@ createApp({
           console.debug(`[analytics] ${failedCount} endpoint(s) failed during refresh`);
         }
 
-        if (this.chartsAvailable) {
-          await nextTick();
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          this.buildRiskChart();
-          this.buildOwaspChart();
-          this.buildAnalyticsTrendChart();
-          this.buildToolEffChart();
-          this.buildSeverityDistChart(sevData);
-          this.forceResizeCharts();
-        }
-      })();
+        // Wait for Vue to flush the DOM (remove overlay) and the browser to
+        // complete layout so canvases have correct dimensions.
+        await nextTick();
+        await new Promise(resolve => requestAnimationFrame(resolve));
 
-      try {
-        await this._analyticsRefreshPromise;
+        if (!stale()) this._buildAnalyticsCharts(sevData);
       } finally {
-        this._analyticsRefreshPromise = null;
-        // Only unset loading state if this is still the latest request.
         if (refreshSeq === this._analyticsRefreshSeq) this.analyticsRefreshing = false;
       }
     },

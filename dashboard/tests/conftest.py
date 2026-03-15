@@ -25,6 +25,7 @@ def isolated_db():
     # Discard any pooled connection so it picks up the fresh schema.
     try:
         import db_adapter as _da
+
         _da.reset_pool()
     except Exception:
         pass

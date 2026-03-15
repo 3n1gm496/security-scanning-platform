@@ -57,6 +57,7 @@ def scan_queue_submit(fn, *args, **kwargs):
 
     return scan_executor.submit(_wrapper)
 
+
 # ── TTL cache for analytics queries ──────────────────────────────────────
 _ttl_cache: dict[str, tuple[float, object]] = {}
 _ttl_lock = Lock()

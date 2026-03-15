@@ -72,6 +72,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     if token:
                         try:
                             from rbac import verify_api_key
+
                             bearer_valid = verify_api_key(token) is not None
                         except Exception:
                             bearer_valid = False

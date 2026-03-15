@@ -192,6 +192,7 @@ class TestAddFindingCommentReturnsId:
     def _insert_parent_finding(self):
         """Insert a parent scan + finding row so FK constraints are satisfied."""
         from db import get_connection
+
         db_path = __import__("os").environ["DASHBOARD_DB_PATH"]
         with get_connection(db_path) as conn:
             conn.execute(

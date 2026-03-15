@@ -124,8 +124,7 @@ async def _scan_timeout_watchdog():
     while True:
         await asyncio.sleep(SCAN_WATCHDOG_INTERVAL_SECONDS)
         try:
-            cutoff = datetime.now(timezone.utc).replace(microsecond=0) - \
-                timedelta(seconds=SCAN_TIMEOUT_SECONDS)
+            cutoff = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=SCAN_TIMEOUT_SECONDS)
             cutoff_iso = cutoff.isoformat()
             with get_connection(DB_PATH) as conn:
                 stale = conn.execute(
@@ -158,6 +157,7 @@ async def _lifespan(app):
     watchdog_task.cancel()
     # Graceful shutdown: wait for running scans to complete.
     from routers._shared import scan_executor as _scan_exec
+
     LOGGER.info("app.shutdown", detail="Waiting for running scans to finish...")
     _scan_exec.shutdown(wait=True, cancel_futures=False)
 

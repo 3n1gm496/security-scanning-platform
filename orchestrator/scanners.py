@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-
 # ---------------------------------------------------------------------------
 # SSRF protection for git clone URLs
 # ---------------------------------------------------------------------------
@@ -47,9 +46,7 @@ def _check_ssrf(hostname: str) -> None:
             addr = ipaddress.ip_address(sockaddr[0])
             for net in _BLOCKED_NETWORKS:
                 if addr in net:
-                    raise ScannerError(
-                        f"Clone target '{hostname}' resolves to blocked IP range: {addr}"
-                    )
+                    raise ScannerError(f"Clone target '{hostname}' resolves to blocked IP range: {addr}")
     except socket.gaierror:
         pass  # DNS resolution failed — let git clone handle the error
 
@@ -69,6 +66,7 @@ def _redact_url_credentials(token: str) -> str:
     except Exception:
         pass
     return token
+
 
 from tenacity import (
     retry,

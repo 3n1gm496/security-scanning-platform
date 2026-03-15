@@ -189,10 +189,27 @@ class TestCreateWebhookReturnsId:
 
 
 class TestAddFindingCommentReturnsId:
+    def _insert_parent_finding(self):
+        """Insert a parent scan + finding row so FK constraints are satisfied."""
+        from db import get_connection
+        db_path = __import__("os").environ["DASHBOARD_DB_PATH"]
+        with get_connection(db_path) as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO scans (id, created_at, finished_at, target_type, target_name, target_value, status, policy_status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("scan-1", "2026-01-01T00:00:00", "2026-01-01T00:01:00", "git", "t", "v", "COMPLETED_CLEAN", "PASSED"),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO findings (id, scan_id, timestamp, target_type, target_name, tool, category, severity, title, description) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (1, "scan-1", "2026-01-01T00:00:00", "git", "t", "tool", "cat", "HIGH", "title", "desc"),
+            )
+
     def test_returns_positive_int(self, isolated_db):
         from finding_management import add_finding_comment, init_finding_management_tables
 
         init_finding_management_tables()
+        self._insert_parent_finding()
         comment_id = add_finding_comment(1, "tester", "First comment")
         assert isinstance(comment_id, int)
         assert comment_id > 0
@@ -201,6 +218,7 @@ class TestAddFindingCommentReturnsId:
         from finding_management import add_finding_comment, init_finding_management_tables
 
         init_finding_management_tables()
+        self._insert_parent_finding()
         id1 = add_finding_comment(1, "tester", "Comment A")
         id2 = add_finding_comment(1, "tester", "Comment B")
         assert id1 != id2

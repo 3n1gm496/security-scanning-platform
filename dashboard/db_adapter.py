@@ -39,10 +39,30 @@ def is_postgres() -> bool:
 
 
 def _adapt_sql(sql: str) -> str:
-    """Convert SQLite-style placeholders (?) to PostgreSQL-style (%s)."""
+    """Convert SQLite-style placeholders (?) to PostgreSQL-style (%s).
+
+    Uses a simple state machine to skip over string literals so that
+    question marks inside quoted values are preserved.
+    """
     if not _IS_POSTGRES:
         return sql
-    return sql.replace("?", "%s")
+    result = []
+    in_quote = False
+    quote_char = None
+    for ch in sql:
+        if in_quote:
+            result.append(ch)
+            if ch == quote_char:
+                in_quote = False
+        elif ch in ("'", '"'):
+            in_quote = True
+            quote_char = ch
+            result.append(ch)
+        elif ch == "?":
+            result.append("%s")
+        else:
+            result.append(ch)
+    return "".join(result)
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +82,7 @@ def _sqlite_connect(db_path: str) -> sqlite3.Connection:
     # synchronous=NORMAL is safe with WAL: durable after each checkpoint, not each commit.
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 

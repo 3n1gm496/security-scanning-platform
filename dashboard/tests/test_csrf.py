@@ -106,10 +106,22 @@ class TestCSRFMiddleware:
         resp = client.delete("/resource", headers={"X-CSRF-Token": token})
         assert resp.status_code == 200
 
-    def test_bearer_auth_bypasses_csrf(self, client):
-        """API-key-authenticated requests (Bearer token) should bypass CSRF."""
+    def test_bearer_auth_bypasses_csrf(self, client, monkeypatch):
+        """API-key-authenticated requests with a valid Bearer token should bypass CSRF."""
+        import rbac
+        monkeypatch.setattr(rbac, "verify_api_key", lambda key: {"id": 1, "role": "admin"} if key == "valid-key" else None)
         resp = client.post(
             "/protected",
-            headers={"Authorization": "Bearer some-api-key"},
+            headers={"Authorization": "Bearer valid-key"},
         )
         assert resp.status_code == 200
+
+    def test_bearer_auth_invalid_key_requires_csrf(self, client, monkeypatch):
+        """Bearer header with an invalid key should NOT bypass CSRF."""
+        import rbac
+        monkeypatch.setattr(rbac, "verify_api_key", lambda key: None)
+        resp = client.post(
+            "/protected",
+            headers={"Authorization": "Bearer invalid-key"},
+        )
+        assert resp.status_code == 403

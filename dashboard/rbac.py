@@ -129,6 +129,8 @@ def _verify_key_hash(key: str, stored_hash: str) -> bool:
 
     Supports both bcrypt (new) and SHA-256 (legacy) hashes for backward
     compatibility during the migration period.
+    Returns True if the key matches. Legacy SHA-256 hashes will be
+    transparently upgraded to bcrypt by verify_api_key().
     """
     if stored_hash.startswith("$2b$") or stored_hash.startswith("$2a$"):
         try:
@@ -185,6 +187,15 @@ def verify_api_key(key: str) -> Optional[dict]:
         for row in rows:
             if not _verify_key_hash(key, row["key_hash"]):
                 continue
+
+            # Transparently upgrade legacy SHA-256 hashes to bcrypt on successful verification.
+            stored_hash = row["key_hash"]
+            if not (stored_hash.startswith("$2b$") or stored_hash.startswith("$2a$")):
+                new_hash = hash_api_key(key)
+                conn.execute(
+                    "UPDATE api_keys SET key_hash = ? WHERE id = ?",
+                    (new_hash, row["id"]),
+                )
 
             # Check expiration
             if row["expires_at"]:

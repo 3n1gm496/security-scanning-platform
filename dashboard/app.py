@@ -6,6 +6,7 @@ import time
 import csv
 import io
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -109,8 +110,18 @@ def _verify_password(plain: str, stored: str) -> bool:
 # Set to '1' or 'true' when the dashboard is served over HTTPS (recommended in production).
 # Enables the Secure flag on session cookies and enforces https_only in SessionMiddleware.
 HTTPS_ONLY = os.getenv("DASHBOARD_HTTPS_ONLY", "0").strip().lower() in ("1", "true", "yes")
+SESSION_MAX_AGE = int(os.getenv("DASHBOARD_SESSION_MAX_AGE", "86400"))  # 24 hours
 
-app = FastAPI(title=APP_TITLE)
+@asynccontextmanager
+async def _lifespan(app):
+    yield
+    # Graceful shutdown: wait for running scans to complete.
+    from routers._shared import scan_executor as _scan_exec
+    LOGGER.info("app.shutdown", detail="Waiting for running scans to finish...")
+    _scan_exec.shutdown(wait=True, cancel_futures=False)
+
+
+app = FastAPI(title=APP_TITLE, lifespan=_lifespan)
 app.add_middleware(
     CSRFMiddleware,
     exempt_paths={"/login", "/api/health", "/api/ready", "/api/metrics", "/metrics"},
@@ -120,6 +131,7 @@ app.add_middleware(
     secret_key=SESSION_SECRET,
     https_only=HTTPS_ONLY,
     same_site="lax",
+    max_age=SESSION_MAX_AGE,
 )
 
 # ── Database initialisation (scans + findings) ───────────────────────────────
@@ -154,7 +166,7 @@ if default_key:
     LOGGER.warning(
         "security.default_admin_key_created",
         detail="Store this key securely! It will not be shown again.",
-        api_key=default_key,
+        api_key_prefix=default_key[:12] + "...",
     )
 
 # Add monitoring endpoints

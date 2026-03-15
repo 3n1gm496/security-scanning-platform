@@ -1,14 +1,74 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
+
+
+# ---------------------------------------------------------------------------
+# SSRF protection for git clone URLs
+# ---------------------------------------------------------------------------
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _check_ssrf(hostname: str) -> None:
+    """Raise ScannerError if hostname resolves to a private/reserved IP."""
+    # Literal IP check
+    try:
+        addr = ipaddress.ip_address(hostname)
+        for net in _BLOCKED_NETWORKS:
+            if addr in net:
+                raise ScannerError(f"Clone target resolves to blocked IP range: {addr}")
+        return
+    except ValueError:
+        pass  # Not a literal IP — resolve via DNS
+
+    try:
+        results = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+        for _family, _type, _proto, _canonname, sockaddr in results:
+            addr = ipaddress.ip_address(sockaddr[0])
+            for net in _BLOCKED_NETWORKS:
+                if addr in net:
+                    raise ScannerError(
+                        f"Clone target '{hostname}' resolves to blocked IP range: {addr}"
+                    )
+    except socket.gaierror:
+        pass  # DNS resolution failed — let git clone handle the error
+
+
+def _redact_url_credentials(token: str) -> str:
+    """Redact userinfo (credentials) from URLs in command tokens for safe logging."""
+    if "://" not in token:
+        return token
+    try:
+        parsed = urlparse(token)
+        if parsed.username or parsed.password:
+            # Replace userinfo with ***
+            netloc = f"***@{parsed.hostname}"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            return urlunparse(parsed._replace(netloc=netloc))
+    except Exception:
+        pass
+    return token
 
 from tenacity import (
     retry,
@@ -42,7 +102,7 @@ def command_exists(name: str) -> bool:
 def run_command(
     command: list[str], cwd: str | None = None, timeout: int = 3600, env: dict[str, str] | None = None
 ) -> tuple[int, str, str]:
-    LOGGER.info("Executing command: %s", " ".join(command))
+    LOGGER.info("Executing command: %s", " ".join(_redact_url_credentials(t) for t in command))
     process = subprocess.run(
         command,
         cwd=cwd,
@@ -106,6 +166,10 @@ def clone_repo(repo_url: str, destination: str, ref: str | None = None, depth: i
             f"Unsupported URL scheme '{parsed.scheme}' for git clone — "
             f"only {', '.join(sorted(_ALLOWED_SCHEMES))} are allowed"
         )
+
+    # Validate that the hostname does not resolve to a private/reserved IP range.
+    if parsed.hostname:
+        _check_ssrf(parsed.hostname)
 
     Path(destination).parent.mkdir(parents=True, exist_ok=True)
     command = ["git", "clone", "--quiet", "-c", "credential.helper="]

@@ -505,7 +505,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
     elif findings and status == "COMPLETED_CLEAN":
         status = "COMPLETED_WITH_FINDINGS"
 
-    policy_status = evaluate_policy(findings, settings, target.name, target.type)
+    policy_status = evaluate_policy([f.to_dict() for f in findings], settings, target.name, target.type)
 
     finished_at = utc_now_iso()
     normalized_report_path = str(reports_root / "normalized.json")

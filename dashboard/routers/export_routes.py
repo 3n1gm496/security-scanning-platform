@@ -11,7 +11,7 @@ from fastapi.responses import Response, StreamingResponse
 from starlette import status
 
 from auth import require_auth, require_permission, AuthContext
-from db import count_findings, list_findings, list_scans
+from db import count_findings, list_findings
 from rbac import Permission
 from export import export_to_json, export_to_csv, export_to_sarif, export_to_html, export_to_pdf, _sanitize_csv_row
 from analytics import get_risk_distribution, get_compliance_summary
@@ -43,12 +43,12 @@ def export_findings_endpoint(
     # Get scan info if scan_id provided
     scan_info = {}
     if scan_id:
-        # Search across all scans (not just the most recent one) to find the matching scan
-        scans = list_scans(DB_PATH, limit=10000)
-        for scan in scans:
-            if scan.get("id") == scan_id:
-                scan_info = scan
-                break
+        from db import get_connection
+
+        with get_connection(DB_PATH) as conn:
+            row = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
+            if row:
+                scan_info = dict(row)
 
     # Export based on format
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

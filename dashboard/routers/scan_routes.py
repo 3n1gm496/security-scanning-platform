@@ -17,7 +17,7 @@ from rbac import Permission
 from pagination import ScansPaginator
 from scan_runner import run_scan
 
-from routers._shared import DB_PATH, scan_executor
+from routers._shared import DB_PATH, scan_queue_submit
 
 router = APIRouter(prefix="/api", tags=["scans"])
 
@@ -103,10 +103,11 @@ def trigger_scan(
     started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     if async_mode:
-        # Submit to bounded thread pool to prevent unbounded thread growth.
-        # If the pool is at capacity, submit() still queues the task internally
-        # (ThreadPoolExecutor uses an unbounded internal queue by default).
-        scan_executor.submit(run_scan, target_type, target, name, str(root_dir), scan_id, started_at)
+        # Submit to bounded thread pool; rejects if queue depth exceeds limit.
+        try:
+            scan_queue_submit(run_scan, target_type, target, name, str(root_dir), scan_id, started_at)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
         return {
             "status": "queued",
             "scan_id": scan_id,

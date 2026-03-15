@@ -62,9 +62,20 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
             # Skip exempt paths
             if path not in self.exempt_paths:
-                # API-key-authenticated requests are exempt (no browser session)
+                # API-key-authenticated requests are exempt from CSRF (no browser session).
+                # However, we must verify the key is valid — a bare "Bearer" header
+                # with an invalid/empty token must NOT bypass CSRF protection.
                 auth_header = request.headers.get("authorization", "")
-                if not auth_header.startswith("Bearer "):
+                bearer_valid = False
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:].strip()
+                    if token:
+                        try:
+                            from rbac import verify_api_key
+                            bearer_valid = verify_api_key(token) is not None
+                        except Exception:
+                            bearer_valid = False
+                if not bearer_valid:
                     expected = request.session.get("csrf_token", "")
                     provided = request.headers.get("x-csrf-token", "")
                     if not expected or not secrets.compare_digest(expected, provided):

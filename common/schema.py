@@ -81,4 +81,11 @@ CREATE INDEX IF NOT EXISTS idx_findings_target_severity
     ON findings(target_name, severity);
 """,
     ),
+    # NOTE: The following dashboard-specific tables are created by their
+    # respective init_*_tables() functions (idempotent, using IF NOT EXISTS):
+    #   - finding_states, finding_comments, finding_attachments  (finding_management.py)
+    #   - notification_preferences                                (notifications.py)
+    #   - api_keys, users, audit_log                              (rbac.py)
+    #   - webhooks, webhook_deliveries                            (webhooks.py)
+    # A future migration should consolidate them here.
 ]

@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import smtplib
+from html import escape as html_escape
 from urllib.parse import quote_plus
 
 from email.mime.text import MIMEText
@@ -43,25 +44,28 @@ class EmailNotificationEngine:
         subject = f"[CRITICAL] Security Finding: {finding.get('title', 'Unknown')}"
         encoded_email = quote_plus(to_email)
 
+        # Escape all user-controlled data for safe HTML embedding
+        e = {k: html_escape(str(v)) for k, v in finding.items() if v is not None}
+
         html_body = f"""
         <html>
             <body style="font-family: Arial, sans-serif;">
                 <h2 style="color: #d32f2f;">Critical Security Finding</h2>
 
-                <p><strong>Title:</strong> {finding.get('title', 'N/A')}</p>
+                <p><strong>Title:</strong> {e.get('title', 'N/A')}</p>
                 <p><strong>Severity:</strong> <span style="color: #d32f2f; font-weight: bold;">CRITICAL</span></p>
-                <p><strong>Type:</strong> {finding.get('category', 'Unknown')}</p>
-                <p><strong>Description:</strong> {finding.get('description', 'N/A')}</p>
+                <p><strong>Type:</strong> {e.get('category', 'Unknown')}</p>
+                <p><strong>Description:</strong> {e.get('description', 'N/A')}</p>
 
                 <h3>Location</h3>
-                <p><strong>File:</strong> {finding.get('file_path', 'N/A')}</p>
-                <p><strong>Line:</strong> {finding.get('line_number', 'N/A')}</p>
+                <p><strong>File:</strong> {e.get('file_path', 'N/A')}</p>
+                <p><strong>Line:</strong> {e.get('line_number', 'N/A')}</p>
 
                 <h3>Details</h3>
                 <ul>
-                    <li>Tool: {finding.get('tool', 'N/A')}</li>
-                    <li>CVE: {finding.get('cve_id', 'N/A')}</li>
-                    <li>Fingerprint: {finding.get('fingerprint', 'N/A')}</li>
+                    <li>Tool: {e.get('tool', 'N/A')}</li>
+                    <li>CVE: {e.get('cve_id', 'N/A')}</li>
+                    <li>Fingerprint: {e.get('fingerprint', 'N/A')}</li>
                 </ul>
 
                 <p>
@@ -116,14 +120,19 @@ class EmailNotificationEngine:
         medium_count = scan_results.get("medium_count", 0)
         total_count = scan_results.get("total_count", 0)
 
+        # Escape user-controlled strings for safe HTML embedding
+        target_name = html_escape(str(scan_results.get("target_name", "N/A")))
+        scan_id = html_escape(str(scan_results.get("scan_id", "N/A")))
+        created_at = html_escape(str(scan_results.get("created_at", "N/A")))
+
         html_body = f"""
         <html>
             <body style="font-family: Arial, sans-serif;">
                 <h2>Security Scan Summary</h2>
 
-                <p><strong>Target:</strong> {scan_results.get('target_name', 'N/A')}</p>
-                <p><strong>Scan ID:</strong> {scan_results.get('scan_id', 'N/A')}</p>
-                <p><strong>Date:</strong> {scan_results.get('created_at', 'N/A')}</p>
+                <p><strong>Target:</strong> {target_name}</p>
+                <p><strong>Scan ID:</strong> {scan_id}</p>
+                <p><strong>Date:</strong> {created_at}</p>
 
                 <h3>Findings Summary</h3>
                 <table style="border-collapse: collapse; width: 100%;">

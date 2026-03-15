@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
+from queue import SimpleQueue
 
 from fastapi.templating import Jinja2Templates
 
@@ -29,7 +30,32 @@ notification_engine: EmailNotificationEngine = EmailNotificationEngine()
 
 # ── Bounded thread pool for background scans ──────────────────────────────
 MAX_SCAN_WORKERS: int = int(os.getenv("DASHBOARD_MAX_SCAN_WORKERS", "4"))
+MAX_SCAN_QUEUE: int = int(os.getenv("DASHBOARD_MAX_SCAN_QUEUE", "20"))
 scan_executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=MAX_SCAN_WORKERS, thread_name_prefix="scan-worker")
+_scan_queue_depth = 0
+_scan_queue_lock = Lock()
+
+
+def scan_queue_submit(fn, *args, **kwargs):
+    """Submit a scan to the bounded pool. Raises RuntimeError if the queue is full."""
+    global _scan_queue_depth
+    with _scan_queue_lock:
+        if _scan_queue_depth >= MAX_SCAN_QUEUE:
+            raise RuntimeError(
+                f"Scan queue is full ({MAX_SCAN_QUEUE} pending). "
+                "Wait for running scans to complete before submitting new ones."
+            )
+        _scan_queue_depth += 1
+
+    def _wrapper():
+        global _scan_queue_depth
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            with _scan_queue_lock:
+                _scan_queue_depth -= 1
+
+    return scan_executor.submit(_wrapper)
 
 # ── TTL cache for analytics queries ──────────────────────────────────────
 _ttl_cache: dict[str, tuple[float, object]] = {}

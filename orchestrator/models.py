@@ -123,7 +123,9 @@ class ScanResult:
         counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0, "UNKNOWN": 0}
         for finding in self.findings:
             sev = (finding.severity or "UNKNOWN").upper()
-            counts[sev] = counts.get(sev, 0) + 1
+            if sev not in counts:
+                sev = "UNKNOWN"
+            counts[sev] += 1
         return counts
 
     def to_dict(self) -> dict[str, Any]:

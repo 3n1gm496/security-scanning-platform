@@ -226,6 +226,18 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
     response_status = None
     response_body = None
 
+    # Re-validate the URL at delivery time to mitigate DNS rebinding attacks
+    # (the hostname may now resolve to a different IP than at registration time).
+    try:
+        validate_webhook_url(webhook["url"], resolve_dns=True)
+    except ValueError as exc:
+        error_msg = f"SSRF validation failed at delivery: {exc}"
+        logger.warning("webhook.ssrf_blocked", webhook_id=webhook["id"], error=error_msg)
+        duration_ms = int((time.time() - start_time) * 1000)
+        _log_delivery(webhook["id"], event_type.value, payload_str, None, None, error_msg, duration_ms)
+        _update_webhook_stats(webhook["id"], success=False)
+        return False, error_msg
+
     async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS) as client:
         for attempt in range(WEBHOOK_RETRY_COUNT):
             try:

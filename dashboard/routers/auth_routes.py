@@ -60,7 +60,8 @@ async def login(
             {"error": "Invalid credentials"},
             status_code=401,
         )
-    # Set session and redirect to the main page
+    # Regenerate session to prevent session fixation attacks
+    request.session.clear()
     request.session["user"] = username
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
 

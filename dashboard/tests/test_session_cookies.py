@@ -74,6 +74,9 @@ def logged_in_client(client):
         data={"username": _TEST_USER, "password": _TEST_PASS},
         follow_redirects=True,
     )
+    csrf_token = client.cookies.get("csrf_token")
+    if csrf_token:
+        client.headers["X-CSRF-Token"] = csrf_token
     return client
 
 

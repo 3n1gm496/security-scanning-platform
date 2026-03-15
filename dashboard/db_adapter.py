@@ -131,20 +131,89 @@ def reset_pool() -> None:
 # PostgreSQL backend
 # ---------------------------------------------------------------------------
 
+# Connection pool settings (configurable via environment)
+_PG_POOL_MIN = int(os.environ.get("PG_POOL_MIN", "2"))
+_PG_POOL_MAX = int(os.environ.get("PG_POOL_MAX", "10"))
+
+# Optional read-replica DSN for routing read-heavy queries
+_DATABASE_READ_URL: str | None = os.environ.get("DATABASE_READ_URL")
+
+_pg_pool = None
+_pg_pool_lock = threading.Lock()
+_pg_read_pool = None
+_pg_read_pool_lock = threading.Lock()
+
+
+def _get_pg_pool():
+    """Lazily create and return the primary PostgreSQL connection pool."""
+    global _pg_pool
+    if _pg_pool is not None:
+        return _pg_pool
+    with _pg_pool_lock:
+        if _pg_pool is not None:
+            return _pg_pool
+        try:
+            from psycopg2.pool import ThreadedConnectionPool
+
+            _pg_pool = ThreadedConnectionPool(_PG_POOL_MIN, _PG_POOL_MAX, _DATABASE_URL)
+            LOGGER.info("db.pool.created", min=_PG_POOL_MIN, max=_PG_POOL_MAX)
+        except ImportError as exc:
+            raise RuntimeError(
+                "psycopg2-binary is required for PostgreSQL support. " "Install it with: pip install psycopg2-binary"
+            ) from exc
+        return _pg_pool
+
+
+def _get_pg_read_pool():
+    """Lazily create and return the read-replica connection pool (if configured)."""
+    global _pg_read_pool
+    if not _DATABASE_READ_URL:
+        return None
+    if _pg_read_pool is not None:
+        return _pg_read_pool
+    with _pg_read_pool_lock:
+        if _pg_read_pool is not None:
+            return _pg_read_pool
+        try:
+            from psycopg2.pool import ThreadedConnectionPool
+
+            _pg_read_pool = ThreadedConnectionPool(_PG_POOL_MIN, _PG_POOL_MAX, _DATABASE_READ_URL)
+            LOGGER.info("db.read_pool.created", min=_PG_POOL_MIN, max=_PG_POOL_MAX)
+        except ImportError:
+            return None
+        return _pg_read_pool
+
 
 def _pg_connect():
-    """Create a psycopg2 connection using DATABASE_URL."""
-    try:
-        import psycopg2
-        import psycopg2.extras
-    except ImportError as exc:
-        raise RuntimeError(
-            "psycopg2-binary is required for PostgreSQL support. " "Install it with: pip install psycopg2-binary"
-        ) from exc
-
-    conn = psycopg2.connect(_DATABASE_URL)
+    """Return a connection from the primary PostgreSQL pool."""
+    pool = _get_pg_pool()
+    conn = pool.getconn()
     conn.autocommit = False
     return conn
+
+
+def _pg_connect_read():
+    """Return a connection from the read-replica pool, or primary if no replica configured."""
+    read_pool = _get_pg_read_pool()
+    if read_pool:
+        conn = read_pool.getconn()
+        conn.autocommit = False
+        return conn
+    return _pg_connect()
+
+
+def _pg_release(conn, *, read_replica: bool = False):
+    """Return a connection back to the appropriate pool."""
+    pool = None
+    if read_replica and _pg_read_pool is not None:
+        pool = _pg_read_pool
+    elif _pg_pool is not None:
+        pool = _pg_pool
+    if pool:
+        try:
+            pool.putconn(conn)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -228,9 +297,10 @@ class _CursorWrapper:
 class _ConnectionWrapper:
     """Wraps a DB connection to provide a uniform interface."""
 
-    def __init__(self, raw_conn, is_pg: bool):
+    def __init__(self, raw_conn, is_pg: bool, *, read_replica: bool = False):
         self._conn = raw_conn
         self._is_pg = is_pg
+        self._read_replica = read_replica
 
     def cursor(self) -> _CursorWrapper:
         if self._is_pg:
@@ -269,7 +339,9 @@ class _ConnectionWrapper:
             self.commit()
         else:
             self.rollback()
-        # Do NOT close here — caller controls lifetime
+        # Return PostgreSQL connections to the pool instead of leaking them
+        if self._is_pg:
+            _pg_release(self._conn, read_replica=self._read_replica)
         return False
 
     # sqlite3.Row compatibility: allow row["key"] on rows returned by this conn
@@ -288,19 +360,26 @@ class _ConnectionWrapper:
 # ---------------------------------------------------------------------------
 
 
-def get_connection(db_path: str | None = None) -> _ConnectionWrapper:
+def get_connection(db_path: str | None = None, *, read_only: bool = False) -> _ConnectionWrapper:
     """
     Return a connection wrapper for the configured backend.
 
     SQLite connections are cached per-thread to avoid repeated setup overhead.
-    PostgreSQL connections are created fresh (use an external pool like
-    pgBouncer for high-throughput production workloads).
+    PostgreSQL connections are drawn from a ThreadedConnectionPool.  When
+    ``DATABASE_READ_URL`` is set and ``read_only=True``, the connection is
+    routed to the read-replica pool for better load distribution.
 
     Args:
         db_path: Path to the SQLite file (ignored when DATABASE_URL is set).
                  Defaults to DASHBOARD_DB_PATH env var.
+        read_only: Hint that this connection will only run SELECT queries.
+                   When a read-replica pool is configured, read_only=True
+                   routes the connection there.
     """
     if _IS_POSTGRES:
+        if read_only and _DATABASE_READ_URL:
+            LOGGER.debug("db.connect.postgres.read_replica")
+            return _ConnectionWrapper(_pg_connect_read(), is_pg=True, read_replica=True)
         LOGGER.debug("db.connect.postgres")
         return _ConnectionWrapper(_pg_connect(), is_pg=True)
 

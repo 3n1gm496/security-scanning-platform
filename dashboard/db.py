@@ -29,12 +29,12 @@ __all__ = ["get_connection", "init_db"]
 _DB_PATH = os.environ.get("DASHBOARD_DB_PATH", "/data/security_scans.db")
 
 
-def _conn(db_path: str | None = None):
-    return get_connection(db_path or _DB_PATH)
+def _conn(db_path: str | None = None, *, read_only: bool = False):
+    return get_connection(db_path or _DB_PATH, read_only=read_only)
 
 
 def fetch_kpis(db_path: str) -> dict[str, Any]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         total_scans = conn.execute("SELECT COUNT(*) AS value FROM scans").fetchone()["value"]
         total_findings = conn.execute("SELECT COUNT(*) AS value FROM findings").fetchone()["value"]
         critical_findings = conn.execute(
@@ -77,7 +77,7 @@ def list_scans(
         params.append(policy_status)
     query += " ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
 
@@ -119,7 +119,7 @@ def count_findings(
     category: str | None = None,
 ) -> int:
     clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         row = conn.execute(f"SELECT COUNT(*) AS n FROM findings {clause}", params).fetchone()  # nosec B608
     return int(row["n"])
 
@@ -137,13 +137,13 @@ def list_findings(
     clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
     query = f"SELECT * FROM findings {clause} ORDER BY timestamp DESC, severity DESC LIMIT ? OFFSET ?"  # nosec B608
     params.extend([limit, offset])
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
 
 
 def severity_breakdown(db_path: str) -> dict[str, int]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(
             "SELECT severity, COUNT(*) AS total FROM findings GROUP BY severity ORDER BY total DESC"
         ).fetchall()
@@ -151,13 +151,13 @@ def severity_breakdown(db_path: str) -> dict[str, int]:
 
 
 def tool_breakdown(db_path: str) -> dict[str, int]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute("SELECT tool, COUNT(*) AS total FROM findings GROUP BY tool ORDER BY total DESC").fetchall()
     return {row["tool"]: row["total"] for row in rows}
 
 
 def target_breakdown(db_path: str) -> dict[str, int]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(
             "SELECT target_name, COUNT(*) AS total FROM findings" " GROUP BY target_name ORDER BY total DESC LIMIT 20"
         ).fetchall()
@@ -165,7 +165,7 @@ def target_breakdown(db_path: str) -> dict[str, int]:
 
 
 def scans_trend(db_path: str, days: int = 30) -> list[dict[str, Any]]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(
             """
             SELECT substr(created_at, 1, 10) AS day,
@@ -182,19 +182,19 @@ def scans_trend(db_path: str, days: int = 30) -> list[dict[str, Any]]:
 
 
 def distinct_targets(db_path: str) -> list[str]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute("SELECT DISTINCT target_name FROM scans ORDER BY target_name ASC").fetchall()
     return [row["target_name"] for row in rows]
 
 
 def distinct_tools(db_path: str) -> list[str]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute("SELECT DISTINCT tool FROM findings ORDER BY tool ASC").fetchall()
     return [row["tool"] for row in rows]
 
 
 def recent_failed_scans(db_path: str, limit: int = 20) -> list[dict[str, Any]]:
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(
             "SELECT * FROM scans WHERE status != 'COMPLETED_CLEAN'" " ORDER BY created_at DESC LIMIT ?",
             (limit,),
@@ -215,7 +215,7 @@ def cache_hit_stats(db_path: str, limit_scans: int = 200) -> dict[str, Any]:
     cached_runs = 0
     by_tool: dict[str, dict[str, int]] = {}
 
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(query, (limit_scans,)).fetchall()
 
     for row in rows:
@@ -280,7 +280,7 @@ def cache_hit_trend(db_path: str, days: int = 14) -> list[dict[str, Any]]:
 
     day_totals: dict[str, dict[str, int]] = {}
 
-    with _conn(db_path) as conn:
+    with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(query, (f"-{days} day",)).fetchall()
 
     for row in rows:
@@ -348,3 +348,42 @@ def init_db(db_path: str):
     with _conn(db_path) as conn:
         conn.executescript(adapt_schema(SCHEMA_SQL))
     _run_migrations(db_path)
+
+
+def deduplicated_findings(
+    db_path: str,
+    target_name: str | None = None,
+    severity: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """Return findings deduplicated by fingerprint, keeping latest occurrence.
+
+    When the same finding (same fingerprint) appears across multiple scans,
+    only the most recent instance is returned.  This is useful for showing
+    the current security posture without duplicate noise.
+    """
+    query = """
+        SELECT f.*
+        FROM findings f
+        INNER JOIN (
+            SELECT fingerprint, MAX(timestamp) AS latest_ts
+            FROM findings
+            WHERE fingerprint IS NOT NULL AND fingerprint != ''
+    """
+    params: list[Any] = []
+    if target_name:
+        query += " AND target_name = ?"
+        params.append(target_name)
+    if severity:
+        query += " AND severity = ?"
+        params.append(severity)
+    query += """
+            GROUP BY fingerprint
+        ) dedup ON f.fingerprint = dedup.fingerprint AND f.timestamp = dedup.latest_ts
+        ORDER BY f.timestamp DESC, f.severity DESC
+        LIMIT ?
+    """
+    params.append(limit)
+    with _conn(db_path, read_only=True) as conn:
+        rows = conn.execute(query, params).fetchall()  # nosec B608
+    return [dict(row) for row in rows]

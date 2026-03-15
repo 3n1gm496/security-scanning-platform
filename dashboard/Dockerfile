@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     ca-certificates \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -79,8 +80,16 @@ COPY config/ /config/
 RUN mkdir -p /data/workspaces /data/reports /data/cache \
     && chown -R dashuser:dashuser /app /orchestrator /common /config /data
 
-# Drop to non-root for runtime
-USER dashuser
+# ── Entrypoint ─────────────────────────────────────────────────────────────────
+# The entrypoint creates /data directories, fixes ownership when the container
+# starts as root (common with bind mounts from a different host UID), then
+# drops to dashuser via gosu before running the application.
+# Security note: the container process starts as root only briefly — gosu
+# drops to dashuser immediately after chowning /data.
+# See dashboard/entrypoint.sh for details.
+COPY dashboard/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8080
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

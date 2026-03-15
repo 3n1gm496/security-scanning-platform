@@ -83,7 +83,7 @@ services:
       - ./config:/app/config:ro
     healthcheck:
       # Verify the orchestrator can import its main module and the DB path is writable
-      test: ["CMD-SHELL", "python -c 'from orchestrator.main import load_settings; load_settings()' && test -w /data"]
+      test: ["CMD-SHELL", "python -c 'from orchestrator.main import build_arg_parser; build_arg_parser()' && test -w /data"]
       interval: 60s
       timeout: 10s
       retries: 3

@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 # Pinned binary versions — update these ARGs to upgrade scanner binaries.
 # Versions verified against GitHub releases on 2026-03-13.
@@ -20,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
+    gosu \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -99,5 +101,20 @@ USER scanuser
 RUN nuclei -ut -duc 2>&1 | tail -5 \
     || echo "WARNING: nuclei template update failed — templates will be downloaded on first scan"
 
-ENTRYPOINT ["python", "-m", "orchestrator.main"]
-CMD ["--help"]
+# Switch back to root so the entrypoint can fix /data permissions at startup.
+# Security note: the container process starts as root only briefly — the
+# entrypoint immediately drops to scanuser via gosu after chowning /data.
+# This is the standard Docker pattern for handling bind-mount UID mismatches
+# without requiring the host to pre-create directories with specific ownership.
+USER root
+
+# ── Entrypoint ─────────────────────────────────────────────────────────────────
+# The entrypoint creates /data directories, fixes ownership when the container
+# starts as root (common with bind mounts from a different host UID), then
+# drops to scanuser via gosu before running the application.
+# See orchestrator/entrypoint.sh for details.
+COPY orchestrator/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "-m", "orchestrator.main", "--help"]

@@ -80,11 +80,66 @@ def query_db(tmp_path):
             """,
             [
                 ("scan-1", "2026-03-01T10:00:04+00:00", "git", "repo-a", "bandit", "misc", "LOW", "Low", "d", "fp-low"),
-                ("scan-1", "2026-03-01T10:00:03+00:00", "git", "repo-a", "bandit", "misc", "MEDIUM", "Medium", "d", "fp-med"),
-                ("scan-1", "2026-03-01T10:00:02+00:00", "git", "repo-a", "bandit", "misc", "HIGH", "High", "d", "fp-high"),
-                ("scan-1", "2026-03-01T10:00:01+00:00", "git", "repo-a", "bandit", "misc", "CRITICAL", "Critical", "d", "fp-crit"),
-                ("scan-1", "2026-03-01T10:00:05+00:00", "git", "repo-a", "semgrep", "xss", "HIGH", "Shared older", "d", "fp-shared"),
-                ("scan-2", "2026-03-02T10:00:05+00:00", "git", "repo-b", "semgrep", "xss", "CRITICAL", "Shared newer", "d", "fp-shared"),
+                (
+                    "scan-1",
+                    "2026-03-01T10:00:03+00:00",
+                    "git",
+                    "repo-a",
+                    "bandit",
+                    "misc",
+                    "MEDIUM",
+                    "Medium",
+                    "d",
+                    "fp-med",
+                ),
+                (
+                    "scan-1",
+                    "2026-03-01T10:00:02+00:00",
+                    "git",
+                    "repo-a",
+                    "bandit",
+                    "misc",
+                    "HIGH",
+                    "High",
+                    "d",
+                    "fp-high",
+                ),
+                (
+                    "scan-1",
+                    "2026-03-01T10:00:01+00:00",
+                    "git",
+                    "repo-a",
+                    "bandit",
+                    "misc",
+                    "CRITICAL",
+                    "Critical",
+                    "d",
+                    "fp-crit",
+                ),
+                (
+                    "scan-1",
+                    "2026-03-01T10:00:05+00:00",
+                    "git",
+                    "repo-a",
+                    "semgrep",
+                    "xss",
+                    "HIGH",
+                    "Shared older",
+                    "d",
+                    "fp-shared",
+                ),
+                (
+                    "scan-2",
+                    "2026-03-02T10:00:05+00:00",
+                    "git",
+                    "repo-b",
+                    "semgrep",
+                    "xss",
+                    "CRITICAL",
+                    "Shared newer",
+                    "d",
+                    "fp-shared",
+                ),
             ],
         )
 
@@ -94,7 +149,10 @@ def query_db(tmp_path):
 def test_list_findings_uses_severity_rank_with_same_timestamp(query_db):
     """Severity ordering should be risk-based, not alphabetical."""
     with _db.get_connection(query_db) as conn:
-        conn.execute("UPDATE findings SET timestamp = ? WHERE fingerprint IN (?, ?, ?, ?)", ("2026-03-03T00:00:00+00:00", "fp-low", "fp-med", "fp-high", "fp-crit"))
+        conn.execute(
+            "UPDATE findings SET timestamp = ? WHERE fingerprint IN (?, ?, ?, ?)",
+            ("2026-03-03T00:00:00+00:00", "fp-low", "fp-med", "fp-high", "fp-crit"),
+        )
 
     rows = _db.list_findings(query_db, limit=4)
     severities = [row["severity"] for row in rows[:4]]

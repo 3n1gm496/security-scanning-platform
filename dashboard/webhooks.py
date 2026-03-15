@@ -114,9 +114,7 @@ logger = get_logger(__name__)
 def _get_webhook_cipher() -> Fernet:
     """Build the app-level cipher used for webhook secret at-rest encryption."""
     key_material = (
-        os.getenv("DASHBOARD_WEBHOOK_SECRET_KEY")
-        or os.getenv("DASHBOARD_SESSION_SECRET")
-        or "please-change-this"
+        os.getenv("DASHBOARD_WEBHOOK_SECRET_KEY") or os.getenv("DASHBOARD_SESSION_SECRET") or "please-change-this"
     )
     digest = hashlib.sha256(key_material.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(digest))

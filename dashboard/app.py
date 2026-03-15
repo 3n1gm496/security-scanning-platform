@@ -276,6 +276,7 @@ def _client_key(request: Request) -> str:
         return request.client.host
     return "unknown"
 
+
 class SecurityMiddleware:
     """ASGI security middleware for rate limiting and response hardening."""
 

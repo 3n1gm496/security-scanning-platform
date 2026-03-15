@@ -77,7 +77,7 @@ def test_notification_links_escape_identifier_in_href():
     finding = {"id": 'abc" onclick="alert(1)"', "title": "Injected", "description": "desc"}
 
     assert engine.send_critical_finding_alert("test@example.com", finding, "https://dashboard.example.com")
-    assert 'onclick=' not in captured["html"]
+    assert "onclick=" not in captured["html"]
     assert "abc%22+onclick%3D%22alert%281%29%22" in captured["html"]
 
 

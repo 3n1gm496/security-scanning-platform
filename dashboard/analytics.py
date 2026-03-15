@@ -270,8 +270,7 @@ def get_risk_distribution(db_path: str) -> dict[str, Any]:
     """Calculate risk score distribution across all findings."""
     risk_sql = _risk_score_sql()
     with get_connection(db_path) as conn:
-        row = conn.execute(
-            f"""
+        row = conn.execute(f"""
             SELECT
                 COUNT(*) AS total_findings,
                 COALESCE(AVG({risk_sql}), 0.0) AS average_risk,
@@ -282,8 +281,7 @@ def get_risk_distribution(db_path: str) -> dict[str, Any]:
                 COALESCE(SUM(CASE WHEN {risk_sql} >= 25 AND {risk_sql} < 50 THEN 1 ELSE 0 END), 0) AS bucket_25_50,
                 COALESCE(SUM(CASE WHEN {risk_sql} < 25 THEN 1 ELSE 0 END), 0) AS bucket_0_25
             FROM findings
-            """
-        ).fetchone()
+            """).fetchone()
 
     if not row or int(row["total_findings"]) == 0:
         return {
@@ -313,8 +311,7 @@ def get_compliance_summary(db_path: str) -> dict[str, Any]:
     owasp_case = _owasp_case_sql()
     cwe_case = _cwe_case_sql()
     with get_connection(db_path) as conn:
-        owasp_rows = conn.execute(
-            f"""
+        owasp_rows = conn.execute(f"""
             SELECT mapped_owasp AS category, COUNT(*) AS count
             FROM (
                 SELECT {owasp_case} AS mapped_owasp
@@ -323,10 +320,8 @@ def get_compliance_summary(db_path: str) -> dict[str, Any]:
             WHERE mapped_owasp IS NOT NULL
             GROUP BY mapped_owasp
             ORDER BY count DESC, mapped_owasp ASC
-            """
-        ).fetchall()
-        cwe_rows = conn.execute(
-            f"""
+            """).fetchall()
+        cwe_rows = conn.execute(f"""
             SELECT mapped_cwe AS cwe, COUNT(*) AS count
             FROM (
                 SELECT {cwe_case} AS mapped_cwe
@@ -335,16 +330,13 @@ def get_compliance_summary(db_path: str) -> dict[str, Any]:
             WHERE mapped_cwe IS NOT NULL
             GROUP BY mapped_cwe
             ORDER BY count DESC, mapped_cwe ASC
-            """
-        ).fetchall()
-        totals = conn.execute(
-            f"""
+            """).fetchall()
+        totals = conn.execute(f"""
             SELECT
                 COUNT(*) AS total_findings,
                 COALESCE(SUM(CASE WHEN {owasp_case} IS NULL THEN 1 ELSE 0 END), 0) AS unmapped_findings
             FROM findings
-            """
-        ).fetchone()
+            """).fetchone()
 
     return {
         "owasp_top_10": [{"category": row["category"], "count": row["count"]} for row in owasp_rows],
@@ -408,8 +400,7 @@ def get_target_risk_ranking(db_path: str) -> list[dict[str, Any]]:
     """Rank targets by aggregated risk score."""
     risk_sql = _risk_score_sql()
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            f"""
+        rows = conn.execute(f"""
             SELECT
                 target_name AS target,
                 COUNT(*) AS findings_count,
@@ -419,8 +410,7 @@ def get_target_risk_ranking(db_path: str) -> list[dict[str, Any]]:
             FROM findings
             GROUP BY target_name
             ORDER BY total_risk DESC, target_name ASC
-            """
-        ).fetchall()
+            """).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -428,8 +418,7 @@ def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
     """Analyze tool effectiveness by findings and risk detection."""
     risk_sql = _risk_score_sql()
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            f"""
+        rows = conn.execute(f"""
             SELECT
                 tool,
                 COUNT(*) AS total_findings,
@@ -443,6 +432,5 @@ def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
             FROM findings
             GROUP BY tool
             ORDER BY high_risk_findings DESC, tool ASC
-            """
-        ).fetchall()
+            """).fetchall()
     return [dict(row) for row in rows]

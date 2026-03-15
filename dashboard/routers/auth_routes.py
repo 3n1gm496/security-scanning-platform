@@ -74,7 +74,9 @@ async def login(
         request.session["role"] = db_user["role"]
     else:
         request.session["user"] = username
-        request.session["role"] = os.getenv("DASHBOARD_SESSION_ROLE", Role.ADMIN.value).strip().lower() or Role.ADMIN.value
+        request.session["role"] = (
+            os.getenv("DASHBOARD_SESSION_ROLE", Role.ADMIN.value).strip().lower() or Role.ADMIN.value
+        )
     request.session["csrf_token"] = csrf_token
     response = HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
     response.set_cookie(

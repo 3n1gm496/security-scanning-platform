@@ -232,7 +232,16 @@ class TestBulkUpdateStatusReporting:
             conn.execute(
                 "INSERT OR IGNORE INTO scans (id, created_at, finished_at, target_type, target_name, target_value, status, policy_status) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                ("scan-bulk", "2026-01-01T00:00:00", "2026-01-01T00:01:00", "git", "t", "v", "COMPLETED_CLEAN", "PASSED"),
+                (
+                    "scan-bulk",
+                    "2026-01-01T00:00:00",
+                    "2026-01-01T00:01:00",
+                    "git",
+                    "t",
+                    "v",
+                    "COMPLETED_CLEAN",
+                    "PASSED",
+                ),
             )
             conn.execute(
                 "INSERT OR IGNORE INTO findings (id, scan_id, timestamp, target_type, target_name, tool, category, severity, title, description) "

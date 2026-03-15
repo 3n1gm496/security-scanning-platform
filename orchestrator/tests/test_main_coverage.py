@@ -303,7 +303,9 @@ class TestRunTargetsConcurrentlyPolicyBlock:
             }
         )
 
-        monkeypatch.setattr("orchestrator.main.run_single_scan", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(
+            "orchestrator.main.run_single_scan", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
 
         results, exit_code = run_targets_concurrently(
             targets=[target],

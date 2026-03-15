@@ -74,6 +74,7 @@ def stub_db(monkeypatch):
         monkeypatch.setattr(module, "target_breakdown", lambda path: {})
         monkeypatch.setattr(module, "scans_trend", lambda path, days: [])
         monkeypatch.setattr(module, "list_scans", lambda path, limit=12: [])
+
     async def _fake_auth():
         return AuthContext(role=Role.ADMIN, user_id="pytest")
 

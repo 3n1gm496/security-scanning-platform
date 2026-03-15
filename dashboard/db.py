@@ -432,9 +432,7 @@ def _run_migrations(db_path: str) -> None:
                 except Exception as exc:
                     message = str(exc).lower()
                     ignorable = (
-                        "duplicate column" in message
-                        or "already exists" in message
-                        or ("duplicate_object" in message)
+                        "duplicate column" in message or "already exists" in message or ("duplicate_object" in message)
                     )
                     if not ignorable:
                         raise

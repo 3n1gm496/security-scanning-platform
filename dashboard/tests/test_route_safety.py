@@ -40,6 +40,7 @@ def test_logout_get_rejected():
 
 def test_audit_csv_export_sanitizes_formula_values():
     """Audit CSV export should escape formula-leading values."""
+
     class FakeConn:
         def __enter__(self):
             return self

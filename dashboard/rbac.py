@@ -258,6 +258,19 @@ def log_audit(
         )
 
 
+def purge_audit_log(retention_days: int = 90) -> int:
+    """Delete audit log entries older than retention_days.
+
+    Returns the number of rows deleted.
+    """
+    with get_connection(DASHBOARD_DB_PATH) as conn:
+        cursor = conn.execute(
+            "DELETE FROM audit_log WHERE timestamp < date('now', ?)",
+            (f"-{retention_days} day",),
+        )
+    return cursor.rowcount
+
+
 def create_default_admin_key():
     """Create a default admin API key if no keys exist."""
     with get_connection(DASHBOARD_DB_PATH) as conn:

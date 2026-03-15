@@ -7,7 +7,14 @@ from starlette import status
 
 from auth import require_auth, require_permission, AuthContext
 from rbac import Permission, log_audit
-from webhooks import WebhookEvent, create_webhook, list_webhooks, delete_webhook, toggle_webhook
+from webhooks import (
+    WebhookEvent,
+    create_webhook,
+    list_webhooks,
+    delete_webhook,
+    toggle_webhook,
+    rotate_webhook_secret,
+)
 
 router = APIRouter(prefix="/api", tags=["webhooks"])
 
@@ -82,3 +89,33 @@ def toggle_webhook_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
 
     return {"status": "updated", "id": webhook_id, "is_active": is_active}
+
+
+@router.post(
+    "/webhooks/{webhook_id}/rotate-secret",
+    dependencies=[Depends(require_permission(Permission.SCAN_WRITE))],
+)
+def rotate_secret_endpoint(
+    webhook_id: int,
+    secret: str = Form(...),
+    auth: AuthContext = Depends(require_auth),
+) -> dict:
+    """Rotate the HMAC signing secret for a webhook (admin/operator only).
+
+    The new secret takes effect immediately. The consumer must be updated
+    to use the new secret before the next delivery.
+    """
+    success = rotate_webhook_secret(webhook_id, secret)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+
+    log_audit(
+        action="webhook.secret_rotated",
+        user_id=auth.user_id,
+        api_key_prefix=auth.api_key_prefix,
+        resource=f"webhook:{webhook_id}",
+        result="success",
+    )
+
+    return {"status": "secret_rotated", "id": webhook_id}

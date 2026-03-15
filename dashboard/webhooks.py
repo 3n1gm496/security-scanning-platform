@@ -209,6 +209,24 @@ def toggle_webhook(webhook_id: int, is_active: bool) -> bool:
     return cursor.rowcount > 0
 
 
+def rotate_webhook_secret(webhook_id: int, new_secret: str) -> bool:
+    """Rotate the HMAC signing secret for a webhook.
+
+    Atomically replaces the secret and resets the consecutive failure
+    counter (the old secret may have caused signature-mismatch failures
+    on the consumer side).
+    """
+    with get_connection(DASHBOARD_DB_PATH) as conn:
+        cursor = conn.execute(
+            "UPDATE webhooks SET secret = ?, consecutive_failures = 0 WHERE id = ?",
+            (new_secret, webhook_id),
+        )
+    if cursor.rowcount > 0:
+        logger.info("webhook.secret_rotated", webhook_id=webhook_id)
+        return True
+    return False
+
+
 def _generate_signature(payload: str, secret: str) -> str:
     """Generate HMAC-SHA256 signature for webhook payload."""
     return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()

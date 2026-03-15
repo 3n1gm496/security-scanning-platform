@@ -288,14 +288,27 @@ def get_findings_by_status(status: Optional[str] = None, limit: int = 100) -> li
     """Get findings filtered by status."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
         if status:
-            query = """
-                SELECT f.*, fs.status, fs.assigned_to, fs.updated_at as state_updated_at
-                FROM findings f
-                LEFT JOIN finding_states fs ON f.id = fs.finding_id
-                WHERE fs.status = ?
-                ORDER BY f.timestamp DESC
-                LIMIT ?
-            """
+            if status == "new":
+                # 'new' is the implicit default for findings with no explicit state
+                query = """
+                    SELECT f.*, COALESCE(fs.status, 'new') as status,
+                           fs.assigned_to, fs.updated_at as state_updated_at
+                    FROM findings f
+                    LEFT JOIN finding_states fs ON f.id = fs.finding_id
+                    WHERE COALESCE(fs.status, 'new') = ?
+                    ORDER BY f.timestamp DESC
+                    LIMIT ?
+                """
+            else:
+                query = """
+                    SELECT f.*, fs.status, fs.assigned_to,
+                           fs.updated_at as state_updated_at
+                    FROM findings f
+                    LEFT JOIN finding_states fs ON f.id = fs.finding_id
+                    WHERE fs.status = ?
+                    ORDER BY f.timestamp DESC
+                    LIMIT ?
+                """
             rows = conn.execute(query, (status, limit)).fetchall()
         else:
             query = """
@@ -350,15 +363,21 @@ def get_triage_summary() -> dict:
     expired = get_expired_risk_acceptances()
 
     # Calculate SLA metrics: findings unactioned for more than 7 days
+    if is_postgres():
+        overdue_condition = "f.timestamp < NOW() - INTERVAL '7 days'"
+    else:
+        overdue_condition = "f.timestamp < datetime('now', '-7 days')"
+
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        overdue_rows = conn.execute("""
+        overdue_query = f"""
             SELECT f.severity, COUNT(*) as count
             FROM findings f
             LEFT JOIN finding_states fs ON f.id = fs.finding_id
             WHERE COALESCE(fs.status, 'new') = 'new'
-              AND f.timestamp < datetime('now', '-7 days')
+              AND {overdue_condition}
             GROUP BY f.severity
-        """).fetchall()
+        """  # nosec B608 — overdue_condition is a hardcoded constant, not user input
+        overdue_rows = conn.execute(overdue_query).fetchall()
     overdue_by_severity = {row["severity"]: row["count"] for row in overdue_rows}
 
     return {

@@ -147,6 +147,12 @@ def paginate_findings(
         )
 
 
+@router.get("/findings/triage-summary")
+def api_triage_summary(auth: AuthContext = Depends(require_auth)) -> dict:
+    """Comprehensive triage summary: status counts, expired risk, overdue findings."""
+    return get_triage_summary()
+
+
 @router.get("/findings/{finding_id}")
 def api_get_finding(
     finding_id: int,
@@ -363,9 +369,3 @@ def generate_badge(target_name: str, auth: AuthContext = Depends(require_auth)) 
 </svg>"""
 
     return Response(content=svg, media_type="image/svg+xml")
-
-
-@router.get("/findings/triage-summary")
-def api_triage_summary(auth: AuthContext = Depends(require_auth)) -> dict:
-    """Comprehensive triage summary: status counts, expired risk, overdue findings."""
-    return get_triage_summary()

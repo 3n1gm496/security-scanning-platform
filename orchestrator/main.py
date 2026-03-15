@@ -512,6 +512,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
                     cache_context={
                         "severities": settings["scanners"]["trivy"].get("severities", ["CRITICAL", "HIGH", "MEDIUM"]),
                         "ignore_unfixed": bool(settings["scanners"]["trivy"].get("ignore_unfixed", False)),
+                        **_git_ctx,
                     },
                 )
             )

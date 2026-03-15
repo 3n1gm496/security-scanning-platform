@@ -8,6 +8,7 @@ import hashlib
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -196,12 +197,17 @@ def install_nuclei(version: str) -> None:
     if not rel:
         print("nuclei: release metadata not found, skipping")
         return
-    # prefer linux amd64 tar.gz
-    asset = pick_asset(rel, ("linux", "amd64")) or pick_asset(rel, ("linux", "64"))
+    # prefer linux amd64 zip, then tar.gz
+    asset = (
+        pick_asset(rel, ("linux", "amd64", ".zip"))
+        or pick_asset(rel, ("linux", "amd64", ".tar.gz"))
+        or pick_asset(rel, ("linux", "64", ".zip"))
+        or pick_asset(rel, ("linux", "64", ".tar.gz"))
+    )
     if not asset:
         print("nuclei: no suitable asset found in release, skipping")
         return
-    out = os.path.join(DOWNLOAD_DIR, "nuclei.tar.gz")
+    out = os.path.join(DOWNLOAD_DIR, os.path.basename(asset["browser_download_url"]))
     print(f"nuclei: downloading {asset['browser_download_url']} -> {out}")
     if not download_url(asset["browser_download_url"], out):
         print("nuclei: download failed")
@@ -209,14 +215,25 @@ def install_nuclei(version: str) -> None:
     if not verify_download(rel, asset, out):
         return
     try:
-        with tarfile.open(out, "r:gz") as tf:
-            for member in tf.getmembers():
-                if os.path.basename(member.name) == "nuclei":
-                    dst = "/usr/local/bin/nuclei"
-                    extract_tar_member(tf, member, dst)
+        dst = "/usr/local/bin/nuclei"
+        if out.endswith(".zip"):
+            with zipfile.ZipFile(out, "r") as zf:
+                for member in zf.namelist():
+                    if os.path.basename(member) != "nuclei" or member.endswith("/"):
+                        continue
+                    with zf.open(member) as src, open(dst, "wb") as dst_file:
+                        shutil.copyfileobj(src, dst_file)
                     ensure_executable(dst)
                     print("nuclei: installed to /usr/local/bin/nuclei")
                     break
+        else:
+            with tarfile.open(out, "r:gz") as tf:
+                for member in tf.getmembers():
+                    if os.path.basename(member.name) == "nuclei":
+                        extract_tar_member(tf, member, dst)
+                        ensure_executable(dst)
+                        print("nuclei: installed to /usr/local/bin/nuclei")
+                        break
     except Exception as e:
         print(f"nuclei: extraction failed: {e}")
 
@@ -227,11 +244,18 @@ def install_grype(version: str) -> None:
     if not rel:
         print("grype: release metadata not found, skipping")
         return
-    asset = pick_asset(rel, ("linux", "amd64")) or pick_asset(rel, ("linux", "64"))
+    asset = (
+        pick_asset(rel, (version.lower(), "linux", "amd64", ".tar.gz"))
+        or pick_asset(rel, ("linux", "amd64", ".tar.gz"))
+        or pick_asset(rel, ("linux", "64", ".tar.gz"))
+        or pick_asset(rel, (version.lower(), "linux", "amd64", ".deb"))
+        or pick_asset(rel, ("linux", "amd64", ".deb"))
+        or pick_asset(rel, ("linux", "64", ".deb"))
+    )
     if not asset:
         print("grype: no suitable asset found in release, skipping")
         return
-    out = os.path.join(DOWNLOAD_DIR, "grype.tar.gz")
+    out = os.path.join(DOWNLOAD_DIR, os.path.basename(asset["browser_download_url"]))
     print(f"grype: downloading {asset['browser_download_url']} -> {out}")
     if not download_url(asset["browser_download_url"], out):
         print("grype: download failed")
@@ -239,14 +263,24 @@ def install_grype(version: str) -> None:
     if not verify_download(rel, asset, out):
         return
     try:
-        with tarfile.open(out, "r:gz") as tf:
-            for member in tf.getmembers():
-                if os.path.basename(member.name) == "grype":
-                    dst = "/usr/local/bin/grype"
-                    extract_tar_member(tf, member, dst)
-                    ensure_executable(dst)
-                    print("grype: installed to /usr/local/bin/grype")
-                    break
+        dst = "/usr/local/bin/grype"
+        if out.endswith(".deb"):
+            with tempfile.TemporaryDirectory(prefix="grype-deb-") as tmpdir:
+                subprocess.run(["dpkg-deb", "-x", out, tmpdir], check=True)
+                candidate = os.path.join(tmpdir, "usr", "bin", "grype")
+                if not os.path.exists(candidate):
+                    raise FileNotFoundError("grype binary not found in .deb package")
+                shutil.copy(candidate, dst)
+                ensure_executable(dst)
+                print("grype: installed to /usr/local/bin/grype")
+        else:
+            with tarfile.open(out, "r:gz") as tf:
+                for member in tf.getmembers():
+                    if os.path.basename(member.name) == "grype":
+                        extract_tar_member(tf, member, dst)
+                        ensure_executable(dst)
+                        print("grype: installed to /usr/local/bin/grype")
+                        break
     except Exception as e:
         print(f"grype: extraction failed: {e}")
 

@@ -13,8 +13,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-security} -d ${POSTGRES_DB:-security_scans}"]
       interval: 10s
@@ -22,13 +20,18 @@ services:
       retries: 5
     restart: unless-stopped
     profiles: ["postgres"]
+    networks:
+      - backend
 
   # -------------------------------------------------------------------------
-  # OWASP ZAP — DAST scanner (always started, used by the orchestrator)
+  # OWASP ZAP — DAST scanner (internal only, used by the orchestrator)
   #
   # The orchestrator auto-enables ZAP when ZAP_API_URL is set in its
   # environment. The default api_key is "zap-api-key" — override via
   # ZAP_API_KEY in .env for production deployments.
+  #
+  # ZAP is NOT exposed to the host — it is only reachable from the
+  # internal "backend" network by the orchestrator and dashboard.
   # -------------------------------------------------------------------------
   zap:
     image: ghcr.io/zaproxy/zaproxy:stable
@@ -42,8 +45,6 @@ services:
       -config api.addrs.addr.regex=true
       -config api.key=${ZAP_API_KEY:-zap-api-key}
       -config connection.timeoutInSecs=60
-    ports:
-      - "${ZAP_PORT:-8090}:8090"
     environment:
       - JAVA_OPTS=-Xmx512m
     healthcheck:
@@ -57,6 +58,8 @@ services:
     restart: unless-stopped
     volumes:
       - zap_data:/home/zap/.ZAP
+    networks:
+      - backend
 
   orchestrator:
     build:
@@ -71,6 +74,7 @@ services:
       WORKSPACE_DIR: ${WORKSPACE_DIR:-/data/workspaces}
       TRIVY_CACHE_DIR: ${TRIVY_CACHE_DIR:-/data/cache/trivy}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
       # ZAP integration — auto-enables owasp_zap scanner when set
       ZAP_API_URL: ${ZAP_API_URL:-http://zap:8090}
       ZAP_API_KEY: ${ZAP_API_KEY:-zap-api-key}
@@ -93,6 +97,8 @@ services:
         required: false
     restart: "no"
     profiles: ["manual"]
+    networks:
+      - backend
 
   dashboard:
     build:
@@ -107,6 +113,7 @@ services:
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-change-me}
       DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-please-change-this}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
       # ZAP integration — forwarded to orchestrator subprocess via scan_runner.py
       ZAP_API_URL: ${ZAP_API_URL:-http://zap:8090}
       ZAP_API_KEY: ${ZAP_API_KEY:-zap-api-key}
@@ -126,6 +133,16 @@ services:
         condition: service_healthy
         required: false
     restart: unless-stopped
+    networks:
+      - frontend
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres_data:

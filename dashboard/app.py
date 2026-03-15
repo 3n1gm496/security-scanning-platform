@@ -22,6 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from csrf import CSRFMiddleware
 
 from db import (
@@ -113,6 +114,8 @@ def _verify_password(plain: str, stored: str) -> bool:
 # Enables the Secure flag on session cookies and enforces https_only in SessionMiddleware.
 HTTPS_ONLY = os.getenv("DASHBOARD_HTTPS_ONLY", "0").strip().lower() in ("1", "true", "yes")
 SESSION_MAX_AGE = int(os.getenv("DASHBOARD_SESSION_MAX_AGE", "86400"))  # 24 hours
+# Comma-separated list of allowed CORS origins. Empty = same-origin only (no CORS headers).
+CORS_ORIGINS = [o.strip() for o in os.getenv("DASHBOARD_CORS_ORIGINS", "").split(",") if o.strip()]
 # Scans stuck in RUNNING for longer than this (seconds) are marked FAILED.
 SCAN_TIMEOUT_SECONDS = int(os.getenv("SCAN_TIMEOUT_SECONDS", "3600"))  # 1 hour
 # How often the watchdog checks for stale scans (seconds).
@@ -174,6 +177,14 @@ app.add_middleware(
     same_site="lax",
     max_age=SESSION_MAX_AGE,
 )
+if CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        allow_headers=["*"],
+    )
 
 # ── Database initialisation (scans + findings) ───────────────────────────────
 # The dashboard may start before the orchestrator has ever written to the DB.

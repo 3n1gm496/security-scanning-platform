@@ -1,0 +1,65 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.py[cod]
+*.egg-info
+dist/
+build/
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+coverage*.xml
+**/tests/
+
+# Database files (runtime data, not image content)
+*.db
+*.sqlite
+*.sqlite3
+
+# Data directories
+data/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+
+# Demo app (intentionally vulnerable, not for production)
+demo/
+
+# Documentation
+*.md
+LICENSE
+
+# Docker files (avoid recursive COPY)
+docker-compose*.yml

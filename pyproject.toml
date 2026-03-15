@@ -59,6 +59,8 @@ omit = [
     "*/venv/*",
     "*/.venv/*",
     "*/demo/*",
+    "orchestrator/scripts/*",
+    "orchestrator/setup.py",
 ]
 
 [tool.coverage.report]

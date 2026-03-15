@@ -13,6 +13,13 @@ import pytest
 import fastapi.testclient as fastapi_testclient
 import starlette.testclient as starlette_testclient
 
+# Ensure real bcrypt is loaded before test modules that may install a fallback
+# stub when "bcrypt" is missing from sys.modules.
+try:
+    import bcrypt  # noqa: F401
+except Exception:
+    pass
+
 # Set default test database path before any imports
 _test_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
 _test_db.close()

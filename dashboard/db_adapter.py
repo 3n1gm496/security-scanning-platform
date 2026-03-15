@@ -18,9 +18,7 @@ import os
 import re
 import sqlite3
 import threading
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Generator
 
 from logging_config import get_logger
 

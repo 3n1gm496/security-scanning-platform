@@ -25,15 +25,15 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-orchestrator-${{ matrix.python-version }}-${{ hashFiles('orchestrator/requirements.txt') }}
+        key: ${{ runner.os }}-pip-orchestrator-${{ matrix.python-version }}-${{ hashFiles('orchestrator/requirements-test.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-orchestrator-${{ matrix.python-version }}-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r orchestrator/requirements.txt
-        pip install pytest pytest-cov pytest-asyncio "black==26.3.1" flake8 isort bandit pip-audit
+        pip install -r orchestrator/requirements-test.txt
+        pip install "black==26.3.1" flake8 isort pip-audit
 
     - name: Dependency vulnerability audit
       run: |
@@ -54,12 +54,13 @@ jobs:
 
     - name: Run orchestrator tests
       run: |
-        PYTHONPATH=. pytest orchestrator/tests -v --cov=orchestrator --cov-report=xml --cov-report=term-missing
+        PYTHONPATH=. pytest orchestrator/tests -v --cov=orchestrator --cov-report=xml:coverage-orchestrator.xml --cov-report=term-missing
 
     - name: Upload orchestrator coverage
       uses: codecov/codecov-action@v4
+      if: always()
       with:
-        file: ./coverage.xml
+        file: ./coverage-orchestrator.xml
         flags: orchestrator
         name: codecov-orchestrator-${{ matrix.python-version }}
 
@@ -81,15 +82,15 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-dashboard-${{ matrix.python-version }}-${{ hashFiles('dashboard/requirements.txt') }}
+        key: ${{ runner.os }}-pip-dashboard-${{ matrix.python-version }}-${{ hashFiles('dashboard/requirements-test.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-dashboard-${{ matrix.python-version }}-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r dashboard/requirements.txt
-        pip install pytest pytest-cov pytest-asyncio httpx "black==26.3.1" flake8 isort bandit pip-audit
+        pip install -r dashboard/requirements-test.txt
+        pip install "black==26.3.1" flake8 isort pip-audit
 
     - name: Dependency vulnerability audit
       run: |
@@ -110,12 +111,13 @@ jobs:
 
     - name: Run dashboard tests
       run: |
-        PYTHONPATH=. pytest dashboard/tests -v --cov=dashboard --cov-report=xml --cov-report=term-missing
+        PYTHONPATH=dashboard pytest dashboard/tests -v --cov=dashboard --cov-report=xml:coverage-dashboard.xml --cov-report=term-missing
 
     - name: Upload dashboard coverage
       uses: codecov/codecov-action@v4
+      if: always()
       with:
-        file: ./coverage.xml
+        file: ./coverage-dashboard.xml
         flags: dashboard
         name: codecov-dashboard-${{ matrix.python-version }}
 

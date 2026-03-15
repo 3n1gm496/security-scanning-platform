@@ -135,8 +135,11 @@ async def _scan_timeout_watchdog():
                 if stale:
                     ids = [row["id"] for row in stale]
                     for sid in ids:
+                        # Guard with AND status='RUNNING' to avoid overwriting
+                        # a scan that completed between SELECT and UPDATE.
                         conn.execute(
-                            "UPDATE scans SET status='FAILED', finished_at=?, error_message=? WHERE id=?",
+                            "UPDATE scans SET status='FAILED', finished_at=?, error_message=? "
+                            "WHERE id=? AND UPPER(status) = 'RUNNING'",
                             (
                                 datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
                                 f"Scan timed out after {SCAN_TIMEOUT_SECONDS}s",

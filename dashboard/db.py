@@ -13,7 +13,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from common.schema import SCHEMA_SQL, MIGRATIONS as _MIGRATIONS
-from db_adapter import get_connection
+from db_adapter import get_connection, adapt_schema
 from logging_config import get_logger
 
 LOGGER = get_logger(__name__)
@@ -335,7 +335,7 @@ def _run_migrations(db_path: str) -> None:
     for version, description, sql in pending:
         with _conn(db_path) as conn:
             if sql.strip():
-                conn.executescript(sql)
+                conn.executescript(adapt_schema(sql))
             conn.execute(
                 "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
                 (version, description, _utc_now()),
@@ -346,5 +346,5 @@ def _run_migrations(db_path: str) -> None:
 def init_db(db_path: str):
     """Initialise the database schema if it does not exist."""
     with _conn(db_path) as conn:
-        conn.executescript(SCHEMA_SQL)
+        conn.executescript(adapt_schema(SCHEMA_SQL))
     _run_migrations(db_path)

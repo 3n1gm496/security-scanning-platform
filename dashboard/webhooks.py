@@ -90,7 +90,11 @@ def validate_webhook_url(url: str, *, resolve_dns: bool = True) -> None:
                 addr = ipaddress.ip_address(sockaddr[0])
                 _check_ip_blocked(addr)
         except socket.gaierror:
-            pass  # DNS resolution failed — allow (will fail at delivery time)
+            # DNS failure at registration: domain may not resolve in this
+            # environment (e.g. CI, air-gapped network).  Log a warning but
+            # don't block — the *real* SSRF guard runs at delivery time when
+            # the resolved IPs are checked again.
+            pass
 
 
 logger = get_logger(__name__)

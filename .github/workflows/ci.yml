@@ -138,6 +138,7 @@ jobs:
         file: orchestrator/Dockerfile
         push: false
         tags: security-scanner-orchestrator:test
+        load: true
 
     - name: Build dashboard image
       uses: docker/build-push-action@v5
@@ -147,3 +148,22 @@ jobs:
         file: dashboard/Dockerfile
         push: false
         tags: security-scanner-dashboard:test
+        load: true
+
+    - name: Scan orchestrator image with Trivy
+      uses: aquasecurity/trivy-action@0.28.0
+      with:
+        image-ref: 'security-scanner-orchestrator:test'
+        format: 'table'
+        exit-code: '1'
+        severity: 'CRITICAL,HIGH'
+        ignore-unfixed: true
+
+    - name: Scan dashboard image with Trivy
+      uses: aquasecurity/trivy-action@0.28.0
+      with:
+        image-ref: 'security-scanner-dashboard:test'
+        format: 'table'
+        exit-code: '1'
+        severity: 'CRITICAL,HIGH'
+        ignore-unfixed: true

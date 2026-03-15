@@ -1,7 +1,8 @@
-"""Scan-related routes: trigger, list, compare, paginate, detail, scanner health."""
+"""Scan-related routes: trigger, list, compare, paginate, detail, scanner health, SSE."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -9,7 +10,8 @@ import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from starlette import status
 
 from auth import require_auth, require_permission, AuthContext
@@ -17,6 +19,7 @@ from db import get_connection, list_scans
 from rbac import Permission
 from pagination import ScansPaginator
 from scan_runner import run_scan
+from scan_events import subscribe, unsubscribe
 
 from routers._shared import DB_PATH, scan_queue_submit
 
@@ -277,3 +280,41 @@ def scanners_health(auth: AuthContext = Depends(require_auth)) -> dict:
     results = scanner_health_check()
     available = sum(1 for r in results if r["available"])
     return {"scanners": results, "available_count": available, "total_count": len(results)}
+
+
+@router.get("/scans/events")
+async def scan_events_stream(request: Request, auth: AuthContext = Depends(require_auth)):
+    """Server-Sent Events stream for real-time scan progress updates.
+
+    Clients connect with EventSource('/api/scans/events') and receive
+    JSON-encoded events whenever scan status changes (started, completed, failed).
+    """
+    client_id = f"sse-{_uuid.uuid4().hex[:8]}"
+    queue = await subscribe(client_id)
+
+    async def _generate():
+        try:
+            # Send initial keepalive
+            yield f"event: connected\ndata: {json.dumps({'client_id': client_id})}\n\n"
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive comment to prevent proxy/browser timeouts
+                    yield ": keepalive\n\n"
+        finally:
+            await unsubscribe(client_id)
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

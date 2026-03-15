@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from db import get_connection
 from logging_config import get_logger
+from scan_events import publish_sync
 
 LOGGER = get_logger(__name__)
 
@@ -84,6 +85,7 @@ def run_scan(
 
     insert_running_scan(scan_id, started_at, target_type, name, target)
     LOGGER.info("scan.starting", scan_id=scan_id, name=name, target=target, target_type=target_type)
+    publish_sync("scan_started", {"scan_id": scan_id, "target_name": name, "target_type": target_type})
 
     try:
         env = os.environ.copy()
@@ -129,19 +131,23 @@ def run_scan(
         try:
             output_json = json.loads(result.stdout)
             LOGGER.info("scan.completed", scan_id=scan_id, returncode=result.returncode)
+            publish_sync("scan_completed", {"scan_id": scan_id, "target_name": name, "returncode": result.returncode})
             return {"status": "completed", "scan_id": scan_id, "output": output_json, "returncode": result.returncode}
         except json.JSONDecodeError:
             msg = "Failed to parse orchestrator output"
             LOGGER.error("scan.output_parse_error", scan_id=scan_id, returncode=result.returncode)
             update_scan_failed(scan_id, msg)
+            publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
             return {"status": "error", "scan_id": scan_id, "message": msg, "returncode": result.returncode}
 
     except subprocess.TimeoutExpired:
         msg = "Scan timed out after 30 minutes"
         LOGGER.error("scan.timeout", scan_id=scan_id, name=name)
         update_scan_failed(scan_id, msg)
+        publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
         return {"status": "error", "scan_id": scan_id, "message": msg}
     except Exception as e:
         LOGGER.exception("scan.unexpected_error", scan_id=scan_id, error=str(e))
         update_scan_failed(scan_id, str(e))
+        publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": str(e)})
         return {"status": "error", "scan_id": scan_id, "message": str(e)}

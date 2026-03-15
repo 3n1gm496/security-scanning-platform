@@ -322,3 +322,52 @@ def get_finding_stats_by_status() -> dict:
             GROUP BY status
         """).fetchall()
     return {row["status"]: row["count"] for row in rows}
+
+
+def get_expired_risk_acceptances() -> list[dict]:
+    """Return findings with expired risk acceptance that need re-evaluation."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_connection(DASHBOARD_DB_PATH) as conn:
+        rows = conn.execute(
+            """
+            SELECT f.id, f.title, f.severity, f.tool, f.target_name,
+                   fs.risk_acceptance_justification, fs.risk_acceptance_expires_at
+            FROM findings f
+            JOIN finding_states fs ON f.id = fs.finding_id
+            WHERE fs.status = 'risk_accepted'
+              AND fs.risk_acceptance_expires_at IS NOT NULL
+              AND fs.risk_acceptance_expires_at < ?
+            ORDER BY f.severity DESC, fs.risk_acceptance_expires_at ASC
+            """,
+            (now,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_triage_summary() -> dict:
+    """Return a comprehensive triage summary for the dashboard."""
+    stats = get_finding_stats_by_status()
+    expired = get_expired_risk_acceptances()
+
+    # Calculate SLA metrics: findings unactioned for more than 7 days
+    with get_connection(DASHBOARD_DB_PATH) as conn:
+        overdue_rows = conn.execute("""
+            SELECT f.severity, COUNT(*) as count
+            FROM findings f
+            LEFT JOIN finding_states fs ON f.id = fs.finding_id
+            WHERE COALESCE(fs.status, 'new') = 'new'
+              AND f.timestamp < datetime('now', '-7 days')
+            GROUP BY f.severity
+        """).fetchall()
+    overdue_by_severity = {row["severity"]: row["count"] for row in overdue_rows}
+
+    return {
+        "status_counts": stats,
+        "total_findings": sum(stats.values()),
+        "open_findings": stats.get("new", 0) + stats.get("acknowledged", 0) + stats.get("in_progress", 0),
+        "resolved_findings": stats.get("resolved", 0),
+        "suppressed_findings": stats.get("false_positive", 0) + stats.get("risk_accepted", 0),
+        "expired_risk_acceptances": len(expired),
+        "expired_details": expired[:20],
+        "overdue_by_severity": overdue_by_severity,
+    }

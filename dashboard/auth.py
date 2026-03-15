@@ -15,10 +15,17 @@ security = HTTPBearer(auto_error=False)
 class AuthContext:
     """Authentication context for the current request."""
 
-    def __init__(self, role: Role, api_key_prefix: Optional[str] = None, user_id: Optional[str] = None):
+    def __init__(
+        self,
+        role: Role,
+        api_key_prefix: Optional[str] = None,
+        user_id: Optional[str] = None,
+        tenant_id: str = "default",
+    ):
         self.role = role
         self.api_key_prefix = api_key_prefix
         self.user_id = user_id
+        self.tenant_id = tenant_id
 
     def has_permission(self, permission: Permission) -> bool:
         """Check if the current user has a specific permission."""
@@ -67,7 +74,11 @@ def _auth_from_api_key(request: Request, authorization: Optional[str]) -> Option
         ip_address=request.client.host if request.client else None,
     )
 
-    return AuthContext(role=Role(key_info["role"]), api_key_prefix=key_info["key_prefix"])
+    return AuthContext(
+        role=Role(key_info["role"]),
+        api_key_prefix=key_info["key_prefix"],
+        tenant_id=key_info.get("tenant_id", "default"),
+    )
 
 
 def _auth_from_session(request: Request) -> Optional[AuthContext]:

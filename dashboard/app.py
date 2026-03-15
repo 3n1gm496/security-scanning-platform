@@ -168,7 +168,7 @@ async def _lifespan(app):
 app = FastAPI(title=APP_TITLE, lifespan=_lifespan)
 app.add_middleware(
     CSRFMiddleware,
-    exempt_paths={"/login", "/api/health", "/api/ready", "/api/metrics", "/metrics"},
+    exempt_paths={"/login", "/api/health", "/api/ready", "/api/metrics", "/metrics", "/api/scans/events"},
 )
 app.add_middleware(
     SessionMiddleware,

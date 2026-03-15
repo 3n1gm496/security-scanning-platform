@@ -224,4 +224,16 @@ ALTER TABLE scans ADD COLUMN git_sha TEXT;
 CREATE INDEX IF NOT EXISTS idx_scans_target_name ON scans(target_name);
 """,
     ),
+    (
+        6,
+        "add tenant_id column for multi-tenant isolation",
+        """
+ALTER TABLE scans ADD COLUMN tenant_id TEXT DEFAULT 'default';
+ALTER TABLE findings ADD COLUMN tenant_id TEXT DEFAULT 'default';
+ALTER TABLE api_keys ADD COLUMN tenant_id TEXT DEFAULT 'default';
+CREATE INDEX IF NOT EXISTS idx_scans_tenant ON scans(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_findings_tenant ON findings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id);
+""",
+    ),
 ]

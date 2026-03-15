@@ -296,6 +296,9 @@ EMAIL_FROM_NAME=Security Scanner
 # WEBHOOK_TIMEOUT_SECONDS=10
 # WEBHOOK_RETRY_COUNT=3
 # WEBHOOK_CIRCUIT_BREAKER_THRESHOLD=5
+# DASHBOARD_MAX_SCAN_WORKERS=4
+# DASHBOARD_MAX_SCAN_QUEUE=20
+# DASHBOARD_SESSION_MAX_AGE=86400
 ```
 
 ---
@@ -668,8 +671,13 @@ Set `DASHBOARD_HTTPS_ONLY=1` in `.env` to enable `Secure` cookie flag.
 - **Network**: Only expose port `8080` on trusted network interfaces.
 - **Docker Socket**: If mounting the Docker socket, apply security best practices to protect it.
 - **HTTPS**: Use a reverse proxy (e.g. Nginx, Caddy) to terminate TLS and add additional security headers.
-- **Webhooks**: The platform blocks SSRF attempts (private IPs, loopback, link-local, AWS IMDS) and validates DNS resolution. Only public endpoints are allowed.
-- **API Keys**: Use least-privilege roles (`viewer` for read-only, `operator` for scans, `admin` for full access). Revoke unused keys.
+- **Sessions**: Sessions expire after 24 hours by default (configurable via `DASHBOARD_SESSION_MAX_AGE`). Sessions are regenerated on login to prevent fixation attacks.
+- **CSRF**: Mutating requests require a valid CSRF token. Bearer API key authentication bypasses CSRF only after validating the key.
+- **Webhooks**: The platform blocks SSRF attempts (private IPs, loopback, link-local, AWS IMDS) and validates DNS resolution at both registration and delivery time. Only public endpoints are allowed.
+- **Git Clone**: Repository URLs are validated for SSRF (scheme whitelist + DNS resolution against blocked IP ranges).
+- **Scan Queue**: Bounded to 20 pending scans by default (configurable via `DASHBOARD_MAX_SCAN_QUEUE`) to prevent resource exhaustion.
+- **API Keys**: Use least-privilege roles (`viewer` for read-only, `operator` for scans, `admin` for full access). Revoke unused keys. Legacy SHA-256 key hashes are transparently upgraded to bcrypt on first use.
+- **Foreign Keys**: SQLite foreign key constraints are enforced to maintain referential integrity.
 
 ---
 

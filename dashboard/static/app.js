@@ -566,11 +566,11 @@ createApp({
           const result = await apiFetch('/api/scans/paginated?per_page=20&sort_by=created_at&sort_order=DESC');
           const items = result.items || [];
           this.recentScans = items.slice(0, 12);
-          if (this.currentPage === 'scans') this.scans = items;
 
           // Refresh KPIs and current page data on every poll tick
           try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
           if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
+          else if (this.currentPage === 'scans') { await this.loadScans(); }
           else if (this.currentPage === 'findings') { await this.loadFindings(); }
           else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
 
@@ -591,6 +591,7 @@ createApp({
             // Final refresh to ensure everything is fully up-to-date
             try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
             if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
+            else if (this.currentPage === 'scans') { await this.loadScans(); }
             else if (this.currentPage === 'findings') { await this.loadFindings(); }
             else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
           }
@@ -711,7 +712,7 @@ createApp({
         this.charts.severity.data.labels = labels;
         this.charts.severity.data.datasets[0].data = values;
         this.charts.severity.data.datasets[0].backgroundColor = colors;
-        this.charts.severity.update('none');
+        this.charts.severity.update();
         return;
       }
       const legendColor = () => this.cssVar('--chart-legend') || '#374151';
@@ -816,7 +817,7 @@ createApp({
         dsData.forEach((d, i) => {
           if (this.charts.trend.data.datasets[i]) this.charts.trend.data.datasets[i].data = d;
         });
-        this.charts.trend.update('none');
+        this.charts.trend.update();
         return;
       }
 
@@ -1217,7 +1218,8 @@ createApp({
     // ── Analytics ─────────────────────────────────────────────────────────────
 
     async loadAnalytics() {
-      // Show loading only on first load, not on refresh
+      // Show loading overlay only on first load; dismiss it before chart
+      // building so the fixed overlay doesn't give canvases zero dimensions.
       const isFirstLoad = !this.analyticsData.riskDistribution;
       if (isFirstLoad) this.loading = true;
       try {
@@ -1236,10 +1238,6 @@ createApp({
       this.analyticsRefreshing = true;
 
       this._analyticsRefreshPromise = (async () => {
-        // Ensure DOM is ready before any chart building
-        await nextTick();
-        await new Promise(resolve => requestAnimationFrame(resolve));
-
         const stale = () => refreshSeq !== this._analyticsRefreshSeq;
 
         // Helper: parse severity-breakdown response into { CRITICAL: N, ... }
@@ -1253,49 +1251,50 @@ createApp({
           return d;
         };
 
-        // Fire all requests in parallel; build each chart as soon as its data
-        // arrives instead of waiting for the slowest endpoint.
+        // Fire all requests in parallel; build each chart as its data arrives.
         let sevData = {};
         const results = await Promise.allSettled([
           apiFetch('/api/analytics/risk-distribution').then(d => {
-            if (stale()) return;
-            this.analyticsData.riskDistribution = d;
-            if (this.chartsAvailable) this.buildRiskChart();
+            if (!stale()) this.analyticsData.riskDistribution = d;
           }),
           apiFetch('/api/analytics/compliance').then(d => {
-            if (stale()) return;
-            this.analyticsData.compliance = d;
-            if (this.chartsAvailable) this.buildOwaspChart();
+            if (!stale()) this.analyticsData.compliance = d;
           }),
           apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`).then(d => {
-            if (stale()) return;
-            this.analyticsData.trends = d;
-            if (this.chartsAvailable) this.buildAnalyticsTrendChart();
+            if (!stale()) this.analyticsData.trends = d;
           }),
           apiFetch('/api/analytics/target-risk').then(d => {
-            if (stale()) return;
-            this.analyticsData.targetRisk = d;
+            if (!stale()) this.analyticsData.targetRisk = d;
           }),
           apiFetch('/api/analytics/tool-effectiveness').then(d => {
-            if (stale()) return;
-            this.analyticsData.toolEffectiveness = d;
-            if (this.chartsAvailable) this.buildToolEffChart();
+            if (!stale()) this.analyticsData.toolEffectiveness = d;
           }),
           apiFetch('/api/chart/severity-breakdown').then(fresh => {
-            if (stale()) return;
-            sevData = parseSev(fresh);
-            if (this.chartsAvailable) this.buildSeverityDistChart(sevData);
+            if (!stale()) sevData = parseSev(fresh);
           }),
         ]);
 
         if (stale()) return;
+
+        // Dismiss the loading overlay BEFORE building charts so canvases
+        // are fully visible and have correct dimensions.
+        this.loading = false;
 
         const failedCount = results.filter(r => r.status === 'rejected').length;
         if (failedCount > 0) {
           console.debug(`[analytics] ${failedCount} endpoint(s) failed during refresh`);
         }
 
-        if (this.chartsAvailable) this.forceResizeCharts();
+        if (this.chartsAvailable) {
+          await nextTick();
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          this.buildRiskChart();
+          this.buildOwaspChart();
+          this.buildAnalyticsTrendChart();
+          this.buildToolEffChart();
+          this.buildSeverityDistChart(sevData);
+          this.forceResizeCharts();
+        }
       })();
 
       try {
@@ -1327,7 +1326,7 @@ createApp({
         dsData.forEach((d, i) => {
           if (this.charts.toolEff.data.datasets[i]) this.charts.toolEff.data.datasets[i].data = d;
         });
-        this.charts.toolEff.update('none');
+        this.charts.toolEff.update();
         return;
       }
       this.charts.toolEff = new Chart(canvas.getContext('2d'), {
@@ -1386,7 +1385,7 @@ createApp({
         this.charts.severityDist.data.labels = labels;
         this.charts.severityDist.data.datasets[0].data = values;
         this.charts.severityDist.data.datasets[0].backgroundColor = colors;
-        this.charts.severityDist.update('none');
+        this.charts.severityDist.update();
         return;
       }
       const legendColor = () => this.cssVar('--chart-legend') || '#374151';
@@ -1448,7 +1447,7 @@ createApp({
       if (this.charts.risk) {
         this.charts.risk.data.labels = labels;
         this.charts.risk.data.datasets[0].data = values;
-        this.charts.risk.update('none');
+        this.charts.risk.update();
         return;
       }
       this.charts.risk = new Chart(canvas.getContext('2d'), {
@@ -1491,7 +1490,7 @@ createApp({
       if (this.charts.owasp) {
         this.charts.owasp.data.labels = labels;
         this.charts.owasp.data.datasets[0].data = values;
-        this.charts.owasp.update('none');
+        this.charts.owasp.update();
         return;
       }
       this.charts.owasp = new Chart(canvas.getContext('2d'), {
@@ -1525,7 +1524,7 @@ createApp({
         this.charts.analyticsTrend.data.labels = labels;
         this.charts.analyticsTrend.data.datasets[0].data = avgData;
         this.charts.analyticsTrend.data.datasets[1].data = maxData;
-        this.charts.analyticsTrend.update('none');
+        this.charts.analyticsTrend.update();
         return;
       }
       const gridColor = this.cssVar('--chart-grid');

@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 import importlib
-import logging
 from typing import Any
 
+from orchestrator.logging_config import get_logger
 from orchestrator.scanners import command_exists
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 # Centralized compatibility matrix: maps scanner name to supported target types.
 # This is the single source of truth for scanner-target routing.
@@ -65,10 +65,10 @@ def get_compatible_scanners(target_type: str, settings: dict[str, Any]) -> list[
             compatible_scanners.append(matrix_key)
 
     LOGGER.info(
-        "Discovered %d enabled scanners for target_type=%s: %s",
-        len(compatible_scanners),
-        target_type,
-        ", ".join(compatible_scanners) or "none",
+        "scanner.discovery",
+        count=len(compatible_scanners),
+        target_type=target_type,
+        scanners=", ".join(compatible_scanners) or "none",
     )
     return compatible_scanners
 
@@ -85,8 +85,9 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
                 runnable.append(tool)
             except ImportError:
                 LOGGER.warning(
-                    "Tool %s is enabled but python-owasp-zap-v2.4 is not installed. Skipping.",
-                    tool,
+                    "preflight.missing_package",
+                    tool=tool,
+                    package="python-owasp-zap-v2.4",
                 )
                 skipped.append(
                     {
@@ -99,7 +100,7 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
         # Trivy is a special case, as both trivy_fs and trivy_image use the same binary
         binary_name = REQUIRED_BINARIES.get(tool.replace("_fs", "").replace("_image", ""))
         if not binary_name:
-            LOGGER.warning("Tool %s has no required binary defined, skipping preflight check.", tool)
+            LOGGER.warning("preflight.no_binary_defined", tool=tool)
             runnable.append(tool)
             continue
 
@@ -107,9 +108,9 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
             runnable.append(tool)
         else:
             LOGGER.warning(
-                "Tool %s is enabled but its binary ('%s') was not found in PATH. Skipping.",
-                tool,
-                binary_name,
+                "preflight.binary_not_found",
+                tool=tool,
+                binary=binary_name,
             )
             skipped.append(
                 {
@@ -119,8 +120,8 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
             )
 
     LOGGER.info(
-        "Preflight check complete. Runnable: %d, Skipped: %d",
-        len(runnable),
-        len(skipped),
+        "preflight.complete",
+        runnable=len(runnable),
+        skipped=len(skipped),
     )
     return runnable, skipped

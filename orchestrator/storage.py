@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +12,10 @@ if _project_root not in sys.path:
 
 from common.schema import SCHEMA_SQL, MIGRATIONS as _MIGRATIONS
 from orchestrator.db_adapter import adapt_schema, get_connection
+from orchestrator.logging_config import get_logger
 from orchestrator.models import Finding, ScanResult
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 def _utc_now() -> str:
@@ -41,7 +41,7 @@ def run_migrations(db_path: str) -> None:
                 "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
                 (version, description, _utc_now()),
             )
-        LOGGER.info("Applied schema migration v%s: %s", version, description)
+        LOGGER.info("schema.migration_applied", version=version, description=description)
 
 
 def connect(db_path: str):
@@ -55,7 +55,7 @@ def init_db(db_path: str) -> None:
         conn.executescript(adapted)
         conn.commit()
     run_migrations(db_path)
-    LOGGER.info("Database initialised at %s", db_path)
+    LOGGER.info("db.initialized", db_path=db_path)
 
 
 def _to_text(value):
@@ -150,7 +150,7 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
             ],
         )
         conn.commit()
-    LOGGER.info("Persisted scan %s with %s findings", result.scan_id, len(result.findings))
+    LOGGER.info("scan.persisted", scan_id=result.scan_id, findings=len(result.findings))
 
 
 def write_json_file(path: str | Path, payload: dict | list) -> None:

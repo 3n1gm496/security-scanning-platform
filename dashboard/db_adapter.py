@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator
@@ -84,6 +85,48 @@ def _sqlite_connect(db_path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+# ---------------------------------------------------------------------------
+# Thread-local connection pool for SQLite
+# ---------------------------------------------------------------------------
+# SQLite connections cannot be shared across threads. Instead of creating a
+# new connection on every request we cache one per thread, which avoids the
+# repeated PRAGMA round-trips and file-open overhead.
+
+_thread_local = threading.local()
+
+
+def _get_sqlite_pooled(db_path: str) -> sqlite3.Connection:
+    """Return a reusable SQLite connection for the current thread."""
+    conn = getattr(_thread_local, "sqlite_conn", None)
+    cached_path = getattr(_thread_local, "sqlite_path", None)
+
+    if conn is not None and cached_path == db_path:
+        # Verify the connection is still usable (not closed).
+        try:
+            conn.execute("SELECT 1")
+            return conn
+        except Exception:
+            pass  # Stale connection — recreate below.
+
+    # Create and cache a fresh connection.
+    conn = _sqlite_connect(db_path)
+    _thread_local.sqlite_conn = conn
+    _thread_local.sqlite_path = db_path
+    return conn
+
+
+def reset_pool() -> None:
+    """Discard the thread-local cached connection (useful in tests)."""
+    conn = getattr(_thread_local, "sqlite_conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    _thread_local.sqlite_conn = None
+    _thread_local.sqlite_path = None
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +294,10 @@ def get_connection(db_path: str | None = None) -> _ConnectionWrapper:
     """
     Return a connection wrapper for the configured backend.
 
+    SQLite connections are cached per-thread to avoid repeated setup overhead.
+    PostgreSQL connections are created fresh (use an external pool like
+    pgBouncer for high-throughput production workloads).
+
     Args:
         db_path: Path to the SQLite file (ignored when DATABASE_URL is set).
                  Defaults to DASHBOARD_DB_PATH env var.
@@ -259,10 +306,9 @@ def get_connection(db_path: str | None = None) -> _ConnectionWrapper:
         LOGGER.debug("db.connect.postgres")
         return _ConnectionWrapper(_pg_connect(), is_pg=True)
 
-    # SQLite fallback
+    # SQLite — reuse thread-local connection
     path = db_path or os.environ.get("DASHBOARD_DB_PATH", "/data/security_scans.db")
-    LOGGER.debug("db.connect.sqlite", path=path)
-    return _ConnectionWrapper(_sqlite_connect(path), is_pg=False)
+    return _ConnectionWrapper(_get_sqlite_pooled(path), is_pg=False)
 
 
 def adapt_schema(schema_sql: str) -> str:

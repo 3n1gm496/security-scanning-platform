@@ -87,5 +87,123 @@ CREATE INDEX IF NOT EXISTS idx_findings_target_severity
     #   - notification_preferences                                (notifications.py)
     #   - api_keys, users, audit_log                              (rbac.py)
     #   - webhooks, webhook_deliveries                            (webhooks.py)
-    # A future migration should consolidate them here.
+    # Migration v3 below consolidates them into the migration chain.
+    (
+        3,
+        "consolidate dashboard tables into schema migrations",
+        """
+-- RBAC tables
+CREATE TABLE IF NOT EXISTS api_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_hash TEXT UNIQUE NOT NULL,
+    key_prefix TEXT NOT NULL,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT,
+    expires_at TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT,
+    is_active INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    user_id TEXT,
+    api_key_prefix TEXT,
+    action TEXT NOT NULL,
+    resource TEXT,
+    result TEXT,
+    ip_address TEXT
+);
+
+-- Webhook tables
+CREATE TABLE IF NOT EXISTS webhooks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT,
+    events TEXT NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    last_triggered_at TEXT,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    consecutive_failures INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    webhook_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    response_status INTEGER,
+    response_body TEXT,
+    error TEXT,
+    delivered_at TEXT NOT NULL,
+    duration_ms INTEGER,
+    FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
+);
+
+-- Finding management tables
+CREATE TABLE IF NOT EXISTS finding_states (
+    finding_id INTEGER PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'new',
+    assigned_to TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT,
+    resolution_notes TEXT,
+    false_positive_reason TEXT,
+    risk_acceptance_justification TEXT,
+    risk_acceptance_expires_at TEXT,
+    FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS finding_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    finding_id INTEGER NOT NULL,
+    user TEXT NOT NULL,
+    comment TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS finding_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    finding_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_finding_states_status ON finding_states(status);
+CREATE INDEX IF NOT EXISTS idx_finding_states_assigned ON finding_states(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_finding_comments_finding ON finding_comments(finding_id);
+
+-- Notification preferences
+CREATE TABLE IF NOT EXISTS notification_preferences (
+    id INTEGER PRIMARY KEY,
+    user_email TEXT UNIQUE,
+    critical_alerts BOOLEAN DEFAULT 1,
+    high_alerts BOOLEAN DEFAULT 1,
+    scan_summaries BOOLEAN DEFAULT 1,
+    weekly_digest BOOLEAN DEFAULT 0,
+    preferred_channel TEXT DEFAULT 'email',
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+""",
+    ),
 ]

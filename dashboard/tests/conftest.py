@@ -22,6 +22,13 @@ def isolated_db():
     """
     db_path = os.environ["DASHBOARD_DB_PATH"]
 
+    # Discard any pooled connection so it picks up the fresh schema.
+    try:
+        import db_adapter as _da
+        _da.reset_pool()
+    except Exception:
+        pass
+
     # Clean existing tables
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()

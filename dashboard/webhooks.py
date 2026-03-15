@@ -8,6 +8,7 @@ import hmac
 import ipaddress
 import json
 import os
+import random
 import socket
 import time
 from datetime import datetime, timezone
@@ -282,7 +283,9 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
                 )
 
             if attempt < WEBHOOK_RETRY_COUNT - 1:
-                await asyncio.sleep(2**attempt)
+                base_delay = 2**attempt
+                jitter = random.uniform(0, base_delay)
+                await asyncio.sleep(base_delay + jitter)
 
     duration_ms = int((time.time() - start_time) * 1000)
     _log_delivery(webhook["id"], event_type.value, payload_str, response_status, response_body, error_msg, duration_ms)

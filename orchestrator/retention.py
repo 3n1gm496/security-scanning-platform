@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import logging
 import shutil
 import time
 from pathlib import Path
 from typing import Any
 
-LOGGER = logging.getLogger(__name__)
+from orchestrator.logging_config import get_logger
+
+LOGGER = get_logger(__name__)
 
 
 def _is_expired(path: Path, cutoff_ts: float) -> bool:
@@ -32,7 +33,7 @@ def cleanup_path(path: Path, cutoff_ts: float, dry_run: bool = False) -> int:
                     child.unlink(missing_ok=True)
             removed += 1
         except Exception as exc:  # noqa: BLE001
-            LOGGER.warning("Retention cleanup failed for %s: %s", child, exc)
+            LOGGER.warning("retention.cleanup_failed", path=str(child), error=str(exc))
     return removed
 
 

@@ -106,6 +106,14 @@ def test_csp_header_present(client):
     assert "frame-ancestors 'none'" in csp
 
 
+def test_csp_nonce_present(client):
+    """CSP should use a nonce for script-src instead of unsafe-inline."""
+    resp = client.get("/api/health")
+    csp = resp.headers.get("Content-Security-Policy", "")
+    assert "'nonce-" in csp
+    assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
+
+
 def test_hsts_header_present(client):
     """Strict-Transport-Security header must be present on all responses."""
     resp = client.get("/api/health")

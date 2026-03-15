@@ -7,13 +7,14 @@ This module mirrors the dashboard/db_adapter.py interface.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import sqlite3
 from pathlib import Path
 
-LOGGER = logging.getLogger(__name__)
+from orchestrator.logging_config import get_logger
+
+LOGGER = get_logger(__name__)
 
 _DATABASE_URL: str | None = os.environ.get("DATABASE_URL")
 _IS_POSTGRES: bool = bool(_DATABASE_URL and _DATABASE_URL.startswith("postgresql"))
@@ -198,11 +199,11 @@ def get_connection(db_path: str | None = None) -> _ConnectionWrapper:
                  Defaults to ORCH_DB_PATH env var.
     """
     if _IS_POSTGRES:
-        LOGGER.debug("Orchestrator connecting to PostgreSQL via DATABASE_URL")
+        LOGGER.debug("db.connect", backend="postgresql")
         return _ConnectionWrapper(_pg_connect(), is_pg=True)
 
     path = db_path or os.environ.get("ORCH_DB_PATH", "/data/security_scans.db")
-    LOGGER.debug("Orchestrator connecting to SQLite at %s", path)
+    LOGGER.debug("db.connect", backend="sqlite", path=path)
     return _ConnectionWrapper(_sqlite_connect(path), is_pg=False)
 
 

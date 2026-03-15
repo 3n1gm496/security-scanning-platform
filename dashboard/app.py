@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import base64
 import os
 import secrets
 import time
@@ -8,7 +10,7 @@ import io
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from logging_config import configure_logging, get_logger
 
@@ -111,10 +113,46 @@ def _verify_password(plain: str, stored: str) -> bool:
 # Enables the Secure flag on session cookies and enforces https_only in SessionMiddleware.
 HTTPS_ONLY = os.getenv("DASHBOARD_HTTPS_ONLY", "0").strip().lower() in ("1", "true", "yes")
 SESSION_MAX_AGE = int(os.getenv("DASHBOARD_SESSION_MAX_AGE", "86400"))  # 24 hours
+# Scans stuck in RUNNING for longer than this (seconds) are marked FAILED.
+SCAN_TIMEOUT_SECONDS = int(os.getenv("SCAN_TIMEOUT_SECONDS", "3600"))  # 1 hour
+# How often the watchdog checks for stale scans (seconds).
+SCAN_WATCHDOG_INTERVAL_SECONDS = int(os.getenv("SCAN_WATCHDOG_INTERVAL_SECONDS", "120"))  # 2 min
+
+
+async def _scan_timeout_watchdog():
+    """Background loop that marks RUNNING scans older than SCAN_TIMEOUT_SECONDS as FAILED."""
+    while True:
+        await asyncio.sleep(SCAN_WATCHDOG_INTERVAL_SECONDS)
+        try:
+            cutoff = datetime.now(timezone.utc).replace(microsecond=0) - \
+                timedelta(seconds=SCAN_TIMEOUT_SECONDS)
+            cutoff_iso = cutoff.isoformat()
+            with get_connection(DB_PATH) as conn:
+                stale = conn.execute(
+                    "SELECT id FROM scans WHERE UPPER(status) = 'RUNNING' AND created_at < ?",
+                    (cutoff_iso,),
+                ).fetchall()
+                if stale:
+                    ids = [row["id"] for row in stale]
+                    for sid in ids:
+                        conn.execute(
+                            "UPDATE scans SET status='FAILED', finished_at=?, error_message=? WHERE id=?",
+                            (
+                                datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                                f"Scan timed out after {SCAN_TIMEOUT_SECONDS}s",
+                                sid,
+                            ),
+                        )
+                    LOGGER.warning("watchdog.stale_scans_failed", count=len(ids), scan_ids=ids)
+        except Exception as exc:
+            LOGGER.error("watchdog.error", error=str(exc))
+
 
 @asynccontextmanager
 async def _lifespan(app):
+    watchdog_task = asyncio.create_task(_scan_timeout_watchdog())
     yield
+    watchdog_task.cancel()
     # Graceful shutdown: wait for running scans to complete.
     from routers._shared import scan_executor as _scan_exec
     LOGGER.info("app.shutdown", detail="Waiting for running scans to finish...")
@@ -229,19 +267,20 @@ async def security_middleware(request: Request, call_next):
                 headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
             )
 
+    # Generate a per-request CSP nonce to eliminate 'unsafe-inline' from script-src.
+    nonce = base64.b64encode(secrets.token_bytes(16)).decode()
+    request.state.csp_nonce = nonce
+
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cache-Control"] = "no-store"
-    # Content-Security-Policy: restrict sources to self; allow inline styles
-    # for Jinja2 templates and Chart.js canvas rendering.
+    # Content-Security-Policy: nonce-based script-src replaces 'unsafe-inline'.
+    # 'unsafe-eval' remains required for Vue.js 3 runtime template compilation.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        # Vue 3 runtime-only (vue.global.prod.js) compiles in-DOM templates via eval();
-        # 'unsafe-eval' is required for the SPA to mount. To remove it, pre-compile
-        # templates with a build tool (Vite/webpack) and switch to vue.esm-bundler.js.
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
+        f"script-src 'self' 'nonce-{nonce}' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
@@ -292,6 +331,7 @@ def get_current_user(request: Request) -> str:
 def index(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
     context = {
         "user": user,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
         "kpis": fetch_kpis(DB_PATH),
         "severity_breakdown": severity_breakdown(DB_PATH),
         "tool_breakdown": tool_breakdown(DB_PATH),

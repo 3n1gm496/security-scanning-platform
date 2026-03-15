@@ -208,8 +208,11 @@ class ChartingEngine:
             SELECT
                 DATE(created_at) as date,
                 COUNT(*) as total_scans,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+                SUM(CASE WHEN UPPER(status)
+                    IN ('COMPLETED_CLEAN', 'COMPLETED_WITH_FINDINGS')
+                    THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN UPPER(status) = 'FAILED'
+                    THEN 1 ELSE 0 END) as failed
             FROM scans
             WHERE created_at >= ?
             GROUP BY DATE(created_at)
@@ -250,11 +253,11 @@ class ChartingEngine:
         """
         query = """
             SELECT
-                COALESCE(status, 'new') as status,
+                COALESCE(fs.status, 'new') as finding_status,
                 COUNT(*) as count
             FROM findings f
             LEFT JOIN finding_states fs ON f.id = fs.finding_id
-            GROUP BY status
+            GROUP BY finding_status
         """
 
         rows = conn.execute(query).fetchall()
@@ -271,7 +274,7 @@ class ChartingEngine:
         }
 
         for row in rows:
-            status = row["status"] or "new"
+            status = row["finding_status"] or "new"
             labels.append(status)
             data.append(row["count"])
 

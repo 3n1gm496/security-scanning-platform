@@ -896,6 +896,7 @@ createApp({
         this.scansPage = 1;
         this.scansCursor = null;
         this.scansCursorStack = [];
+        this._scansPageCursor = null;
       }
       this.scansLoading = true;
       try {
@@ -959,7 +960,9 @@ createApp({
 
     async nextScansPage() {
       if (!this.scansCursor) return;
-      this.scansCursorStack.push(this.scansCursor);
+      // Push the cursor that fetched the *current* page so prevPage can restore it.
+      this.scansCursorStack.push(this._scansPageCursor || null);
+      this._scansPageCursor = this.scansCursor;
       this.scansPage++;
       await this.loadScans();
     },
@@ -967,7 +970,8 @@ createApp({
     async prevScansPage() {
       if (this.scansPage <= 1) return;
       this.scansPage--;
-      this.scansCursor = this.scansCursorStack.pop() || null;
+      this._scansPageCursor = this.scansCursorStack.pop() || null;
+      this.scansCursor = this._scansPageCursor;
       await this.loadScans();
     },
 
@@ -1011,6 +1015,7 @@ createApp({
         this.findingsPage = 1;
         this.findingsCursor = null;
         this.findingsCursorStack = [];
+        this._findingsPageCursor = null;
         this.selectedFindings = [];
       }
       this.findingsLoading = true;
@@ -1047,7 +1052,9 @@ createApp({
 
     async nextFindingsPage() {
       if (!this.findingsCursor) return;
-      this.findingsCursorStack.push(this.findingsCursor);
+      // Push the cursor that fetched the *current* page so prevPage can restore it.
+      this.findingsCursorStack.push(this._findingsPageCursor || null);
+      this._findingsPageCursor = this.findingsCursor;
       this.findingsPage++;
       await this.loadFindings();
     },
@@ -1055,7 +1062,8 @@ createApp({
     async prevFindingsPage() {
       if (this.findingsPage <= 1) return;
       this.findingsPage--;
-      this.findingsCursor = this.findingsCursorStack.pop() || null;
+      this._findingsPageCursor = this.findingsCursorStack.pop() || null;
+      this.findingsCursor = this._findingsPageCursor;
       await this.loadFindings();
     },
 

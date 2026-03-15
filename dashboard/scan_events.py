@@ -25,6 +25,15 @@ _subscribers: dict[str, asyncio.Queue] = {}
 _subscriber_lock = asyncio.Lock()
 _counter = 0
 
+# Reference to the main event loop, set by set_loop() at app startup.
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Store the main event loop reference so worker threads can schedule tasks."""
+    global _main_loop
+    _main_loop = loop
+
 
 async def subscribe(client_id: str) -> asyncio.Queue:
     """Register a new SSE client and return its event queue."""
@@ -60,12 +69,19 @@ async def publish(event_type: str, data: dict[str, Any]) -> None:
 
 
 def publish_sync(event_type: str, data: dict[str, Any]) -> None:
-    """Synchronous wrapper for publish() — safe to call from non-async code."""
+    """Synchronous wrapper for publish() — safe to call from any thread.
+
+    Uses asyncio.run_coroutine_threadsafe() to schedule the coroutine on the
+    main event loop, which works correctly from ThreadPoolExecutor workers.
+    """
+    loop = _main_loop
+    if loop is None or loop.is_closed():
+        LOGGER.debug("sse.publish_sync_skipped", reason="no_event_loop")
+        return
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(publish(event_type, data))
-        else:
-            loop.run_until_complete(publish(event_type, data))
-    except RuntimeError:
-        pass
+        future = asyncio.run_coroutine_threadsafe(publish(event_type, data), loop)
+        # Wait briefly so the event is dispatched before the caller moves on,
+        # but don't block the worker thread for long.
+        future.result(timeout=2.0)
+    except Exception as exc:
+        LOGGER.debug("sse.publish_sync_error", error=str(exc))

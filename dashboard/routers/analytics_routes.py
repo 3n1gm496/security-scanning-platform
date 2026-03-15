@@ -149,8 +149,17 @@ def chart_remediation_progress(auth: AuthContext = Depends(require_auth)) -> dic
 
 @router.get("/chart/severity-breakdown")
 def chart_severity_breakdown(auth: AuthContext = Depends(require_auth)) -> dict:
-    """Get findings count grouped by severity for the dashboard bar chart."""
-    return severity_breakdown(DB_PATH)
+    """Get findings count grouped by severity for the dashboard bar chart.
+
+    Returns ``{labels: [...], values: [...]}`` for consistency with other
+    chart endpoints.  The frontend ``parseSev()`` helper accepts both this
+    format and the raw ``{CRITICAL: N, ...}`` dict, but a uniform shape
+    avoids confusion.
+    """
+    raw = severity_breakdown(DB_PATH)
+    labels = list(raw.keys())
+    values = list(raw.values())
+    return {"labels": labels, "values": values}
 
 
 @router.get("/chart/cve-distribution")

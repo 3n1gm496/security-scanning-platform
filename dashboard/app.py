@@ -155,6 +155,11 @@ async def _scan_timeout_watchdog():
 
 @asynccontextmanager
 async def _lifespan(app):
+    # Store the running event loop so worker threads can schedule SSE events.
+    from scan_events import set_loop as _set_sse_loop
+
+    _set_sse_loop(asyncio.get_running_loop())
+
     watchdog_task = asyncio.create_task(_scan_timeout_watchdog())
     yield
     watchdog_task.cancel()

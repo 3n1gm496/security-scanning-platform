@@ -61,18 +61,41 @@ def scan_queue_submit(fn, *args, **kwargs):
 # ── TTL cache for analytics queries ──────────────────────────────────────
 _ttl_cache: dict[str, tuple[float, object]] = {}
 _ttl_lock = Lock()
+# Tracks keys currently being computed to prevent thundering herd.
+_ttl_inflight: dict[str, Lock] = {}
+_ttl_inflight_lock = Lock()
 ANALYTICS_CACHE_TTL: int = int(os.getenv("ANALYTICS_CACHE_TTL_SECONDS", "300"))
 
 
 def cached(key: str, fn, ttl: int = ANALYTICS_CACHE_TTL):
-    """Return cached result or call *fn()* and store for *ttl* seconds."""
+    """Return cached result or call *fn()* and store for *ttl* seconds.
+
+    Uses per-key locks to prevent thundering herd: when multiple threads
+    miss the cache for the same key, only one calls *fn()* while the
+    others wait for the result.
+    """
     now = time.monotonic()
     with _ttl_lock:
         if key in _ttl_cache:
             expires, value = _ttl_cache[key]
             if now < expires:
                 return value
-    result = fn()
-    with _ttl_lock:
-        _ttl_cache[key] = (now + ttl, result)
+
+    # Acquire a per-key lock so only one thread computes the value.
+    with _ttl_inflight_lock:
+        if key not in _ttl_inflight:
+            _ttl_inflight[key] = Lock()
+        key_lock = _ttl_inflight[key]
+
+    with key_lock:
+        # Double-check: another thread may have populated the cache while we waited.
+        now = time.monotonic()
+        with _ttl_lock:
+            if key in _ttl_cache:
+                expires, value = _ttl_cache[key]
+                if now < expires:
+                    return value
+        result = fn()
+        with _ttl_lock:
+            _ttl_cache[key] = (now + ttl, result)
     return result

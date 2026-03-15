@@ -394,7 +394,7 @@ createApp({
       const items = result.items || [];
       const runningScans = items.filter(s => s.status === 'RUNNING');
       if (runningScans.length > 0) {
-        this.startScanPolling(runningScans[0].created_at);
+        this.startScanPolling(runningScans[0].id);
       }
     } catch (_) {}
 
@@ -567,11 +567,9 @@ createApp({
       }, 30000);
     },
 
-    startScanPolling(triggerTime) {
+    startScanPolling(scanId) {
       this.hasRunningScans = true;
-      // Normalise to epoch ms so we can compare reliably regardless of ISO format
-      // (JS uses "Z" suffix, Python uses "+00:00" — string compare breaks).
-      this._pollTriggerEpoch = new Date(triggerTime || Date.now()).getTime();
+      this._pollScanId = scanId || null;
       this._pollDeadline = Date.now() + 37 * 60 * 1000; // 37 min (> 30 min subprocess timeout)
       if (this.scanPollingInterval) return;
       this.scanPollingInterval = setInterval(async () => {
@@ -587,18 +585,23 @@ createApp({
           else if (this.currentPage === 'findings') { await this.loadFindings(); }
           else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
 
-          // Check if there are still RUNNING scans that started after our trigger
-          const stillRunning = items.some(s =>
-            s.status === 'RUNNING' && new Date(s.created_at).getTime() >= this._pollTriggerEpoch
-          );
+          // Check if the tracked scan is still RUNNING
+          const stillRunning = this._pollScanId
+            ? items.some(s => s.id === this._pollScanId && s.status === 'RUNNING')
+            : items.some(s => s.status === 'RUNNING');
           if (!stillRunning || Date.now() > this._pollDeadline) {
             this.hasRunningScans = false;
             this.stopScanPolling();
             // Notify user
-            const failed = items.find(s => s.status === 'FAILED' && new Date(s.created_at).getTime() >= this._pollTriggerEpoch);
-            if (failed) {
-              this.showToast('Scan failed: ' + (failed.error_message || 'unknown error'), 'error');
-            } else {
+            const targetScan = this._pollScanId
+              ? items.find(s => s.id === this._pollScanId)
+              : null;
+            if (targetScan && targetScan.status === 'FAILED') {
+              this.showToast('Scan failed: ' + (targetScan.error_message || 'unknown error'), 'error');
+            } else if (targetScan && (targetScan.status === 'COMPLETED_WITH_FINDINGS' || targetScan.status === 'COMPLETED_CLEAN')) {
+              this.showToast('Scan completed successfully');
+            } else if (!this._pollScanId) {
+              // Mount-time recovery: no specific scan tracked, generic message
               this.showToast('Scan completed successfully');
             }
             // Final refresh to ensure everything is fully up-to-date
@@ -1673,8 +1676,7 @@ createApp({
         formData.append('target', this.newScanForm.target);
         formData.append('target_type', this.newScanForm.target_type);
         formData.append('async_mode', 'true');
-        const triggerTime = new Date().toISOString();
-        await apiFetch('/api/scan/trigger', {
+        const resp = await apiFetch('/api/scan/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: formData.toString(),
@@ -1684,7 +1686,7 @@ createApp({
         this.newScanForm = { name: '', target: '', target_type: 'local' };
         this.showToast('Scan started successfully');
         await this.loadScans(true);
-        this.startScanPolling(triggerTime);
+        this.startScanPolling(resp.scan_id);
       } catch (e) {
         // Keep modal open on error so user can fix the input
         this.showToast('Failed to start scan: ' + e.message, 'error');

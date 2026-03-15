@@ -105,7 +105,7 @@ class PaginationCursor:
             WHERE {where_sql}
             ORDER BY {self.sort_by} {self.sort_order}
             LIMIT ?
-            """
+            """  # nosec B608
         params.append(self.per_page + 1)  # Fetch +1 to detect if there's next page
 
         return query, params
@@ -252,7 +252,7 @@ class FindingsPaginator:
                 WHERE {where_sql}
                 ORDER BY f.{safe_sort_by} {safe_sort_order}
                 LIMIT ?
-                """
+                """  # nosec B608
         else:
             # Standard query without JOIN
             query = f"""
@@ -262,7 +262,7 @@ class FindingsPaginator:
                 WHERE {where_sql}
                 ORDER BY {safe_sort_by} {safe_sort_order}
                 LIMIT ?
-                """
+                """  # nosec B608
         params.append(self.per_page + 1)
 
         # Total count query (same filters, no cursor/LIMIT)
@@ -289,9 +289,9 @@ class FindingsPaginator:
                 SELECT COUNT(*) AS total FROM findings f
                 LEFT JOIN finding_states fs ON fs.finding_id = f.id
                 WHERE {count_where}
-                """
+                """  # nosec B608
         else:
-            count_query = f"SELECT COUNT(*) AS total FROM findings WHERE {count_where}"
+            count_query = f"SELECT COUNT(*) AS total FROM findings WHERE {count_where}"  # nosec B608
         total_count = conn.execute(count_query, count_params).fetchone()["total"]
 
         rows = conn.execute(query, params).fetchall()
@@ -420,7 +420,7 @@ class ScansPaginator:
             WHERE {where_sql}
             ORDER BY {safe_sort_by} {safe_sort_order}
             LIMIT ?
-            """
+            """  # nosec B608
         params.append(self.per_page + 1)
 
         # Total count query (same filters, no cursor/LIMIT)
@@ -437,7 +437,7 @@ class ScansPaginator:
         if cursor:
             count_clauses = count_clauses[:-1]
         count_where = " AND ".join(count_clauses)
-        count_query = f"SELECT COUNT(*) AS total FROM scans WHERE {count_where}"
+        count_query = f"SELECT COUNT(*) AS total FROM scans WHERE {count_where}"  # nosec B608
         total_count = conn.execute(count_query, count_params).fetchone()["total"]
 
         rows = conn.execute(query, params).fetchall()

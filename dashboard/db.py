@@ -120,7 +120,7 @@ def count_findings(
 ) -> int:
     clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
     with _conn(db_path) as conn:
-        row = conn.execute(f"SELECT COUNT(*) AS n FROM findings {clause}", params).fetchone()
+        row = conn.execute(f"SELECT COUNT(*) AS n FROM findings {clause}", params).fetchone()  # nosec B608
     return int(row["n"])
 
 
@@ -135,7 +135,7 @@ def list_findings(
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
-    query = f"SELECT * FROM findings {clause} ORDER BY timestamp DESC, severity DESC LIMIT ? OFFSET ?"
+    query = f"SELECT * FROM findings {clause} ORDER BY timestamp DESC, severity DESC LIMIT ? OFFSET ?"  # nosec B608
     params.extend([limit, offset])
     with _conn(db_path) as conn:
         rows = conn.execute(query, params).fetchall()

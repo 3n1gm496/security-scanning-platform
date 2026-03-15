@@ -6,7 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
-Open-source, Linux-based, CI-agnostic platform for centralized security scanning in heterogeneous enterprise environments. Automated orchestration of 10+ OSS scanners with unified dashboard, result normalization, and **501 unit and integration tests**.
+Open-source, Linux-based, CI-agnostic platform for centralized security scanning in heterogeneous enterprise environments. Automated orchestration of 10+ OSS scanners with unified dashboard, result normalization, and **550 unit and integration tests**.
 
 **Repository:** [github.com/3n1gm496/security-scanning-platform](https://github.com/3n1gm496/security-scanning-platform)
 
@@ -74,7 +74,7 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 ### Security & Auth
 - **Authentication** — Form-based login with secure sessions; bcrypt password hashing; `HttpOnly`/`Secure` cookies
 - **API Key Auth** — RBAC-based API keys (`ssp_` prefix) with admin/operator/viewer roles
-- **Security Headers** — `Content-Security-Policy`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`, `Permissions-Policy`, `Referrer-Policy`
+- **Security Headers** — `Content-Security-Policy` with per-request nonces, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`, `Permissions-Policy`, `Referrer-Policy`
 - **Rate Limiting** — Brute-force protection on `/login` (10 req/min) and API (180 req/min) with sliding window
 - **Path Traversal Protection** — Input validation and sanitization on all scan endpoints
 - **SSRF Protection** — Webhook URL validation with DNS-rebinding mitigation (blocked: RFC 1918, loopback, link-local, AWS IMDS)
@@ -83,10 +83,14 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 ### Operations
 - **SQLite or PostgreSQL** — SQLite by default; optional PostgreSQL via Docker Compose profile
 - **Email Notifications** — Critical alerts and granular per-user notification preferences
-- **Webhooks** — Event-driven notifications with HMAC signatures, retry logic, and circuit breaker auto-disable
+- **Webhooks** — Event-driven notifications with HMAC signatures, exponential backoff + jitter retry, and circuit breaker auto-disable
 - **Prometheus Metrics** — `/metrics` endpoint for observability and monitoring
 - **Audit Log** — API key operations and triage actions logged with CSV/JSON export
-- **High Test Coverage** — 501 total tests (278 dashboard + 223 orchestrator) across Python 3.11 and 3.12
+- **Scan Timeout Watchdog** — Background task auto-fails RUNNING scans stuck beyond configurable timeout (default 1h)
+- **DB Connection Pooling** — Thread-local SQLite connection cache; avoids per-request PRAGMA overhead
+- **Schema Migrations** — Versioned DDL migrations in `common/schema.py` for all tables (core + dashboard)
+- **Structured Logging** — Structured JSON logging via structlog across all modules
+- **High Test Coverage** — 550 total tests (324 dashboard + 226 orchestrator) across Python 3.11 and 3.12
 
 ---
 
@@ -129,6 +133,8 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 │   ├── settings.yaml        # Scanner and policy configuration
 │   ├── policies.yaml        # Pipeline blocking policies
 │   └── targets.yaml         # Batch scan targets
+├── common/
+│   └── schema.py            # Single source of truth for DB schema + migrations
 ├── dashboard/
 │   ├── app.py               # Main FastAPI application (1500+ lines)
 │   ├── db.py                # Centralized DB connection (SQLite + PostgreSQL)
@@ -141,13 +147,13 @@ Centralized collection in **SQLite** (default) or **PostgreSQL** with a unified 
 │   ├── static/              # Vue.js 3 SPA (app.js, app.css, login.css)
 │   ├── templates/           # Jinja2 templates (app.html, login.html)
 │   ├── Dockerfile
-│   └── tests/               # 278 tests
+│   └── tests/               # 324 tests
 ├── orchestrator/
 │   ├── main.py              # Scan orchestration & scheduling
 │   ├── scanners.py          # Scanner wrappers (10 scanners)
 │   ├── normalizers.py       # Result normalization
 │   ├── Dockerfile
-│   └── tests/               # 223 tests
+│   └── tests/               # 226 tests
 ├── scripts/
 │   ├── ops.sh               # Unified CLI for all operations
 │   ├── run_scan.sh
@@ -299,6 +305,8 @@ EMAIL_FROM_NAME=Security Scanner
 # DASHBOARD_MAX_SCAN_WORKERS=4
 # DASHBOARD_MAX_SCAN_QUEUE=20
 # DASHBOARD_SESSION_MAX_AGE=86400
+# SCAN_TIMEOUT_SECONDS=3600
+# SCAN_WATCHDOG_INTERVAL_SECONDS=120
 ```
 
 ---
@@ -675,7 +683,9 @@ Set `DASHBOARD_HTTPS_ONLY=1` in `.env` to enable `Secure` cookie flag.
 - **CSRF**: Mutating requests require a valid CSRF token. Bearer API key authentication bypasses CSRF only after validating the key.
 - **Webhooks**: The platform blocks SSRF attempts (private IPs, loopback, link-local, AWS IMDS) and validates DNS resolution at both registration and delivery time. Only public endpoints are allowed.
 - **Git Clone**: Repository URLs are validated for SSRF (scheme whitelist + DNS resolution against blocked IP ranges).
+- **CSP Nonces**: Per-request nonces eliminate `'unsafe-inline'` from `script-src`; `'unsafe-eval'` remains required for Vue.js 3 runtime template compilation.
 - **Scan Queue**: Bounded to 20 pending scans by default (configurable via `DASHBOARD_MAX_SCAN_QUEUE`) to prevent resource exhaustion.
+- **Scan Watchdog**: Scans stuck in RUNNING state beyond `SCAN_TIMEOUT_SECONDS` (default 1 hour) are automatically marked FAILED.
 - **API Keys**: Use least-privilege roles (`viewer` for read-only, `operator` for scans, `admin` for full access). Revoke unused keys. Legacy SHA-256 key hashes are transparently upgraded to bcrypt on first use.
 - **Foreign Keys**: SQLite foreign key constraints are enforced to maintain referential integrity.
 
@@ -716,13 +726,13 @@ The project uses `pip-tools` for pinning dependencies. To update or add packages
 ### Running Tests
 
 ```bash
-# Run all 501 tests
+# Run all 550 tests
 ./scripts/ops.sh test
 
-# Run only dashboard tests (278 tests)
+# Run only dashboard tests (324 tests)
 ./scripts/ops.sh test dashboard
 
-# Run only orchestrator tests with coverage (223 tests)
+# Run only orchestrator tests with coverage (226 tests)
 ./scripts/ops.sh test orchestrator --coverage
 ```
 

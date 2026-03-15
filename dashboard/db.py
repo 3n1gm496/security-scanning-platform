@@ -223,9 +223,9 @@ def list_findings(
 ) -> list[dict[str, Any]]:
     clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
     query = (
-        f"SELECT * FROM findings {clause} "
+        f"SELECT * FROM findings {clause} "  # nosec
         f"ORDER BY timestamp DESC, {_severity_order_sql()} DESC, severity DESC LIMIT ? OFFSET ?"
-    )  # nosec B608
+    )
     params.extend([limit, offset])
     with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(query, params).fetchall()

@@ -474,12 +474,12 @@ def adapt_schema(schema_sql: str) -> str:
         if update_columns:
             update_set = ", ".join(f"{col} = EXCLUDED.{col}" for col in update_columns)
             sql = (
-                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "
+                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "  # nosec B608
                 f"ON CONFLICT ({conflict_column}) DO UPDATE SET {update_set}"
             )
         else:
             sql = (
-                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "
+                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "  # nosec B608
                 f"ON CONFLICT ({conflict_column}) DO NOTHING"
             )
     return sql

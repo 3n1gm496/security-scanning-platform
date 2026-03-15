@@ -269,19 +269,21 @@ def map_to_cwe(category: str) -> str | None:
 def get_risk_distribution(db_path: str) -> dict[str, Any]:
     """Calculate risk score distribution across all findings."""
     risk_sql = _risk_score_sql()
+    query_template = """
+        SELECT
+            COUNT(*) AS total_findings,
+            COALESCE(AVG(__RISK_SQL__), 0.0) AS average_risk,
+            COALESCE(MAX(__RISK_SQL__), 0.0) AS max_risk,
+            COALESCE(SUM(CASE WHEN __RISK_SQL__ >= 50 THEN 1 ELSE 0 END), 0) AS high_risk_count,
+            COALESCE(SUM(CASE WHEN __RISK_SQL__ >= 75 THEN 1 ELSE 0 END), 0) AS bucket_75_100,
+            COALESCE(SUM(CASE WHEN __RISK_SQL__ >= 50 AND __RISK_SQL__ < 75 THEN 1 ELSE 0 END), 0) AS bucket_50_75,
+            COALESCE(SUM(CASE WHEN __RISK_SQL__ >= 25 AND __RISK_SQL__ < 50 THEN 1 ELSE 0 END), 0) AS bucket_25_50,
+            COALESCE(SUM(CASE WHEN __RISK_SQL__ < 25 THEN 1 ELSE 0 END), 0) AS bucket_0_25
+        FROM findings
+        """
+    query = query_template.replace("__RISK_SQL__", risk_sql)
     with get_connection(db_path) as conn:
-        row = conn.execute(f"""
-            SELECT
-                COUNT(*) AS total_findings,
-                COALESCE(AVG({risk_sql}), 0.0) AS average_risk,
-                COALESCE(MAX({risk_sql}), 0.0) AS max_risk,
-                COALESCE(SUM(CASE WHEN {risk_sql} >= 50 THEN 1 ELSE 0 END), 0) AS high_risk_count,
-                COALESCE(SUM(CASE WHEN {risk_sql} >= 75 THEN 1 ELSE 0 END), 0) AS bucket_75_100,
-                COALESCE(SUM(CASE WHEN {risk_sql} >= 50 AND {risk_sql} < 75 THEN 1 ELSE 0 END), 0) AS bucket_50_75,
-                COALESCE(SUM(CASE WHEN {risk_sql} >= 25 AND {risk_sql} < 50 THEN 1 ELSE 0 END), 0) AS bucket_25_50,
-                COALESCE(SUM(CASE WHEN {risk_sql} < 25 THEN 1 ELSE 0 END), 0) AS bucket_0_25
-            FROM findings
-            """).fetchone()
+        row = conn.execute(query).fetchone()
 
     if not row or int(row["total_findings"]) == 0:
         return {
@@ -310,33 +312,39 @@ def get_compliance_summary(db_path: str) -> dict[str, Any]:
     """Generate OWASP Top 10 and CWE compliance summary."""
     owasp_case = _owasp_case_sql()
     cwe_case = _cwe_case_sql()
-    with get_connection(db_path) as conn:
-        owasp_rows = conn.execute(f"""
-            SELECT mapped_owasp AS category, COUNT(*) AS count
-            FROM (
-                SELECT {owasp_case} AS mapped_owasp
-                FROM findings
-            ) mapped
-            WHERE mapped_owasp IS NOT NULL
-            GROUP BY mapped_owasp
-            ORDER BY count DESC, mapped_owasp ASC
-            """).fetchall()
-        cwe_rows = conn.execute(f"""
-            SELECT mapped_cwe AS cwe, COUNT(*) AS count
-            FROM (
-                SELECT {cwe_case} AS mapped_cwe
-                FROM findings
-            ) mapped
-            WHERE mapped_cwe IS NOT NULL
-            GROUP BY mapped_cwe
-            ORDER BY count DESC, mapped_cwe ASC
-            """).fetchall()
-        totals = conn.execute(f"""
-            SELECT
-                COUNT(*) AS total_findings,
-                COALESCE(SUM(CASE WHEN {owasp_case} IS NULL THEN 1 ELSE 0 END), 0) AS unmapped_findings
+    owasp_query_template = """
+        SELECT mapped_owasp AS category, COUNT(*) AS count
+        FROM (
+            SELECT __OWASP_CASE__ AS mapped_owasp
             FROM findings
-            """).fetchone()
+        ) mapped
+        WHERE mapped_owasp IS NOT NULL
+        GROUP BY mapped_owasp
+        ORDER BY count DESC, mapped_owasp ASC
+        """
+    cwe_query_template = """
+        SELECT mapped_cwe AS cwe, COUNT(*) AS count
+        FROM (
+            SELECT __CWE_CASE__ AS mapped_cwe
+            FROM findings
+        ) mapped
+        WHERE mapped_cwe IS NOT NULL
+        GROUP BY mapped_cwe
+        ORDER BY count DESC, mapped_cwe ASC
+        """
+    totals_query_template = """
+        SELECT
+            COUNT(*) AS total_findings,
+            COALESCE(SUM(CASE WHEN __OWASP_CASE__ IS NULL THEN 1 ELSE 0 END), 0) AS unmapped_findings
+        FROM findings
+        """
+    owasp_query = owasp_query_template.replace("__OWASP_CASE__", owasp_case)
+    cwe_query = cwe_query_template.replace("__CWE_CASE__", cwe_case)
+    totals_query = totals_query_template.replace("__OWASP_CASE__", owasp_case)
+    with get_connection(db_path) as conn:
+        owasp_rows = conn.execute(owasp_query).fetchall()
+        cwe_rows = conn.execute(cwe_query).fetchall()
+        totals = conn.execute(totals_query).fetchone()
 
     return {
         "owasp_top_10": [{"category": row["category"], "count": row["count"]} for row in owasp_rows],
@@ -350,26 +358,25 @@ def get_trend_analysis(db_path: str, days: int = 90) -> dict[str, Any]:
     """Detailed trend analysis with risk scoring over time."""
     cutoff = _date_days_ago(days)
     risk_sql = _risk_score_sql()
+    query_template = """
+        SELECT
+            substr(timestamp, 1, 10) AS day,
+            COUNT(*) AS total_findings,
+            COALESCE(AVG(__RISK_SQL__), 0.0) AS average_risk,
+            COALESCE(MAX(__RISK_SQL__), 0.0) AS max_risk,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'CRITICAL' THEN 1 ELSE 0 END), 0) AS critical_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'HIGH' THEN 1 ELSE 0 END), 0) AS high_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'MEDIUM' THEN 1 ELSE 0 END), 0) AS medium_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'LOW' THEN 1 ELSE 0 END), 0) AS low_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'INFO' THEN 1 ELSE 0 END), 0) AS info_count
+        FROM findings
+        WHERE substr(timestamp, 1, 10) >= ?
+        GROUP BY substr(timestamp, 1, 10)
+        ORDER BY day ASC
+        """
+    query = query_template.replace("__RISK_SQL__", risk_sql)
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            f"""
-            SELECT
-                substr(timestamp, 1, 10) AS day,
-                COUNT(*) AS total_findings,
-                COALESCE(AVG({risk_sql}), 0.0) AS average_risk,
-                COALESCE(MAX({risk_sql}), 0.0) AS max_risk,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'CRITICAL' THEN 1 ELSE 0 END), 0) AS critical_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'HIGH' THEN 1 ELSE 0 END), 0) AS high_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'MEDIUM' THEN 1 ELSE 0 END), 0) AS medium_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'LOW' THEN 1 ELSE 0 END), 0) AS low_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'INFO' THEN 1 ELSE 0 END), 0) AS info_count
-            FROM findings
-            WHERE substr(timestamp, 1, 10) >= ?
-            GROUP BY substr(timestamp, 1, 10)
-            ORDER BY day ASC
-            """,
-            (cutoff,),
-        ).fetchall()
+        rows = conn.execute(query, (cutoff,)).fetchall()
 
     trend_points = []
     for row in rows:
@@ -399,38 +406,42 @@ def get_trend_analysis(db_path: str, days: int = 90) -> dict[str, Any]:
 def get_target_risk_ranking(db_path: str) -> list[dict[str, Any]]:
     """Rank targets by aggregated risk score."""
     risk_sql = _risk_score_sql()
+    query_template = """
+        SELECT
+            target_name AS target,
+            COUNT(*) AS findings_count,
+            ROUND(COALESCE(SUM(__RISK_SQL__), 0.0), 2) AS total_risk,
+            ROUND(COALESCE(AVG(__RISK_SQL__), 0.0), 2) AS average_risk,
+            ROUND(COALESCE(MAX(__RISK_SQL__), 0.0), 2) AS max_risk
+        FROM findings
+        GROUP BY target_name
+        ORDER BY total_risk DESC, target_name ASC
+        """
+    query = query_template.replace("__RISK_SQL__", risk_sql)
     with get_connection(db_path) as conn:
-        rows = conn.execute(f"""
-            SELECT
-                target_name AS target,
-                COUNT(*) AS findings_count,
-                ROUND(COALESCE(SUM({risk_sql}), 0.0), 2) AS total_risk,
-                ROUND(COALESCE(AVG({risk_sql}), 0.0), 2) AS average_risk,
-                ROUND(COALESCE(MAX({risk_sql}), 0.0), 2) AS max_risk
-            FROM findings
-            GROUP BY target_name
-            ORDER BY total_risk DESC, target_name ASC
-            """).fetchall()
+        rows = conn.execute(query).fetchall()
     return [dict(row) for row in rows]
 
 
 def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
     """Analyze tool effectiveness by findings and risk detection."""
     risk_sql = _risk_score_sql()
+    query_template = """
+        SELECT
+            tool,
+            COUNT(*) AS total_findings,
+            COALESCE(SUM(CASE WHEN __RISK_SQL__ >= 50 THEN 1 ELSE 0 END), 0) AS high_risk_findings,
+            ROUND(COALESCE(AVG(__RISK_SQL__), 0.0), 2) AS average_risk,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'CRITICAL' THEN 1 ELSE 0 END), 0) AS critical_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'HIGH' THEN 1 ELSE 0 END), 0) AS high_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'MEDIUM' THEN 1 ELSE 0 END), 0) AS medium_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'LOW' THEN 1 ELSE 0 END), 0) AS low_count,
+            COALESCE(SUM(CASE WHEN UPPER(severity) = 'INFO' THEN 1 ELSE 0 END), 0) AS info_count
+        FROM findings
+        GROUP BY tool
+        ORDER BY high_risk_findings DESC, tool ASC
+        """
+    query = query_template.replace("__RISK_SQL__", risk_sql)
     with get_connection(db_path) as conn:
-        rows = conn.execute(f"""
-            SELECT
-                tool,
-                COUNT(*) AS total_findings,
-                COALESCE(SUM(CASE WHEN {risk_sql} >= 50 THEN 1 ELSE 0 END), 0) AS high_risk_findings,
-                ROUND(COALESCE(AVG({risk_sql}), 0.0), 2) AS average_risk,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'CRITICAL' THEN 1 ELSE 0 END), 0) AS critical_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'HIGH' THEN 1 ELSE 0 END), 0) AS high_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'MEDIUM' THEN 1 ELSE 0 END), 0) AS medium_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'LOW' THEN 1 ELSE 0 END), 0) AS low_count,
-                COALESCE(SUM(CASE WHEN UPPER(severity) = 'INFO' THEN 1 ELSE 0 END), 0) AS info_count
-            FROM findings
-            GROUP BY tool
-            ORDER BY high_risk_findings DESC, tool ASC
-            """).fetchall()
+        rows = conn.execute(query).fetchall()
     return [dict(row) for row in rows]

@@ -108,7 +108,8 @@ def _scanner_subprocess_env(extra: dict[str, str] | None = None) -> dict[str, st
     """Build a minimal subprocess environment to avoid leaking unrelated secrets."""
     env = {key: value for key, value in os.environ.items() if key in _SAFE_ENV_KEYS}
     env.setdefault("PATH", os.environ.get("PATH", ""))
-    env.setdefault("HOME", os.environ.get("HOME", "/tmp"))
+    if "HOME" in os.environ:
+        env.setdefault("HOME", os.environ["HOME"])
     env.setdefault("LANG", os.environ.get("LANG", "C.UTF-8"))
     if extra:
         env.update(extra)

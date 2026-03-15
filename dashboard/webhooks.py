@@ -219,6 +219,8 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
     Trigger a webhook delivery.
     Returns (success, error_message).
     """
+    from monitoring import SSP_WEBHOOK_DELIVERIES_TOTAL, SSP_WEBHOOK_LATENCY_SECONDS
+
     start_time = time.time()
 
     payload_with_meta = {
@@ -249,6 +251,8 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
         duration_ms = int((time.time() - start_time) * 1000)
         _log_delivery(webhook["id"], event_type.value, payload_str, None, None, error_msg, duration_ms)
         _update_webhook_stats(webhook["id"], success=False)
+        SSP_WEBHOOK_DELIVERIES_TOTAL.labels(status="ssrf_blocked").inc()
+        SSP_WEBHOOK_LATENCY_SECONDS.observe(duration_ms / 1000)
         return False, error_msg
 
     async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS, follow_redirects=False) as client:
@@ -271,6 +275,8 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
                         duration_ms,
                     )
                     _update_webhook_stats(webhook["id"], success=True)
+                    SSP_WEBHOOK_DELIVERIES_TOTAL.labels(status="success").inc()
+                    SSP_WEBHOOK_LATENCY_SECONDS.observe(duration_ms / 1000)
                     logger.info(
                         "webhook.delivered",
                         webhook_id=webhook["id"],
@@ -302,6 +308,8 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
     duration_ms = int((time.time() - start_time) * 1000)
     _log_delivery(webhook["id"], event_type.value, payload_str, response_status, response_body, error_msg, duration_ms)
     _update_webhook_stats(webhook["id"], success=False)
+    SSP_WEBHOOK_DELIVERIES_TOTAL.labels(status="failed").inc()
+    SSP_WEBHOOK_LATENCY_SECONDS.observe(duration_ms / 1000)
 
     return False, error_msg
 

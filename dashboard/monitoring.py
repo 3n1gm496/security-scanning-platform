@@ -82,6 +82,24 @@ SSP_ACTIVE_SCAN_WORKERS: Gauge = _get_or_create_gauge(
     "Number of currently running background scan workers",
 )
 
+SSP_WEBHOOK_DELIVERIES_TOTAL: Counter = _get_or_create_counter(
+    "ssp_webhook_deliveries_total",
+    "Total webhook delivery attempts, partitioned by status",
+    ["status"],
+)
+
+SSP_WEBHOOK_LATENCY_SECONDS: Histogram = _get_or_create_histogram(
+    "ssp_webhook_latency_seconds",
+    "Webhook delivery latency in seconds",
+    buckets=[0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+)
+
+SSP_CACHE_OPERATIONS_TOTAL: Counter = _get_or_create_counter(
+    "ssp_cache_operations_total",
+    "Orchestrator cache operations, partitioned by result (hit/miss)",
+    ["result"],
+)
+
 
 # ---------------------------------------------------------------------------
 # Pydantic response models
@@ -129,15 +147,28 @@ def _app_version() -> str:
 
 
 @router.get("/health", response_model=HealthResponse, status_code=status.HTTP_200_OK)
-async def health_check() -> HealthResponse:
+async def health_check(response: Response) -> HealthResponse:
     """
-    Basic health check endpoint.
-    Returns 200 OK if the service is running.
+    Deep health check endpoint.
+    Verifies the service is running and the database is accessible.
+    Returns 200 OK if healthy, 503 if DB is unreachable.
     """
     uptime = time.time() - START_TIME
+    health_status = "healthy"
+
+    # Verify database connectivity with a real query
+    try:
+        db_path = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+        from db import get_connection
+
+        with get_connection(db_path) as conn:
+            conn.execute("SELECT 1")
+    except Exception:
+        health_status = "degraded"
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return HealthResponse(
-        status="healthy",
+        status=health_status,
         timestamp=datetime.now(timezone.utc).isoformat(),
         uptime_seconds=round(uptime, 2),
         version=_app_version(),

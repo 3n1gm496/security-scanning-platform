@@ -11,7 +11,6 @@ Supports:
 
 from __future__ import annotations
 
-import logging
 import os
 import smtplib
 from html import escape as html_escape
@@ -23,7 +22,9 @@ from datetime import datetime, timedelta
 from typing import Any
 from hashlib import sha256
 
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class EmailNotificationEngine:

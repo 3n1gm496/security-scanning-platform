@@ -179,28 +179,33 @@ class TestRunSingleScanWithFindings:
         settings["scanners"]["bandit"]["enabled"] = True
         target = _local_target(tmp_path)
 
-        fake_finding = Finding(
-            scan_id="",
-            timestamp="2026-01-01T00:00:00+00:00",
-            target_type="local",
-            target_name=target.name,
-            tool="bandit",
-            category="code",
-            severity="HIGH",
-            title="Test finding",
-            description="A test finding",
-        )
-
         # Mock run_bandit to produce a dummy JSON file and mock normalize_bandit
         def fake_run_bandit(path, output_path, *args, **kwargs):
             Path(output_path).write_text('{"results": []}')
             return {"exit_code": 0, "stderr": ""}
 
-        def fake_normalize_bandit(raw, output_path, *args, **kwargs):
-            return [fake_finding]
+        def fake_normalize_bandit(sid, tgt, raw, output_path, *args, **kwargs):
+            return [
+                Finding(
+                    scan_id=sid,
+                    timestamp="2026-01-01T00:00:00+00:00",
+                    target_type="local",
+                    target_name=tgt.name,
+                    tool="bandit",
+                    category="code",
+                    severity="HIGH",
+                    title="Test finding",
+                    description="A test finding",
+                )
+            ]
 
         monkeypatch.setattr("orchestrator.main.run_bandit", fake_run_bandit)
         monkeypatch.setattr("orchestrator.main.normalize_bandit", fake_normalize_bandit)
+        # Bypass the preflight binary check so the mocked bandit is actually invoked
+        monkeypatch.setattr(
+            "orchestrator.main.preflight_check",
+            lambda tools: (tools, []),
+        )
 
         result = run_single_scan(target, settings)
 
@@ -226,23 +231,13 @@ class TestRunSingleScanWithFindings:
             Path(output_path).write_text('{"results": []}')
             return {"exit_code": 0, "stderr": ""}
 
-        def fake_normalize_bandit(raw, output_path, *args, **kwargs):
-            # scan_id is baked into the closure lambda in main.py;
-            # we retrieve it from the already-running ScanResult via the
-            # injected_scan_id container that capturing_save will fill.
-            # At this point scan_id is not yet available, so we return a
-            # placeholder; the scan_id will be fixed up before DB write
-            # by the real save_scan_result which uses result.findings directly.
-            # Instead, we rely on the normalizer lambda signature:
-            # lambda raw_payload, output_path: normalize_bandit(scan_id, target, raw, path)
-            # The scan_id is already in the closure — we just need to match it.
-            # We use a sentinel and fix it in capturing_save.
+        def fake_normalize_bandit(sid, tgt, raw, output_path, *args, **kwargs):
             return [
                 Finding(
-                    scan_id="__PLACEHOLDER__",
+                    scan_id=sid,
                     timestamp="2026-01-01T00:00:00+00:00",
                     target_type="local",
-                    target_name=target.name,
+                    target_name=tgt.name,
                     tool="bandit",
                     category="code",
                     severity="MEDIUM",
@@ -251,20 +246,13 @@ class TestRunSingleScanWithFindings:
                 )
             ]
 
-        from orchestrator import storage as _storage
-
-        original_save = _storage.save_scan_result
-
-        def capturing_save(db_path, result):
-            # Fix up placeholder scan_id before the real save
-            for f in result.findings:
-                if f.scan_id == "__PLACEHOLDER__":
-                    f.scan_id = result.scan_id
-            original_save(db_path, result)
-
         monkeypatch.setattr("orchestrator.main.run_bandit", fake_run_bandit)
         monkeypatch.setattr("orchestrator.main.normalize_bandit", fake_normalize_bandit)
-        monkeypatch.setattr("orchestrator.main.save_scan_result", capturing_save)
+        # Bypass the preflight binary check so the mocked bandit is actually invoked
+        monkeypatch.setattr(
+            "orchestrator.main.preflight_check",
+            lambda tools: (tools, []),
+        )
 
         result = run_single_scan(target, settings)
 
@@ -300,6 +288,11 @@ class TestRunSingleScanErrorHandling:
             raise RuntimeError("bandit binary crashed")
 
         monkeypatch.setattr("orchestrator.main.run_bandit", failing_run_bandit)
+        # Bypass the preflight binary check so the mocked bandit is actually invoked
+        monkeypatch.setattr(
+            "orchestrator.main.preflight_check",
+            lambda tools: (tools, []),
+        )
 
         result = run_single_scan(target, settings)
 
@@ -356,6 +349,11 @@ class TestRunTargetsConcurrently:
             raise RuntimeError("crash")
 
         monkeypatch.setattr("orchestrator.main.run_bandit", failing_run_bandit)
+        # Bypass the preflight binary check so the mocked bandit is actually invoked
+        monkeypatch.setattr(
+            "orchestrator.main.preflight_check",
+            lambda tools: (tools, []),
+        )
 
         results, exit_code = run_targets_concurrently(
             targets=targets,

@@ -259,13 +259,13 @@ class TestRunTargetsConcurrentlyPolicyBlock:
             Path(output_path).write_text('{"results": []}')
             return {"exit_code": 0, "stderr": ""}
 
-        def fake_normalize_bandit(raw, output_path, *args, **kwargs):
+        def fake_normalize_bandit(sid, tgt, raw, output_path, *args, **kwargs):
             return [
                 Finding(
-                    scan_id="__PLACEHOLDER__",
+                    scan_id=sid,
                     timestamp="2026-01-01T00:00:00+00:00",
                     target_type="local",
-                    target_name="blocked-svc",
+                    target_name=tgt.name,
                     tool="bandit",
                     category="code",
                     severity="CRITICAL",
@@ -274,19 +274,13 @@ class TestRunTargetsConcurrentlyPolicyBlock:
                 )
             ]
 
-        from orchestrator import storage as _storage
-
-        original_save = _storage.save_scan_result
-
-        def capturing_save(db_path, result):
-            for f in result.findings:
-                if f.scan_id == "__PLACEHOLDER__":
-                    f.scan_id = result.scan_id
-            original_save(db_path, result)
-
         monkeypatch.setattr("orchestrator.main.run_bandit", fake_run_bandit)
         monkeypatch.setattr("orchestrator.main.normalize_bandit", fake_normalize_bandit)
-        monkeypatch.setattr("orchestrator.main.save_scan_result", capturing_save)
+        # Bypass the preflight binary check so the mocked bandit is actually invoked
+        monkeypatch.setattr(
+            "orchestrator.main.preflight_check",
+            lambda tools: (tools, []),
+        )
 
         results, exit_code = run_targets_concurrently(
             targets=[target],

@@ -24,19 +24,17 @@ def _utc_now() -> str:
 
 def run_migrations(db_path: str) -> None:
     """Apply any schema migrations not yet recorded in schema_migrations."""
-    with get_connection(db_path) as conn:
-        row = conn.execute("SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations").fetchone()
-        current_version: int = int(row["v"]) if row else 0
-
-    pending = [(v, d, s) for v, d, s in _MIGRATIONS if v > current_version]
-    if not pending:
-        return
-
-    for version, description, sql in pending:
+    for version, description, sql in _MIGRATIONS:
         with get_connection(db_path) as conn:
+            row = conn.execute("SELECT 1 FROM schema_migrations WHERE version = ?", (version,)).fetchone()
+            if row:
+                continue
             if sql.strip():
                 adapted = adapt_schema(sql)
-                conn.executescript(adapted)
+                for stmt in adapted.split(";"):
+                    stmt = stmt.strip()
+                    if stmt:
+                        conn.execute(stmt)
             conn.execute(
                 "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
                 (version, description, _utc_now()),

@@ -67,6 +67,14 @@ def load_yaml(path: str) -> dict[str, Any]:
         return yaml.safe_load(handle) or {}
 
 
+def _safe_int(value: str, default: int) -> int:
+    """Parse an integer from a string, returning *default* on failure."""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
 def resolve_settings(path: str) -> dict[str, Any]:
     settings = load_yaml(path)
     settings.setdefault("paths", {})
@@ -103,21 +111,23 @@ def resolve_settings(path: str) -> dict[str, Any]:
         _zap["api_key"] = os.getenv("ZAP_API_KEY", "")
     settings["policy"].setdefault("block_on_severities", ["CRITICAL"])
     settings["policy"].setdefault("block_on_secret_categories", True)
-    settings["execution"].setdefault("max_concurrent_targets", int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2")))
+    settings["execution"].setdefault(
+        "max_concurrent_targets", _safe_int(os.getenv("ORCH_MAX_CONCURRENT_TARGETS", "2"), 2)
+    )
     # git_clone_depth: 0 = full history (recommended for secret scanning via gitleaks).
     # Set to a positive integer for shallow clones in bandwidth-constrained environments.
-    settings["execution"].setdefault("git_clone_depth", int(os.getenv("ORCH_GIT_CLONE_DEPTH", "0")))
+    settings["execution"].setdefault("git_clone_depth", _safe_int(os.getenv("ORCH_GIT_CLONE_DEPTH", "0"), 0))
     settings["cache"].setdefault(
         "enabled", os.getenv("ORCH_CACHE_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     )
-    settings["cache"].setdefault("ttl_seconds", int(os.getenv("ORCH_CACHE_TTL_SECONDS", "900")))
+    settings["cache"].setdefault("ttl_seconds", _safe_int(os.getenv("ORCH_CACHE_TTL_SECONDS", "900"), 900))
     settings["cache"]["dir"] = os.getenv("ORCH_CACHE_DIR", settings["cache"].get("dir", "/data/cache/orchestrator"))
     settings["retention"].setdefault(
         "enabled", os.getenv("ORCH_RETENTION_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
     )
-    settings["retention"].setdefault("reports_days", int(os.getenv("ORCH_RETENTION_REPORTS_DAYS", "14")))
-    settings["retention"].setdefault("workspaces_days", int(os.getenv("ORCH_RETENTION_WORKSPACES_DAYS", "3")))
-    settings["retention"].setdefault("cache_days", int(os.getenv("ORCH_RETENTION_CACHE_DAYS", "7")))
+    settings["retention"].setdefault("reports_days", _safe_int(os.getenv("ORCH_RETENTION_REPORTS_DAYS", "14"), 14))
+    settings["retention"].setdefault("workspaces_days", _safe_int(os.getenv("ORCH_RETENTION_WORKSPACES_DAYS", "3"), 3))
+    settings["retention"].setdefault("cache_days", _safe_int(os.getenv("ORCH_RETENTION_CACHE_DAYS", "7"), 7))
     return settings
 
 
@@ -231,7 +241,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
     findings = []
     artifacts: dict[str, str] = {}
     status = "COMPLETED_CLEAN"
-    error_message = None
+    error_messages: list[str] = []
 
     target_input, target_value, git_sha = prepare_target(target, settings, scan_id)
 
@@ -268,7 +278,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
         parser_kwargs: dict[str, Any] | None = None,
         cache_context: dict[str, Any] | None = None,
     ) -> None:
-        nonlocal status, error_message
+        nonlocal status
         parser_kwargs = parser_kwargs or {}
         cache_context = cache_context or {}
         started_tool = utc_now_iso()
@@ -312,8 +322,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Tool %s failed for target %s", tool_name, target.name)
             status = "PARTIAL_FAILED"
-            if not error_message:
-                error_message = str(exc)
+            error_messages.append(str(exc))
             tools.append(
                 ToolExecutionResult(
                     tool=tool_name,
@@ -330,7 +339,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
             )
 
     def execute_syft() -> None:
-        nonlocal status, error_message
+        nonlocal status
         started_tool = utc_now_iso()
         output_path = str(raw_dir / "syft.spdx.json")
         try:
@@ -347,14 +356,13 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
                     finished_at=utc_now_iso(),
                     raw_output_path=output_path,
                     stderr=result.get("stderr"),
-                    finding_count=meta.get("packages", 0),
+                    finding_count=meta.get("package_count", 0),
                 )
             )
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Tool syft failed for target %s", target.name)
             status = "PARTIAL_FAILED"
-            if not error_message:
-                error_message = str(exc)
+            error_messages.append(str(exc))
             tools.append(
                 ToolExecutionResult(
                     tool="syft",
@@ -525,7 +533,7 @@ def run_single_scan(target: TargetSpec, settings: dict[str, Any], scan_id: str |
         artifacts=artifacts,
         raw_report_dir=str(raw_dir),
         normalized_report_path=normalized_report_path,
-        error_message=error_message,
+        error_message="; ".join(error_messages) if error_messages else None,
     )
 
     if db_path:
@@ -569,7 +577,8 @@ def run_targets_concurrently(
     """
     max_workers = max(1, int(settings.get("execution", {}).get("max_concurrent_targets", 1)))
     results: list[dict[str, Any]] = []
-    overall_exit = 0
+    has_block = False
+    has_failure = False
 
     def _scan_target(target: TargetSpec) -> dict[str, Any]:
         LOGGER.info("Starting scan for target=%s type=%s", target.name, target.type)
@@ -610,10 +619,18 @@ def run_targets_concurrently(
         for future in as_completed(futures):
             item = future.result()
             results.append(item["payload"])
-            if item["policy_status"] == "BLOCK" and fail_on_policy_block:
-                overall_exit = max(overall_exit, 3)
-            elif item["status"] in {"PARTIAL_FAILED", "FAILED"}:
-                overall_exit = max(overall_exit, 4)
+            if item["policy_status"] == "BLOCK":
+                has_block = True
+            if item["status"] in {"PARTIAL_FAILED", "FAILED"}:
+                has_failure = True
+
+    # BLOCK takes priority over FAILED (security policy violation is more important)
+    if has_block and fail_on_policy_block:
+        overall_exit = 3
+    elif has_failure:
+        overall_exit = 4
+    else:
+        overall_exit = 0
     return results, overall_exit
 
 

@@ -178,10 +178,16 @@ app.add_middleware(
     max_age=SESSION_MAX_AGE,
 )
 if CORS_ORIGINS:
+    _cors_allow_creds = "*" not in CORS_ORIGINS
+    if not _cors_allow_creds:
+        LOGGER.warning(
+            "security.cors_wildcard",
+            detail="CORS origin '*' detected — disabling allow_credentials for safety.",
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
-        allow_credentials=True,
+        allow_credentials=_cors_allow_creds,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
         allow_headers=["*"],
     )
@@ -249,11 +255,12 @@ app.include_router(audit_router)
 
 
 def _client_key(request: Request) -> str:
-    if request.client and request.client.host:
-        return request.client.host
+    """Return the client IP, preferring X-Forwarded-For when behind a reverse proxy."""
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
     return "unknown"
 
 

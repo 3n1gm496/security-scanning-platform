@@ -38,6 +38,7 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("169.254.0.0/16"),  # link-local / AWS IMDS
     ipaddress.ip_network("100.64.0.0/10"),  # shared address space (RFC 6598)
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),  # unique local IPv6
     ipaddress.ip_network("fe80::/10"),  # link-local IPv6
@@ -51,6 +52,13 @@ def _check_ip_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> No
             raise ValueError(
                 f"Webhook URL targets a private/reserved address ({addr}). " "Only public endpoints are allowed."
             )
+    # IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1) bypass pure IPv6 checks.
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        for net in _BLOCKED_NETWORKS:
+            if addr.ipv4_mapped in net:
+                raise ValueError(
+                    f"Webhook URL targets a private/reserved address ({addr}). " "Only public endpoints are allowed."
+                )
 
 
 def validate_webhook_url(url: str, *, resolve_dns: bool = True) -> None:
@@ -243,7 +251,7 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
         _update_webhook_stats(webhook["id"], success=False)
         return False, error_msg
 
-    async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS, follow_redirects=False) as client:
         for attempt in range(WEBHOOK_RETRY_COUNT):
             try:
                 response = await client.post(webhook["url"], content=payload_str, headers=headers)

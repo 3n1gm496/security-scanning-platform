@@ -66,8 +66,15 @@ async def login(
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/"})
 
 
-@router.get("/logout")
+@router.post("/logout")
 def logout(request: Request) -> HTMLResponse:
+    request.session.clear()
+    return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
+
+
+@router.get("/logout")
+def logout_get(request: Request) -> HTMLResponse:
+    """GET logout kept for backward compatibility (link-based logout)."""
     request.session.clear()
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
 

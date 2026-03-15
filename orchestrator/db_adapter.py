@@ -178,6 +178,8 @@ class _ConnectionWrapper:
             self.commit()
         else:
             self.rollback()
+        if self._is_pg:
+            self.close()
         return False
 
     @property

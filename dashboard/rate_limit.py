@@ -41,15 +41,17 @@ def is_rate_limited(scope: str, client_id: str, limit: int, window: int, now: fl
 
 def _evict_stale_buckets() -> None:
     """Remove bucket entries whose last timestamp is older than the longest window."""
-    cutoff = time.monotonic() - max(RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_WINDOW_SECONDS)
-    with _rate_lock:
-        stale = [k for k, dq in _rate_buckets.items() if not dq or dq[-1] < cutoff]
-        for k in stale:
-            del _rate_buckets[k]
-    # Self-reschedule: only one timer active at a time
-    t = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
-    t.daemon = True
-    t.start()
+    try:
+        cutoff = time.monotonic() - max(RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_WINDOW_SECONDS)
+        with _rate_lock:
+            stale = [k for k, dq in _rate_buckets.items() if not dq or dq[-1] < cutoff]
+            for k in stale:
+                del _rate_buckets[k]
+    finally:
+        # Self-reschedule in finally block so the timer survives exceptions
+        t = Timer(_CLEANUP_INTERVAL_SECONDS, _evict_stale_buckets)
+        t.daemon = True
+        t.start()
 
 
 def start_cleanup_timer() -> None:

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import shutil
+import signal
 import socket
 import subprocess
 from datetime import datetime, timezone
@@ -22,10 +23,25 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fe80::/10"),
 ]
+
+
+def _is_blocked_ip(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Return True if addr falls within a blocked network range."""
+    for net in _BLOCKED_NETWORKS:
+        if addr in net:
+            return True
+    # IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1) bypass pure IPv6 checks.
+    # Extract the mapped IPv4 address and re-check against the IPv4 blocklist.
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        for net in _BLOCKED_NETWORKS:
+            if addr.ipv4_mapped in net:
+                return True
+    return False
 
 
 def _check_ssrf(hostname: str) -> None:
@@ -33,9 +49,8 @@ def _check_ssrf(hostname: str) -> None:
     # Literal IP check
     try:
         addr = ipaddress.ip_address(hostname)
-        for net in _BLOCKED_NETWORKS:
-            if addr in net:
-                raise ScannerError(f"Clone target resolves to blocked IP range: {addr}")
+        if _is_blocked_ip(addr):
+            raise ScannerError(f"Clone target resolves to blocked IP range: {addr}")
         return
     except ValueError:
         pass  # Not a literal IP — resolve via DNS
@@ -44,9 +59,8 @@ def _check_ssrf(hostname: str) -> None:
         results = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
         for _family, _type, _proto, _canonname, sockaddr in results:
             addr = ipaddress.ip_address(sockaddr[0])
-            for net in _BLOCKED_NETWORKS:
-                if addr in net:
-                    raise ScannerError(f"Clone target '{hostname}' resolves to blocked IP range: {addr}")
+            if _is_blocked_ip(addr):
+                raise ScannerError(f"Clone target '{hostname}' resolves to blocked IP range: {addr}")
     except socket.gaierror:
         pass  # DNS resolution failed — let git clone handle the error
 
@@ -101,16 +115,26 @@ def run_command(
     command: list[str], cwd: str | None = None, timeout: int = 3600, env: dict[str, str] | None = None
 ) -> tuple[int, str, str]:
     LOGGER.info("Executing command: %s", " ".join(_redact_url_credentials(t) for t in command))
-    process = subprocess.run(
+    process = subprocess.Popen(
         command,
         cwd=cwd,
         env=env or os.environ.copy(),
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout,
-        check=False,
+        start_new_session=True,
     )
-    return process.returncode, process.stdout, process.stderr
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+        return process.returncode, stdout, stderr
+    except subprocess.TimeoutExpired:
+        # Kill the entire process group (child + its descendants)
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            process.kill()
+        process.wait()
+        raise
 
 
 def ensure_json_file(path: str | Path, default_payload: dict | list) -> None:
@@ -185,7 +209,7 @@ def clone_repo(repo_url: str, destination: str, ref: str | None = None, depth: i
     if code != 0:
         # include git output so caller can log reason; the "Username for" line may
         # appear in stderr even though prompting is disabled.
-        raise ScannerError(f"git clone failed: {stderr or stdout}")
+        raise ScannerError(f"git clone failed: {_redact_url_credentials(stderr or stdout)}")
     return destination
 
 
@@ -444,7 +468,8 @@ def run_nuclei(
 
     # Build command using the current CLI flags from nuclei v2+
     command = ["nuclei", "-json-export", output_path, "-target", target_path]
-    command.extend(["-t"] + effective_templates)
+    for tmpl in effective_templates:
+        command.extend(["-t", tmpl])
     if severity:
         command.extend(["-s", severity])
     if tags:
@@ -554,9 +579,15 @@ def run_owasp_zap(
 
     # --- Passive scan wait (let ZAP process spidered pages) ---
     pscan_deadline = time.monotonic() + 30
-    while int(zap.pscan.records_to_scan) > 0:
+    while True:
+        try:
+            records = int(zap.pscan.records_to_scan)
+        except (ValueError, TypeError):
+            break
+        if records <= 0:
+            break
         if time.monotonic() > pscan_deadline:
-            LOGGER.info("ZAP passive scan still has %s records — proceeding", zap.pscan.records_to_scan)
+            LOGGER.info("ZAP passive scan still has %s records — proceeding", records)
             break
         time.sleep(1)
 

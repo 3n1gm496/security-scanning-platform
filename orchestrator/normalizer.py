@@ -200,6 +200,10 @@ def normalize_gitleaks(
     base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return findings
     for item in raw:
         description = item.get("Description") or item.get("RuleID") or "Potential secret detected"
         file_path = item.get("File")
@@ -375,7 +379,10 @@ def normalize_nuclei(
         title = f"{base_title}: {matcher_name}" if matcher_name else base_title
 
         # "matched-at" provides the URL/location that matched; use as file fallback
-        matched_file = item.get("matched", {}).get("file") or item.get("matched-at") or item.get("host")
+        matched = item.get("matched")
+        matched_file = (
+            (matched.get("file") if isinstance(matched, dict) else None) or item.get("matched-at") or item.get("host")
+        )
 
         finding = Finding(
             scan_id=scan_id,
@@ -388,19 +395,23 @@ def normalize_nuclei(
             title=title,
             description=info.get("description") or "",
             file=_rel_path(base_path, matched_file),
-            line=item.get("matched", {}).get("line"),
+            line=(matched.get("line") if isinstance(matched, dict) else None),
             package=None,
             version=None,
             cve=None,
-            remediation=info.get("reference"),
+            remediation=(
+                info.get("reference")
+                if not isinstance(info.get("reference"), list)
+                else "; ".join(str(x) for x in info.get("reference"))
+            ),
             raw_reference=raw_reference,
             fingerprint=_fingerprint(
                 "nuclei",
                 target.name,
                 item.get("templateId") or item.get("template-id"),
                 matcher_name,
-                item.get("matched-at") or item.get("matched", {}).get("file"),
-                item.get("matched", {}).get("line"),
+                item.get("matched-at") or (matched.get("file") if isinstance(matched, dict) else None),
+                (matched.get("line") if isinstance(matched, dict) else None),
             ),
         )
         findings.append(finding)
@@ -452,6 +463,10 @@ def normalize_zap(
     base_path: str | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return findings
     # ZAP REST API returns a list of alert dicts.  The key fields are:
     #   alert   — short name of the finding
     #   risk    — "High" / "Medium" / "Low" / "Informational"

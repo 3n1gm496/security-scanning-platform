@@ -6,6 +6,8 @@ ARG SYFT_VERSION=1.42.2
 ARG NUCLEI_VERSION=3.7.1
 ARG GRYPE_VERSION=0.109.1
 ARG GO_VERSION=1.25.7
+ARG SEMGREP_VERSION=1.85.0
+ARG CHECKOV_VERSION=3.1.47
 
 FROM python:3.11-slim AS scanner-builder
 
@@ -67,6 +69,8 @@ ARG GITLEAKS_VERSION
 ARG SYFT_VERSION
 ARG NUCLEI_VERSION
 ARG GRYPE_VERSION
+ARG SEMGREP_VERSION
+ARG CHECKOV_VERSION
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -91,15 +95,16 @@ WORKDIR /app
 # repo root so that the shared common/ package can be included.
 COPY orchestrator/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
-    pip install --no-cache-dir semgrep checkov bandit && \
+    # Pin resolved versions to avoid expensive pip backtracking in CI/builds.
+    pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" "checkov==${CHECKOV_VERSION}" bandit && \
     # Keep Trivy CI gate clean by reinstalling the patched packages after
     # checkov pins older vulnerable versions.
-    pip uninstall -y wheel jaraco.context && \
+    pip uninstall -y protobuf wheel jaraco.context && \
+    pip install --no-cache-dir --upgrade --force-reinstall "protobuf>=5.29.6,<6" && \
     pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
     pip install --no-cache-dir "jaraco.context>=6.1.0" && \
-    pip install --no-cache-dir --upgrade --force-reinstall "setuptools>=82.0.1" && \
     find /usr/local/lib/python3.11/site-packages \
-      \( -name 'wheel-0.45.1.dist-info' -o -name 'jaraco.context-5.3.0.dist-info' -o -name 'jaraco_context-5.3.0.dist-info' \) \
+      \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
       -exec rm -rf {} +
 
 COPY --from=scanner-builder /usr/local/bin/gitleaks /usr/local/bin/gitleaks
@@ -125,6 +130,12 @@ COPY common/ /app/common
 WORKDIR /app/orchestrator
 RUN pip install -e . && \
     chown -R scanuser:scanuser /app
+
+# Pip/setuptools can reintroduce vendored dist-info metadata in later install
+# steps, so remove stale vulnerable metadata again in the final runtime image.
+RUN find /usr/local/lib/python3.11/site-packages \
+      \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
+      -exec rm -rf {} +
 
 # Pre-download nuclei templates so the first scan does not need internet access.
 # Templates are stored in ~/nuclei-templates (nuclei v3 default path).

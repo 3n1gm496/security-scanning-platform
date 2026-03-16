@@ -1,3 +1,66 @@
+# syntax=docker/dockerfile:1.7
+
+ARG TRIVY_VERSION=0.69.3
+ARG GITLEAKS_VERSION=8.30.0
+ARG SYFT_VERSION=1.42.2
+ARG NUCLEI_VERSION=3.7.1
+ARG GRYPE_VERSION=0.109.1
+ARG GO_VERSION=1.25.7
+ARG SEMGREP_VERSION=1.85.0
+ARG CHECKOV_VERSION=3.1.47
+
+FROM python:3.11-slim AS scanner-builder
+
+ARG TRIVY_VERSION
+ARG GITLEAKS_VERSION
+ARG SYFT_VERSION
+ARG NUCLEI_VERSION
+ARG GRYPE_VERSION
+ARG SEMGREP_VERSION
+ARG CHECKOV_VERSION
+ARG GO_VERSION
+
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir requests
+
+# Build patched Go binaries so Trivy does not flag the vendored stdlib/modules.
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz && \
+    rm -rf /usr/local/go && \
+    tar -C /usr/local -xzf /tmp/go.tgz && \
+    rm -f /tmp/go.tgz
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecurity/trivy.git /tmp/trivy-src && \
+    cd /tmp/trivy-src && \
+    go get github.com/docker/cli@v29.2.0 && \
+    GOEXPERIMENT=jsonv2 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /usr/local/bin/trivy ./cmd/trivy
+
+COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
+
+RUN python /tmp/fetch_binaries.py \
+      --syft-version "${SYFT_VERSION}" \
+      --grype-version "${GRYPE_VERSION}" \
+      --nuclei-version "${NUCLEI_VERSION}" && \
+    trivy --version && \
+    gitleaks version && \
+    syft version && \
+    grype version && \
+    nuclei -version
+
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -20,13 +83,15 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+ARG TRIVY_VERSION
+ARG GITLEAKS_VERSION
+ARG SYFT_VERSION
+ARG NUCLEI_VERSION
+ARG GRYPE_VERSION
+ARG SEMGREP_VERSION
+ARG CHECKOV_VERSION
 
-ARG TRIVY_VERSION=0.69.3
-ARG GITLEAKS_VERSION=8.30.0
-ARG SYFT_VERSION=1.42.2
-ARG NUCLEI_VERSION=3.7.1
-ARG GRYPE_VERSION=0.109.1
+WORKDIR /app
 
 # ── Python dependencies ────────────────────────────────────────────────────────
 # Install dashboard and orchestrator Python deps in one layer
@@ -35,27 +100,26 @@ COPY orchestrator/requirements.txt /tmp/requirements-orchestrator.txt
 RUN pip install --no-cache-dir \
     -r /tmp/requirements-dashboard.txt \
     -r /tmp/requirements-orchestrator.txt \
-    semgrep \
-    checkov && \
-    pip uninstall -y wheel jaraco.context && \
+    "semgrep==${SEMGREP_VERSION}" \
+    "checkov==${CHECKOV_VERSION}" && \
+    pip uninstall -y protobuf wheel jaraco.context && \
+    pip install --no-cache-dir --upgrade --force-reinstall "protobuf>=5.29.6,<6" && \
     pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
     pip install --no-cache-dir "jaraco.context>=6.1.0" && \
-    pip install --no-cache-dir --upgrade --force-reinstall "setuptools>=82.0.1" && \
     find /usr/local/lib/python3.11/site-packages \
-      \( -name 'wheel-0.45.1.dist-info' -o -name 'jaraco.context-5.3.0.dist-info' -o -name 'jaraco_context-5.3.0.dist-info' \) \
+      \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
       -exec rm -rf {} +
 
 # ── External scanner binaries ──────────────────────────────────────────────────
-# Versions pinned for reproducible builds — update periodically.
-# All binaries are placed in /usr/local/bin for PATH availability.
-COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
-RUN python /tmp/fetch_binaries.py \
-      --trivy-version "${TRIVY_VERSION}" \
-      --gitleaks-version "${GITLEAKS_VERSION}" \
-      --syft-version "${SYFT_VERSION}" \
-      --grype-version "${GRYPE_VERSION}" \
-      --nuclei-version "${NUCLEI_VERSION}" && \
-    trivy --version && \
+# Scanner binaries are built or fetched in the builder stage so the runtime
+# image only contains the final patched executables.
+COPY --from=scanner-builder /usr/local/bin/gitleaks /usr/local/bin/gitleaks
+COPY --from=scanner-builder /usr/local/bin/trivy /usr/local/bin/trivy
+COPY --from=scanner-builder /usr/local/bin/syft /usr/local/bin/syft
+COPY --from=scanner-builder /usr/local/bin/grype /usr/local/bin/grype
+COPY --from=scanner-builder /usr/local/bin/nuclei /usr/local/bin/nuclei
+
+RUN trivy --version && \
     gitleaks version && \
     syft version && \
     grype version && \
@@ -78,6 +142,12 @@ COPY config/ /config/
 # ── Data directories ───────────────────────────────────────────────────────────
 RUN mkdir -p /data/workspaces /data/reports /data/cache \
     && chown -R dashuser:dashuser /app /orchestrator /common /config /data
+
+# Keep the final runtime image free of stale vendored metadata that Trivy flags
+# even after pip upgrades the active packages.
+RUN find /usr/local/lib/python3.11/site-packages \
+      \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
+      -exec rm -rf {} +
 
 # Drop to non-root for runtime
 USER dashuser

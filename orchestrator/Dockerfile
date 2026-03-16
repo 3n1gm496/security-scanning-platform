@@ -16,7 +16,8 @@ ARG GO_VERSION=1.25.7
 RUN groupadd -g 1000 scanuser && \
     useradd -u 1000 -g scanuser -m -s /bin/bash scanuser
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     curl \

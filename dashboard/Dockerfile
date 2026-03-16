@@ -10,7 +10,8 @@ RUN groupadd -g 1000 dashuser && \
     useradd -u 1000 -g dashuser -m -s /bin/bash dashuser
 
 # ── System dependencies ────────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git \
     curl \
     wget \

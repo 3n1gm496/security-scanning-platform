@@ -1,9 +1,0 @@
-# Temporary risk acceptances for CI image scan gates.
-# Keep this file minimal and periodically revalidate each entry.
-CVE-2026-23949
-CVE-2026-24049
-CVE-2025-68121
-CVE-2025-61726
-CVE-2025-61728
-CVE-2025-61729
-CVE-2025-15558

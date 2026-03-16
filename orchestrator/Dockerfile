@@ -10,6 +10,7 @@ ARG GITLEAKS_VERSION=8.30.0
 ARG SYFT_VERSION=1.42.2
 ARG NUCLEI_VERSION=3.7.1
 ARG GRYPE_VERSION=0.109.1
+ARG GO_VERSION=1.25.7
 
 # Use non-root user to avoid permission issues with host volumes
 RUN groupadd -g 1000 scanuser && \
@@ -29,14 +30,34 @@ WORKDIR /app
 # repo root so that the shared common/ package can be included.
 COPY orchestrator/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
-    pip install --no-cache-dir semgrep checkov bandit
+    pip install --no-cache-dir semgrep checkov bandit && \
+    # Keep Trivy CI gate clean by forcing patched transitive packages.
+    # Install wheel without deps to avoid upgrading packaging beyond checkov's pin.
+    pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
+    pip install --no-cache-dir "jaraco.context>=6.1.0"
+
+# Install modern Go toolchain to build patched scanner binaries from source.
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz && \
+    rm -rf /usr/local/go && \
+    tar -C /usr/local -xzf /tmp/go.tgz && \
+    rm -f /tmp/go.tgz
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Build gitleaks from source with the patched Go toolchain.
+RUN GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+
+# Build trivy from source and bump docker/cli dependency to the fixed version.
+RUN git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecurity/trivy.git /tmp/trivy-src && \
+    cd /tmp/trivy-src && \
+    go get github.com/docker/cli@v29.2.0 && \
+    GOEXPERIMENT=jsonv2 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /usr/local/bin/trivy ./cmd/trivy && \
+    rm -rf /tmp/trivy-src
 
 COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
 
 # Install scanner binaries from GitHub releases with SHA-256 verification.
 RUN python /tmp/fetch_binaries.py \
-      --trivy-version "${TRIVY_VERSION}" \
-      --gitleaks-version "${GITLEAKS_VERSION}" \
       --syft-version "${SYFT_VERSION}" \
       --grype-version "${GRYPE_VERSION}" \
       --nuclei-version "${NUCLEI_VERSION}" && \

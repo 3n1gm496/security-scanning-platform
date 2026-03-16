@@ -63,10 +63,20 @@ async function getCsrfToken(forceRefresh = false) {
 
 async function _fetchWithCsrfRetry(url, options, timeoutMs, parseJson) {
   const attempt = async (forceRefresh = false) => {
+    const externalSignal = options?.signal;
     const controller = new AbortController();
+    const abortFromExternalSignal = () => controller.abort(externalSignal?.reason);
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort(externalSignal.reason);
+      } else {
+        externalSignal.addEventListener('abort', abortFromExternalSignal, { once: true });
+      }
+    }
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const requestOptions = { ...options };
+      delete requestOptions.signal;
       if (_MUTATING_METHODS.has((requestOptions.method || 'GET').toUpperCase())) {
         const token = await getCsrfToken(forceRefresh);
         requestOptions.headers = { 'X-CSRF-Token': token, ...requestOptions.headers };
@@ -88,6 +98,9 @@ async function _fetchWithCsrfRetry(url, options, timeoutMs, parseJson) {
       throw err;
     } finally {
       clearTimeout(timer);
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', abortFromExternalSignal);
+      }
     }
   };
   return attempt(false);
@@ -228,6 +241,7 @@ createApp({
       analyticsRefreshing: false,
       analyticsRefreshingMode: 'silent-sync',
       _analyticsRefreshSeq: 0,
+      _analyticsWarmupDone: false,
 
       // ── Settings page
       settingsTab: 'apikeys',
@@ -428,23 +442,13 @@ createApp({
       }
     } catch (_) {}
 
-    // Pre-warm the analytics backend cache in the background so the first
-    // visit to the Analytics tab doesn't trigger 6 un-cached DB queries.
-    if (initialPage !== 'analytics') {
-      const warmup = [
-        '/api/analytics/risk-distribution',
-        '/api/analytics/compliance',
-        '/api/analytics/trends?days=30',
-        '/api/analytics/target-risk',
-        '/api/analytics/tool-effectiveness',
-        '/api/chart/severity-breakdown',
-      ];
-      Promise.allSettled(warmup.map(u => fetch(u))).catch(() => {});
-    }
+    this.scheduleAnalyticsWarmup();
   },
   beforeUnmount() {
-    if (this.refreshInterval) clearInterval(this.refreshInterval);
+    this.stopAutoRefresh();
     this.stopScanPolling();
+    this.cancelAnalyticsWarmup();
+    if (this._analyticsAbortController) this._analyticsAbortController.abort();
     if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
     if (this._popstateHandler) window.removeEventListener('popstate', this._popstateHandler);
     Object.keys(this.charts).forEach((key) => this.safeDestroyChart(key));
@@ -828,12 +832,58 @@ createApp({
       this.mobileNavOpen = false;
     },
 
+    cancelAnalyticsWarmup() {
+      if (this._analyticsWarmupCleanup) {
+        this._analyticsWarmupCleanup();
+        this._analyticsWarmupCleanup = null;
+      }
+    },
+
+    scheduleAnalyticsWarmup() {
+      this.cancelAnalyticsWarmup();
+      if (this.currentPage === 'analytics' || this._analyticsWarmupDone || !this.isDocumentVisible()) return;
+
+      const runWarmup = async () => {
+        this._analyticsWarmupCleanup = null;
+        if (
+          this.currentPage === 'analytics' ||
+          this._analyticsWarmupDone ||
+          !this.isDocumentVisible() ||
+          this.hasRunningScans
+        ) {
+          return;
+        }
+        try {
+          await this._refreshAnalyticsData('silent-sync');
+          this._analyticsWarmupDone = true;
+        } catch (e) {
+          console.debug('[analyticsWarmup] warmup skipped:', e.message);
+        }
+      };
+
+      if (typeof window.requestIdleCallback === 'function') {
+        const idleId = window.requestIdleCallback(() => {
+          const timerId = window.setTimeout(runWarmup, 1500);
+          this._analyticsWarmupCleanup = () => window.clearTimeout(timerId);
+        }, { timeout: 5000 });
+        this._analyticsWarmupCleanup = () => window.cancelIdleCallback(idleId);
+        return;
+      }
+
+      const timerId = window.setTimeout(runWarmup, 4000);
+      this._analyticsWarmupCleanup = () => window.clearTimeout(timerId);
+    },
+
     // ── Auto-refresh ──────────────────────────────────────────────────────────
 
     startAutoRefresh() {
-      this.refreshInterval = setInterval(async () => {
-        if (!this.autoRefresh || !this.isDocumentVisible()) return;
+      this.stopAutoRefresh();
+      this._autoRefreshStopped = false;
+
+      const run = async () => {
+        if (this._autoRefreshStopped) return;
         try {
+          if (!this.autoRefresh || !this.isDocumentVisible()) return;
           if (this.currentPage === 'dashboard') {
             await this.refreshDashboardData();
             await this.initDashboardCharts('background-refresh');
@@ -845,8 +895,22 @@ createApp({
           }
         } catch (e) {
           console.debug('[autoRefresh] page refresh failed:', e.message);
+        } finally {
+          if (!this._autoRefreshStopped) {
+            this.refreshInterval = setTimeout(run, 30000);
+          }
         }
-      }, 30000);
+      };
+
+      this.refreshInterval = setTimeout(run, 30000);
+    },
+
+    stopAutoRefresh() {
+      this._autoRefreshStopped = true;
+      if (this.refreshInterval) {
+        clearTimeout(this.refreshInterval);
+        this.refreshInterval = null;
+      }
     },
 
     startScanPolling(scanId) {
@@ -854,9 +918,12 @@ createApp({
       this._pollScanId = scanId || null;
       this._pollDeadline = Date.now() + 37 * 60 * 1000; // 37 min (> 30 min subprocess timeout)
       if (this.scanPollingInterval) return;
-      this.scanPollingInterval = setInterval(async () => {
-        if (!this.isDocumentVisible()) return;
+      this._scanPollingStopped = false;
+
+      const run = async () => {
+        if (this._scanPollingStopped) return;
         try {
+          if (!this.isDocumentVisible()) return;
           const result = await apiFetch('/api/scans/paginated?per_page=20&sort_by=created_at&sort_order=DESC');
           const items = result.items || [];
           const recentChanged = this.applyRecentScans(items);
@@ -871,14 +938,12 @@ createApp({
             this.findingsLiveMessage = 'Scan running. Results will update when ready.';
           }
 
-          // Check if the tracked scan is still RUNNING
           const stillRunning = this._pollScanId
             ? items.some(s => s.id === this._pollScanId && s.status === 'RUNNING')
             : items.some(s => s.status === 'RUNNING');
           if (!stillRunning || Date.now() > this._pollDeadline) {
             this.hasRunningScans = false;
             this.stopScanPolling();
-            // Notify user
             const targetScan = this._pollScanId
               ? items.find(s => s.id === this._pollScanId)
               : null;
@@ -887,22 +952,27 @@ createApp({
             } else if (targetScan && (targetScan.status === 'COMPLETED_WITH_FINDINGS' || targetScan.status === 'COMPLETED_CLEAN')) {
               this.showToast('Scan completed successfully');
             } else if (!this._pollScanId) {
-              // Mount-time recovery: no specific scan tracked, generic message
               this.showToast('Scan completed successfully');
             }
-            // Final refresh to ensure everything is fully up-to-date
             await this.refreshKpis(true);
             await this.syncCurrentPageAfterScanCompletion();
           }
         } catch (e) {
           console.debug('[scanPolling] poll failed:', e.message);
+        } finally {
+          if (!this._scanPollingStopped) {
+            this.scanPollingInterval = setTimeout(run, 5000);
+          }
         }
-      }, 5000);
+      };
+
+      this.scanPollingInterval = setTimeout(run, 5000);
     },
 
     stopScanPolling() {
+      this._scanPollingStopped = true;
       if (this.scanPollingInterval) {
-        clearInterval(this.scanPollingInterval);
+        clearTimeout(this.scanPollingInterval);
         this.scanPollingInterval = null;
       }
     },
@@ -1686,6 +1756,11 @@ createApp({
       // Cancel any in-flight refresh — always use the latest request so that
       // chart builders run with fresh $refs after navigation.
       const refreshSeq = ++this._analyticsRefreshSeq;
+      if (this._analyticsAbortController) {
+        this._analyticsAbortController.abort();
+      }
+      const controller = new AbortController();
+      this._analyticsAbortController = controller;
       this.analyticsRefreshing = true;
       this.analyticsRefreshingMode = mode;
 
@@ -1706,22 +1781,22 @@ createApp({
         // Fire all requests in parallel.
         let sevData = {};
         const results = await Promise.allSettled([
-          apiFetch('/api/analytics/risk-distribution').then(d => {
+          apiFetch('/api/analytics/risk-distribution', { signal: controller.signal }).then(d => {
             if (!stale()) this.analyticsData.riskDistribution = d;
           }),
-          apiFetch('/api/analytics/compliance').then(d => {
+          apiFetch('/api/analytics/compliance', { signal: controller.signal }).then(d => {
             if (!stale()) this.analyticsData.compliance = d;
           }),
-          apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`).then(d => {
+          apiFetch(`/api/analytics/trends?days=${this.analyticsDays}`, { signal: controller.signal }).then(d => {
             if (!stale()) this.analyticsData.trends = d;
           }),
-          apiFetch('/api/analytics/target-risk').then(d => {
+          apiFetch('/api/analytics/target-risk', { signal: controller.signal }).then(d => {
             if (!stale()) this.analyticsData.targetRisk = d;
           }),
-          apiFetch('/api/analytics/tool-effectiveness').then(d => {
+          apiFetch('/api/analytics/tool-effectiveness', { signal: controller.signal }).then(d => {
             if (!stale()) this.analyticsData.toolEffectiveness = d;
           }),
-          apiFetch('/api/chart/severity-breakdown').then(fresh => {
+          apiFetch('/api/chart/severity-breakdown', { signal: controller.signal }).then(fresh => {
             if (!stale()) sevData = parseSev(fresh);
           }),
         ]);
@@ -1744,6 +1819,9 @@ createApp({
 
         if (!stale()) this._buildAnalyticsCharts(sevData, mode);
       } finally {
+        if (this._analyticsAbortController === controller) {
+          this._analyticsAbortController = null;
+        }
         if (refreshSeq === this._analyticsRefreshSeq) this.analyticsRefreshing = false;
       }
     },

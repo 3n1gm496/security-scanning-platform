@@ -71,6 +71,7 @@ package-lock.json
 /tmp
 .DS_Store
 verbose-*.txt
+artifacts/
 data/reports/
 .local-playwright-libs/
 artifacts/browser-smoke/

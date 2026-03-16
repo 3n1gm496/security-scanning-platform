@@ -21,6 +21,7 @@ jobs:
     outputs:
       enabled: ${{ steps.detect.outputs.enabled }}
       mode: ${{ steps.detect.outputs.mode }}
+      require_remote: ${{ steps.detect.outputs.require_remote }}
     env:
       SECURITY_SCANNER_URL: ${{ secrets.SECURITY_SCANNER_URL }}
       SECURITY_SCANNER_API_KEY: ${{ secrets.SECURITY_SCANNER_API_KEY }}
@@ -30,10 +31,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          require_remote=false
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] || [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            require_remote=true
+          fi
+          echo "require_remote=${require_remote}" >> "$GITHUB_OUTPUT"
+
           if [ -n "${SECURITY_SCANNER_URL}" ] && [ -n "${SECURITY_SCANNER_API_KEY}" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "mode=remote" >> "$GITHUB_OUTPUT"
             echo "Security scanner secrets found. Remote scan will run." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${require_remote}" = "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "mode=missing-required-remote" >> "$GITHUB_OUTPUT"
+            echo "Remote security scan is required for this run, but scanner secrets are missing." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "mode=local-fallback" >> "$GITHUB_OUTPUT"
@@ -49,6 +60,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history for Gitleaks
+
+      - name: Fail when remote scan is required but not configured
+        if: ${{ needs.config-check.outputs.mode == 'missing-required-remote' }}
+        run: |
+          echo "Remote security scan is mandatory on main and scheduled runs."
+          echo "Configure SECURITY_SCANNER_URL and SECURITY_SCANNER_API_KEY to restore the gate."
+          exit 1
       
       - name: Run remote security scan
         if: ${{ needs.config-check.outputs.mode == 'remote' }}

@@ -34,11 +34,6 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-# Build gitleaks from source with the patched Go toolchain.
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/root/go/pkg/mod \
-    GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
-
 # Build trivy from source and bump docker/cli dependency to the fixed version.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/root/go/pkg/mod \
@@ -51,6 +46,7 @@ COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
 
 # Install scanner binaries from GitHub releases with SHA-256 verification.
 RUN python /tmp/fetch_binaries.py \
+      --gitleaks-version "${GITLEAKS_VERSION}" \
       --syft-version "${SYFT_VERSION}" \
       --grype-version "${GRYPE_VERSION}" \
       --nuclei-version "${NUCLEI_VERSION}" && \

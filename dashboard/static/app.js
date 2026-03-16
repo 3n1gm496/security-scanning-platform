@@ -332,7 +332,7 @@ createApp({
     this._popstateHandler = async (e) => {
       const page = (e.state && e.state.page) ? e.state.page : 'dashboard';
       if (validPages.includes(page) && page !== this.currentPage) {
-        await this.navigate(page, { pushHistory: false });
+        await this.navigate(page, { pushHistory: false, force: true });
       }
     };
     window.addEventListener('popstate', this._popstateHandler);
@@ -460,6 +460,17 @@ createApp({
       const s = getComputedStyle(document.documentElement);
       Chart.defaults.color = s.getPropertyValue('--chart-tick').trim() || '#6b7280';
       Chart.defaults.borderColor = s.getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,0.06)';
+      // Disable animations to avoid race conditions when canvases are unmounted
+      // during fast page navigation (dashboard <-> analytics).
+      Chart.defaults.animation = false;
+      if (Chart.defaults.transitions) {
+        if (Chart.defaults.transitions.active) {
+          Chart.defaults.transitions.active.animation = { duration: 0 };
+        }
+        if (Chart.defaults.transitions.resize) {
+          Chart.defaults.transitions.resize.animation = { duration: 0 };
+        }
+      }
     },
 
     // Read a CSS variable from :root — used by all chart builders for consistent theming
@@ -471,7 +482,7 @@ createApp({
       if (!this.chartsAvailable) return;
       requestAnimationFrame(() => {
         Object.values(this.charts).forEach(chart => {
-          if (!chart) return;
+          if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
           chart.resize();
           chart.update('none');
         });
@@ -499,9 +510,9 @@ createApp({
 
     // ── Navigation ─────────────────────────────────────────────────────────────────────────────────────
 
-    async navigate(page, { pushHistory = true } = {}) {
+    async navigate(page, { pushHistory = true, force = false } = {}) {
       // Skip redundant navigation to the same page (prevents chart destruction)
-      if (page === this.currentPage && !this._refreshing) return;
+      if (page === this.currentPage && !force) return;
 
       // Destroy chart instances when leaving a chart page — the v-if directive
       // removes the canvas elements from the DOM so old instances become stale.
@@ -524,7 +535,10 @@ createApp({
       if (pushHistory) history.pushState({ page }, '', '#' + page);
       window.scrollTo(0, 0);
       await nextTick();
-      if (page === 'dashboard') await this.initDashboardCharts();
+      if (page === 'dashboard') {
+        await this.refreshDashboardData();
+        await this.initDashboardCharts();
+      }
       if (page === 'scans') await this.loadScans(true);
       if (page === 'findings') await this.loadFindings(true);
       if (page === 'analytics') await this.loadAnalytics();
@@ -541,12 +555,31 @@ createApp({
     },
 
     async refreshCurrentPage() {
-      if (this._refreshing) return;
-      this._refreshing = true;
-      try {
-        await this.navigate(this.currentPage);
-      } finally {
-        this._refreshing = false;
+      if (this.currentPage !== 'dashboard') {
+        try {
+          this.kpis = await apiFetch('/api/kpi');
+        } catch (e) {
+          console.debug('[refreshCurrentPage] KPI refresh failed:', e.message);
+        }
+      }
+      await this.navigate(this.currentPage, { force: true });
+    },
+
+    async refreshDashboardData() {
+      const [kpiRes, scansRes] = await Promise.allSettled([
+        apiFetch('/api/kpi'),
+        apiFetch('/api/scans/paginated?per_page=12&sort_by=created_at&sort_order=DESC'),
+      ]);
+      if (kpiRes.status === 'fulfilled') {
+        this.kpis = kpiRes.value || {};
+      } else {
+        console.debug('[refreshDashboardData] KPI refresh failed:', kpiRes.reason?.message || kpiRes.reason);
+      }
+      if (scansRes.status === 'fulfilled') {
+        const items = scansRes.value?.items || [];
+        this.recentScans = items.slice(0, 12);
+      } else {
+        console.debug('[refreshDashboardData] Recent scans refresh failed:', scansRes.reason?.message || scansRes.reason);
       }
     },
 
@@ -576,11 +609,15 @@ createApp({
     startAutoRefresh() {
       this.refreshInterval = setInterval(async () => {
         if (!this.autoRefresh) return;
-        try {
-          // Always refresh KPIs
-          this.kpis = await apiFetch('/api/kpi');
-        } catch (e) {
-          console.debug('[autoRefresh] KPI poll failed:', e.message);
+        if (this.currentPage === 'dashboard') {
+          await this.refreshDashboardData();
+        } else {
+          try {
+            // Always refresh KPIs
+            this.kpis = await apiFetch('/api/kpi');
+          } catch (e) {
+            console.debug('[autoRefresh] KPI poll failed:', e.message);
+          }
         }
         // Refresh data for the currently visible page
         try {
@@ -679,71 +716,73 @@ createApp({
         await nextTick();
         this.buildTrendChart();
         this.buildSeverityChart(sevData);
-        this.buildRemediationChart();
+        await this.buildRemediationChart();
       } finally {
         this._chartsBuilding = false;
       }
     },
 
-    buildRemediationChart() {
-      const canvas = this.$refs.remediationChart;
-      if (!canvas) return;
-      if (this.charts.remediation && this.charts.remediation.canvas !== canvas) {
-        this.charts.remediation.destroy(); this.charts.remediation = null;
-      }
-      const labels = STATUS_LABELS;
-      const colors = STATUS_COLORS;
-      if (!this.charts.remediation) {
-        this.charts.remediation = new Chart(canvas.getContext('2d'), {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Findings',
-              data: [0, 0, 0, 0, 0, 0],
-              backgroundColor: colors,
-              borderRadius: 6,
-              borderSkipped: false,
-            }],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} findings` } },
-            },
-            scales: {
-              x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-              y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0 } },
-            },
-          },
-        });
-      }
-      // Load real data from the single status-counts endpoint
+    async buildRemediationChart() {
+      if (this.currentPage !== 'dashboard') return;
       const chartId = ++this._remediationChartVersion;
-      apiFetch('/api/findings/status-counts').then(statusMap => {
-        const counts = STATUS_KEYS.map(s => statusMap[s] || 0);
-        return counts;
-      }).catch(() => STATUS_KEYS.map(() => 0)).then(counts => {
-        // Discard stale response if chart was rebuilt or user navigated away
-        if (!this.charts.remediation || this._remediationChartVersion !== chartId) return;
-        // Filter out categories with zero findings to reduce visual noise
-        const nonZeroIdx = counts.map((c, i) => c > 0 ? i : -1).filter(i => i >= 0);
-        if (nonZeroIdx.length > 0) {
-          this.charts.remediation.data.labels = nonZeroIdx.map(i => labels[i]);
-          this.charts.remediation.data.datasets[0].data = nonZeroIdx.map(i => counts[i]);
-          this.charts.remediation.data.datasets[0].backgroundColor = nonZeroIdx.map(i => colors[i]);
-        } else {
-          this.charts.remediation.data.labels = labels;
-          this.charts.remediation.data.datasets[0].data = counts;
-          this.charts.remediation.data.datasets[0].backgroundColor = colors;
-        }
-        this.charts.remediation.update();
+
+      let statusMap = {};
+      try {
+        statusMap = await apiFetch('/api/findings/status-counts');
+      } catch (_) {
+        statusMap = {};
+      }
+
+      // Bail out if a newer refresh started or user navigated away.
+      if (this._remediationChartVersion !== chartId || this.currentPage !== 'dashboard') return;
+
+      const counts = STATUS_KEYS.map(s => Number(statusMap[s] || 0));
+      const nonZeroIdx = counts.map((c, i) => c > 0 ? i : -1).filter(i => i >= 0);
+      const labels = nonZeroIdx.length > 0 ? nonZeroIdx.map(i => STATUS_LABELS[i]) : [...STATUS_LABELS];
+      const values = nonZeroIdx.length > 0 ? nonZeroIdx.map(i => counts[i]) : counts;
+      const colors = nonZeroIdx.length > 0 ? nonZeroIdx.map(i => STATUS_COLORS[i]) : [...STATUS_COLORS];
+
+      const canvas = this.$refs.remediationChart;
+      if (!canvas || !canvas.isConnected) return;
+
+      if (this.charts.remediation) {
+        this.charts.remediation.destroy();
+        this.charts.remediation = null;
+      }
+
+      this.charts.remediation = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: [...labels],
+          datasets: [{
+            label: 'Findings',
+            data: values,
+            backgroundColor: [...colors],
+            borderRadius: 6,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 11 }, color: this.cssVar('--chart-tick') } },
+            y: {
+              beginAtZero: true,
+              grid: { color: this.cssVar('--chart-grid') },
+              ticks: { precision: 0, color: this.cssVar('--chart-tick') },
+            },
+          },
+        },
       });
     },
 
     buildSeverityChart(data) {
+      if (this.currentPage !== 'dashboard') return;
       const canvas = this.$refs.severityChart;
       if (!canvas) return;
       // If chart instance points to a canvas removed by v-if, discard it.
@@ -816,9 +855,13 @@ createApp({
     },
 
     buildTrendChart() {
+      if (this.currentPage !== 'dashboard') return;
       const canvas = this.$refs.trendChart;
       if (!canvas) return;
       if (this.charts.trend && this.charts.trend.canvas !== canvas) {
+        this.charts.trend.destroy(); this.charts.trend = null;
+      }
+      if (this.charts.trend && (!this.charts.trend.canvas || !this.charts.trend.canvas.isConnected)) {
         this.charts.trend.destroy(); this.charts.trend = null;
       }
 
@@ -1377,6 +1420,9 @@ createApp({
       const canvas = this.$refs.toolEffChart;
       if (!canvas || !this.analyticsData.toolEffectiveness) return;
       if (this.charts.toolEff && this.charts.toolEff.canvas !== canvas) {
+        this.charts.toolEff.destroy(); this.charts.toolEff = null;
+      }
+      if (this.charts.toolEff && (!this.charts.toolEff.canvas || !this.charts.toolEff.canvas.isConnected)) {
         this.charts.toolEff.destroy(); this.charts.toolEff = null;
       }
       const tools = this.analyticsData.toolEffectiveness;

@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.detect.outputs.enabled }}
+      mode: ${{ steps.detect.outputs.mode }}
     env:
       SECURITY_SCANNER_URL: ${{ secrets.SECURITY_SCANNER_URL }}
       SECURITY_SCANNER_API_KEY: ${{ secrets.SECURITY_SCANNER_API_KEY }}
@@ -28,16 +29,17 @@ jobs:
 
           if [ -n "${SECURITY_SCANNER_URL}" ] && [ -n "${SECURITY_SCANNER_API_KEY}" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "mode=remote" >> "$GITHUB_OUTPUT"
             echo "Security scanner secrets found. Remote scan will run." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Security scanner secrets are not configured. Remote scan skipped." >> "$GITHUB_STEP_SUMMARY"
+            echo "mode=local-fallback" >> "$GITHUB_OUTPUT"
+            echo "Security scanner secrets are not configured. Running local fallback scan instead." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   security-scan:
     name: Run Security Scan
     needs: config-check
-    if: ${{ needs.config-check.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -45,7 +47,8 @@ jobs:
         with:
           fetch-depth: 0  # Full history for Gitleaks
       
-      - name: Run Security Scan
+      - name: Run remote security scan
+        if: ${{ needs.config-check.outputs.mode == 'remote' }}
         env:
           SCANNER_URL: ${{ secrets.SECURITY_SCANNER_URL }}
           SCANNER_API_KEY: ${{ secrets.SECURITY_SCANNER_API_KEY }}
@@ -96,6 +99,22 @@ jobs:
           fi
           
           echo "✅ Security scan passed"
+
+      - name: Run local fallback security scan
+        if: ${{ needs.config-check.outputs.mode == 'local-fallback' }}
+        run: |
+          set -euo pipefail
+
+          docker run --rm \
+            -v "${PWD}:/repo" \
+            zricethezav/gitleaks:v8.30.0 \
+            git /repo \
+            --report-format json \
+            --report-path /repo/scan-results.json
+
+          echo "status=passed" > scan-mode.txt
+          echo "mode=local-fallback" >> scan-mode.txt
+          echo "Local fallback scan completed with gitleaks." >> "$GITHUB_STEP_SUMMARY"
       
       - name: Upload scan results
         if: always()

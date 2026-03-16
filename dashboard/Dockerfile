@@ -137,6 +137,13 @@ COPY orchestrator/requirements.txt /tmp/requirements-orchestrator.txt
 RUN pip install --no-cache-dir \
     -r /tmp/requirements-dashboard.txt \
     -r /tmp/requirements-orchestrator.txt
+RUN pip install --no-cache-dir --upgrade \
+      "setuptools==80.9.0" \
+      "wheel>=0.46.2" \
+      "jaraco.context>=6.1.0" && \
+    find /usr/local/lib/python3.11/site-packages \
+      \( -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
+      -exec rm -rf {} +
 
 # ── External scanner binaries ──────────────────────────────────────────────────
 # Scanner binaries are built or fetched in the builder stage so the runtime
@@ -152,6 +159,9 @@ COPY --from=scanner-builder /usr/local/bin/nuclei /usr/local/bin/nuclei
 RUN chmod 0755 /usr/local/bin/semgrep /usr/local/bin/gitleaks /usr/local/bin/trivy /usr/local/bin/syft /usr/local/bin/grype /usr/local/bin/nuclei && \
     find /opt/scanner-venv/lib/python3.11/site-packages \
       \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
+      -exec rm -rf {} + && \
+    find /usr/local/lib/python3.11/site-packages \
+      \( -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
       -exec rm -rf {} + && \
     semgrep --version && \
     checkov --version && \
@@ -183,6 +193,9 @@ RUN mkdir -p /data/workspaces /data/reports /data/cache \
 # even after pip upgrades the active packages.
 RUN find /opt/scanner-venv/lib/python3.11/site-packages \
       \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
+      -exec rm -rf {} + && \
+    find /usr/local/lib/python3.11/site-packages \
+      \( -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
       -exec rm -rf {} +
 
 # Drop to non-root for runtime

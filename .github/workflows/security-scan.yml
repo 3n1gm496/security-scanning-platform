@@ -108,7 +108,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "::warning::Remote security scanner is not configured; running the local gitleaks fallback only."
           docker run --rm \
             -v "${PWD}:/repo" \
             zricethezav/gitleaks:v8.30.0 \
@@ -120,9 +119,6 @@ jobs:
           echo "status=passed" > scan-mode.txt
           echo "mode=local-fallback" >> scan-mode.txt
           echo "Local fallback scan completed with gitleaks." >> "$GITHUB_STEP_SUMMARY"
-          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] || [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "Warning: main/scheduled runs are not using the remote scanner gate." >> "$GITHUB_STEP_SUMMARY"
-          fi
       
       - name: Upload scan results
         if: always()

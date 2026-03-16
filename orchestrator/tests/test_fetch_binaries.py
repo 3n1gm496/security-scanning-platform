@@ -1,4 +1,6 @@
 import io
+import os
+import stat
 import tarfile
 
 from orchestrator.scripts import fetch_binaries
@@ -66,3 +68,16 @@ def test_expected_sha256_from_release_parses_checksum_asset(monkeypatch, tmp_pat
         fetch_binaries.expected_sha256_from_release(release_json, "tool.tar.gz")
         == "2222222222222222222222222222222222222222222222222222222222222222"
     )
+
+
+def test_ensure_executable_sets_group_and_other_exec_bits(tmp_path):
+    binary = tmp_path / "nuclei"
+    binary.write_bytes(b"#!/bin/sh\necho ok\n")
+    os.chmod(binary, 0o600)
+
+    fetch_binaries.ensure_executable(str(binary))
+
+    mode = os.stat(binary).st_mode
+    assert mode & stat.S_IXUSR
+    assert mode & stat.S_IXGRP
+    assert mode & stat.S_IXOTH

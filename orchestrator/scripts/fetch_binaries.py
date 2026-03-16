@@ -185,7 +185,18 @@ def get_release(owner: str, repo: str, tag: str) -> dict | None:
 def ensure_executable(path: str) -> None:
     try:
         st = os.stat(path)
-        os.chmod(path, st.st_mode | stat.S_IEXEC)
+        # Make scanner binaries executable for non-root runtime users too
+        # (e.g. scanuser in Docker images).
+        os.chmod(
+            path,
+            st.st_mode
+            | stat.S_IRUSR
+            | stat.S_IRGRP
+            | stat.S_IROTH
+            | stat.S_IXUSR
+            | stat.S_IXGRP
+            | stat.S_IXOTH,
+        )
     except Exception:
         pass
 

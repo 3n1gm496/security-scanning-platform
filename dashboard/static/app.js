@@ -10,16 +10,16 @@ const { createApp, ref, reactive, computed, onMounted, nextTick, watch } = Vue;
 const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO', 'UNKNOWN'];
 
 const SEVERITY_COLORS = {
-  CRITICAL: '#dc2626', HIGH: '#f97316', MEDIUM: '#f59e0b',
-  LOW: '#3b82f6', INFO: '#6b7280', UNKNOWN: '#9ca3af',
+  CRITICAL: '#ff5b5b', HIGH: '#ff9b3d', MEDIUM: '#f6c15d',
+  LOW: '#34d5ff', INFO: '#70819d', UNKNOWN: '#4b5563',
 };
 
 const STATUS_LABELS = ['New', 'Acknowledged', 'In Progress', 'Resolved', 'False Positive', 'Risk Accepted'];
 const STATUS_KEYS   = ['new', 'acknowledged', 'in_progress', 'resolved', 'false_positive', 'risk_accepted'];
-const STATUS_COLORS = ['#6b7280', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899'];
+const STATUS_COLORS = ['#64748b', '#f6c15d', '#34d5ff', '#29d391', '#6b7a90', '#ff9b3d'];
 
-const OWASP_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#14b8a6', '#3b82f6', '#8b5cf6'];
-const RISK_COLORS  = ['#10b981', '#f59e0b', '#f97316', '#dc2626'];
+const OWASP_COLORS = ['#34d5ff', '#57c8ff', '#7eb5ff', '#f6c15d', '#ff9b3d', '#ff5b5b'];
+const RISK_COLORS  = ['#29d391', '#34d5ff', '#f6c15d', '#ff5b5b'];
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +42,15 @@ function stableSerialize(value) {
   } catch (_) {
     return '';
   }
+}
+
+function formatCompactNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '—';
+  return new Intl.NumberFormat('en', {
+    notation: 'compact',
+    maximumFractionDigits: numeric >= 1000 ? 1 : 0,
+  }).format(numeric);
 }
 
 // CSRF token cache — fetched once, reused for all mutating requests.
@@ -288,7 +297,7 @@ createApp({
       acceptRiskExpiry: '',
 
       // ── Dark mode
-      darkMode: false,
+      darkMode: true,
 
       // ── UI overlays
       showFindingModal: false,
@@ -309,18 +318,27 @@ createApp({
     },
     pageSubtitle() {
       const subs = {
-        dashboard: 'Security posture overview',
-        scans: 'History of all scan executions',
-        findings: 'Detected vulnerabilities and lifecycle management',
-        analytics: 'Risk scoring, compliance and trends',
-        compare: 'Differential analysis between two scans',
-        settings: 'API keys, webhooks and configuration',
+        dashboard: 'Live security posture',
+        scans: 'Queue and execution history',
+        findings: 'Triage and remediation operations',
+        analytics: 'Risk, compliance and trend intelligence',
+        compare: 'Baseline diff intelligence',
+        settings: 'Access and automation controls',
       };
       return subs[this.currentPage] || '';
     },
     currentUserRoleLabel() {
       const labels = { admin: 'Administrator', operator: 'Operator', viewer: 'Viewer' };
       return labels[this.currentUserRole] || 'User';
+    },
+    currentUserInitials() {
+      const base = String(this.currentUser || 'U')
+        .split(/[\s._-]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(part => part[0]?.toUpperCase())
+        .join('');
+      return base || 'U';
     },
     allSelected() {
       return this.findings.length > 0 && this.findings.every(f => this.selectedFindings.includes(f.id));
@@ -331,6 +349,117 @@ createApp({
       const scanA = this.compareScanList.find(s => s.id === this.compareIdA);
       if (!scanA) return this.compareScanList;
       return this.compareScanList.filter(s => s.id !== this.compareIdA && s.target_name === scanA.target_name);
+    },
+    dashboardSignalTiles() {
+      return [
+        {
+          key: 'total-scans',
+          label: 'Total Scans',
+          value: formatCompactNumber(this.kpis.total_scans),
+          hint: 'Historical executions indexed in platform',
+          tone: 'signal-cyan',
+        },
+        {
+          key: 'total-findings',
+          label: 'Total findings',
+          value: formatCompactNumber(this.kpis.total_findings),
+          hint: 'Across all indexed scan results',
+          tone: 'signal-amber',
+        },
+        {
+          key: 'critical',
+          label: 'Critical',
+          value: formatCompactNumber(this.kpis.critical_findings),
+          hint: 'Immediate operator attention',
+          tone: 'signal-danger',
+        },
+        {
+          key: 'high',
+          label: 'High',
+          value: formatCompactNumber(this.kpis.high_findings),
+          hint: 'Elevated remediation queue',
+          tone: 'signal-warning',
+        },
+        {
+          key: 'targets',
+          label: 'Observed targets',
+          value: formatCompactNumber(this.kpis.open_targets),
+          hint: 'Assets currently under watch',
+          tone: 'signal-cyan',
+        },
+        {
+          key: 'velocity',
+          label: 'Scan velocity',
+          value: formatCompactNumber(this.kpis.last_7d_scans),
+          hint: 'Completed in the last 7 days',
+          tone: 'signal-green',
+        },
+      ];
+    },
+    scansActiveFilters() {
+      const chips = [];
+      if (this.scansFilter.search) chips.push({ key: 'search', label: 'Search', value: this.scansFilter.search });
+      if (this.scansFilter.target) chips.push({ key: 'target', label: 'Target', value: this.scansFilter.target });
+      if (this.scansFilter.status) chips.push({ key: 'status', label: 'Status', value: this.statusLabel(this.scansFilter.status) });
+      if (this.scansFilter.policy) chips.push({ key: 'policy', label: 'Policy', value: this.scansFilter.policy });
+      return chips;
+    },
+    findingsActiveFilters() {
+      const chips = [];
+      if (this.findingsFilter.search) chips.push({ key: 'search', label: 'Search', value: this.findingsFilter.search });
+      if (this.findingsFilter.severity) chips.push({ key: 'severity', label: 'Severity', value: this.findingsFilter.severity });
+      if (this.findingsFilter.tool) chips.push({ key: 'tool', label: 'Tool', value: this.findingsFilter.tool });
+      if (this.findingsFilter.target) chips.push({ key: 'target', label: 'Target', value: this.findingsFilter.target });
+      if (this.findingsFilter.status) chips.push({ key: 'status', label: 'Status', value: this.findingsFilter.status.replace(/_/g, ' ') });
+      if (this.findingsFilter.scan_id) chips.push({ key: 'scan_id', label: 'Scan', value: String(this.findingsFilter.scan_id).slice(0, 12) });
+      return chips;
+    },
+    analyticsSummaryTiles() {
+      const riskDistribution = this.analyticsData.riskDistribution || {};
+      const distribution = riskDistribution.distribution || {};
+      const total = Object.values(distribution).reduce((sum, count) => sum + (Number(count) || 0), 0);
+      const highRiskShare = total > 0 ? Math.round(((Number(riskDistribution.high_risk_count) || 0) / total) * 100) : 0;
+      const targetRisk = Array.isArray(this.analyticsData.targetRisk) ? this.analyticsData.targetRisk : [];
+      const highestTarget = targetRisk.slice().sort((a, b) => (b.average_risk || 0) - (a.average_risk || 0))[0];
+      const hotspotTarget = highestTarget?.target || '—';
+      const hotspotShort = hotspotTarget.length > 26 ? hotspotTarget.slice(0, 24) + '…' : hotspotTarget;
+      return [
+        {
+          key: 'avg-risk',
+          label: 'Average risk',
+          value: Number.isFinite(Number(riskDistribution.average_risk)) ? `${riskDistribution.average_risk}/100` : '—',
+          hint: 'Cross-finding blended risk posture',
+          tone: 'signal-cyan',
+        },
+        {
+          key: 'high-risk-share',
+          label: 'High-risk share',
+          value: total > 0 ? `${highRiskShare}%` : '—',
+          hint: 'Portion of findings in the upper risk bands',
+          tone: 'signal-danger',
+        },
+        {
+          key: 'hotspot',
+          label: 'Most exposed target',
+          value: hotspotShort,
+          fullValue: hotspotTarget,
+          hint: highestTarget ? `${highestTarget.average_risk}/100 average risk` : 'No analytics hotspot yet',
+          tone: 'signal-amber',
+        },
+      ];
+    },
+    compareContext() {
+      const scanA = this.compareScanList.find(s => s.id === this.compareIdA);
+      const scanB = this.compareScanList.find(s => s.id === this.compareIdB);
+      return { scanA, scanB };
+    },
+    findingsTableHasLongValues() {
+      return this.findings.some((finding) => {
+        const title = String(finding.title || '');
+        const file = String(finding.file || '');
+        const target = String(finding.target_name || '');
+        return title.length > 80 || file.length > 44 || target.length > 32;
+      });
     },
   },
 
@@ -374,9 +503,11 @@ createApp({
 
     // ── Dark mode: restore preference from localStorage
     const savedTheme = localStorage.getItem('ssp-theme');
-    if (savedTheme === 'dark') {
-      this.darkMode = true;
-      document.documentElement.setAttribute('data-theme', 'dark');
+    this.darkMode = savedTheme !== 'light';
+    if (this.darkMode) {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
     }
 
     // ── Keyboard: Escape to close modals + Tab focus trap
@@ -455,6 +586,7 @@ createApp({
     this.stopScanPolling();
     this.cancelAnalyticsWarmup();
     if (this._analyticsAbortController) this._analyticsAbortController.abort();
+    if (this._resizeFrame) cancelAnimationFrame(this._resizeFrame);
     if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
     if (this._popstateHandler) window.removeEventListener('popstate', this._popstateHandler);
     Object.keys(this.charts).forEach((key) => this.safeDestroyChart(key));
@@ -485,19 +617,7 @@ createApp({
       const s = getComputedStyle(document.documentElement);
       Chart.defaults.color = s.getPropertyValue('--chart-tick').trim() || '#6b7280';
       Chart.defaults.borderColor = s.getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,0.06)';
-      if (!Chart.__sspDetachedCanvasGuardInstalled) {
-        ['clear', 'draw', 'render', 'resize', 'update'].forEach((method) => {
-          const original = Chart.prototype[method];
-          if (typeof original !== 'function') return;
-          Chart.prototype[method] = function guardedChartMethod(...args) {
-            if (!this.canvas || !this.ctx || this.canvas.isConnected === false) {
-              return this;
-            }
-            return original.apply(this, args);
-          };
-        });
-        Chart.__sspDetachedCanvasGuardInstalled = true;
-      }
+      Chart.defaults.font.family = s.getPropertyValue('--font-ui').trim() || 'IBM Plex Sans, system-ui, sans-serif';
       if (Chart.defaults.transitions) {
         if (Chart.defaults.transitions.active) {
           Chart.defaults.transitions.active.animation = { duration: 0 };
@@ -515,6 +635,10 @@ createApp({
 
     isDocumentVisible() {
       return document.visibilityState !== 'hidden';
+    },
+
+    chartIsUsable(chart) {
+      return !!(chart && chart.canvas && chart.ctx && chart.canvas.isConnected !== false);
     },
 
     _scanSignaturePayload(scans) {
@@ -552,9 +676,8 @@ createApp({
 
     updateChartWithMode(chart, mode = 'background-refresh') {
       if (!chart) return;
-      if (!chart.canvas || !chart.canvas.isConnected || !chart.ctx) {
-        try { chart.stop(); } catch (_) {}
-        try { chart.destroy(); } catch (_) {}
+      if (!this.chartIsUsable(chart)) {
+        this.safeDestroyChart(chart);
         return;
       }
       chart.options.animation = this.chartMotion(mode);
@@ -564,7 +687,12 @@ createApp({
         resize: { animation: { duration: 0 } },
       };
       const updateMode = ['background-refresh', 'resize', 'silent-sync'].includes(mode) ? 'none' : undefined;
-      chart.update(updateMode);
+      try {
+        chart.update(updateMode);
+      } catch (error) {
+        console.debug('[charts] update skipped:', error?.message || error);
+        this.safeDestroyChart(chart);
+      }
     },
 
     safeDestroyChart(keyOrChart) {
@@ -713,11 +841,18 @@ createApp({
 
     forceResizeCharts() {
       if (!this.chartsAvailable) return;
-      requestAnimationFrame(() => {
+      if (this._resizeFrame) cancelAnimationFrame(this._resizeFrame);
+      this._resizeFrame = requestAnimationFrame(() => {
+        this._resizeFrame = null;
         Object.values(this.charts).forEach(chart => {
-          if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
-          chart.resize();
-          this.updateChartWithMode(chart, 'resize');
+          if (!this.chartIsUsable(chart)) return;
+          try {
+            chart.options.animation = false;
+            chart.resize();
+          } catch (error) {
+            console.debug('[charts] resize skipped:', error?.message || error);
+            this.safeDestroyChart(chart);
+          }
         });
       });
     },
@@ -1212,6 +1347,7 @@ createApp({
           responsive: true,
           maintainAspectRatio: false,
           indexAxis: 'y',
+          layout: { padding: { top: 4, right: 8, bottom: 0, left: 0 } },
           plugins: {
             legend: {
               display: true,
@@ -1309,6 +1445,7 @@ createApp({
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
+          layout: { padding: { top: 2, right: 8, bottom: 4, left: 0 } },
           plugins: {
             legend: {
               display: true,
@@ -1948,45 +2085,38 @@ createApp({
         this.updateChartWithMode(this.charts.severityDist, mode);
         return;
       }
-      const legendColor = () => this.cssVar('--chart-legend') || '#374151';
       this.charts.severityDist = new Chart(canvas.getContext('2d'), {
-        type: 'doughnut',
+        type: 'bar',
         data: {
           labels,
           datasets: [{
+            label: 'Findings',
             data: values,
             backgroundColor: colors,
-            borderWidth: 2,
-            borderColor: this.cssVar('--chart-border'),
+            borderRadius: 8,
+            borderSkipped: false,
           }],
         },
         options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
+          indexAxis: 'y',
           plugins: {
-            legend: {
-              position: 'bottom',
-              labels: {
-                boxWidth: 12,
-                font: { size: 11 },
-                color: this.cssVar('--chart-legend'),
-                padding: 12,
-                usePointStyle: false,
-                generateLabels: (chart) => {
-                  return chart.data.labels.map((label, i) => ({
-                    text: `${label}  (${chart.data.datasets[0].data[i]})`,
-                    fillStyle: chart.data.datasets[0].backgroundColor[i],
-                    fontColor: legendColor(),
-                    lineWidth: 0,
-                    hidden: false,
-                    index: i,
-                  }));
-                },
-              },
-            },
+            legend: { display: false },
             tooltip: {
               callbacks: {
-                label: ctx => ` ${ctx.parsed} findings (${ctx.label})`,
+                label: ctx => ` ${ctx.parsed.x} findings (${ctx.label})`,
               },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: this.cssVar('--chart-grid') },
+              ticks: { precision: 0, color: this.cssVar('--chart-tick') },
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: this.cssVar('--chart-tick'), font: { weight: '600' } },
             },
           },
         }, mode),
@@ -2032,6 +2162,7 @@ createApp({
         },
         options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 4, right: 6, bottom: 0, left: 0 } },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -2041,8 +2172,16 @@ createApp({
             },
           },
           scales: {
-            y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { color: this.cssVar('--chart-tick') } },
-            x: { grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },
+            y: {
+              beginAtZero: true,
+              grid: { color: this.cssVar('--chart-grid') },
+              ticks: { color: this.cssVar('--chart-tick'), precision: 0, font: { size: 11 } },
+              title: { display: true, text: 'Findings', color: this.cssVar('--chart-tick'), font: { size: 10 } },
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: this.cssVar('--chart-tick'), font: { size: 11 }, maxRotation: 18, minRotation: 0 },
+            },
           },
         }, mode),
       });
@@ -2069,23 +2208,46 @@ createApp({
         if (this.charts.owasp.$sspSignature === signature) return;
         this.charts.owasp.data.labels = labels;
         this.charts.owasp.data.datasets[0].data = values;
+        this.charts.owasp.data.datasets[0].backgroundColor = OWASP_COLORS.slice(0, values.length);
         this.charts.owasp.$sspSignature = signature;
         this.updateChartWithMode(this.charts.owasp, mode);
         return;
       }
       this.charts.owasp = new Chart(canvas.getContext('2d'), {
-        type: 'pie',
+        type: 'bar',
         data: {
           labels,
           datasets: [{
+            label: 'Findings',
             data: values,
-            backgroundColor: OWASP_COLORS,
-            borderWidth: 2, borderColor: this.cssVar('--chart-border'),
+            backgroundColor: OWASP_COLORS.slice(0, values.length),
+            borderRadius: 8,
+            borderSkipped: false,
           }],
         },
         options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, usePointStyle: false } } },
+          indexAxis: 'y',
+          layout: { padding: { top: 2, right: 10, bottom: 0, left: 0 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.parsed.x} findings`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: this.cssVar('--chart-grid') },
+              ticks: { precision: 0, color: this.cssVar('--chart-tick') },
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: this.cssVar('--chart-tick'), font: { weight: '600', size: 11 } },
+            },
+          },
         }, mode),
       });
       this.charts.owasp.$sspSignature = signature;
@@ -2142,10 +2304,11 @@ createApp({
         },
         options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 4, right: 8, bottom: 2, left: 0 } },
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: this.cssVar('--chart-legend'), font: { size: 11 }, usePointStyle: false },
+              labels: { color: this.cssVar('--chart-legend'), font: { size: 11 }, usePointStyle: true, boxWidth: 10, padding: 16 },
             },
             tooltip: {
               backgroundColor: this.cssVar('--chart-tooltip-bg'),
@@ -2163,7 +2326,7 @@ createApp({
             },
             x: {
               grid: { display: false },
-              ticks: { color: tickColor, font: { size: 11 } },
+              ticks: { color: tickColor, font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
             },
           },
         }, mode),
@@ -2190,6 +2353,11 @@ createApp({
       if (risk >= 50) return 'risk-high';
       if (risk >= 25) return 'risk-medium';
       return 'risk-low';
+    },
+
+    formatModalTarget(target) {
+      const text = String(target || '—');
+      return text.length > 54 ? text.slice(0, 52) + '…' : text;
     },
 
     // ── Compare ───────────────────────────────────────────────────────────────
@@ -2482,6 +2650,18 @@ createApp({
 
     formatDate,
 
+    clearScanFilter(key) {
+      if (!(key in this.scansFilter)) return;
+      this.scansFilter[key] = '';
+      this.loadScans(true);
+    },
+
+    clearFindingFilter(key) {
+      if (!(key in this.findingsFilter)) return;
+      this.findingsFilter[key] = '';
+      this.loadFindings(true);
+    },
+
     statusBadgeClass(status) {
       const map = {
         COMPLETED_CLEAN: 'badge-success',
@@ -2599,10 +2779,10 @@ createApp({
     toggleDarkMode() {
       this.darkMode = !this.darkMode;
       if (this.darkMode) {
-        document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.removeAttribute('data-theme');
         localStorage.setItem('ssp-theme', 'dark');
       } else {
-        document.documentElement.removeAttribute('data-theme');
+        document.documentElement.setAttribute('data-theme', 'light');
         localStorage.setItem('ssp-theme', 'light');
       }
       // Wait for the browser to recalculate CSS custom properties before reading

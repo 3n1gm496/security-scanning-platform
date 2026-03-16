@@ -79,6 +79,44 @@ async function readTotalScansKpi(page) {
   return parseInteger(raw);
 }
 
+async function clickNav(page, label) {
+  await page.locator("a.nav-item", { hasText: label }).first().click();
+  await page.waitForTimeout(900);
+}
+
+async function ensureCompareSelection(page) {
+  const pair = await page.evaluate(() => {
+    const selectA = document.querySelector("#compare-scan-a");
+    const selectB = document.querySelector("#compare-scan-b");
+    if (!(selectA instanceof HTMLSelectElement) || !(selectB instanceof HTMLSelectElement)) return null;
+    const optionMap = new Map();
+    for (const option of Array.from(selectA.options)) {
+      if (!option.value) continue;
+      const text = option.textContent || "";
+      const target = text.split("—")[1]?.split("(")[0]?.trim() || text.trim();
+      if (!optionMap.has(target)) optionMap.set(target, []);
+      optionMap.get(target).push(option.value);
+    }
+    for (const values of optionMap.values()) {
+      if (values.length >= 2) {
+        return { a: values[0], b: values[1] };
+      }
+    }
+    return null;
+  });
+  if (!pair) {
+    throw new Error("Unable to find two comparable scans for compare smoke test");
+  }
+  await page.selectOption("#compare-scan-a", pair.a);
+  await page.waitForTimeout(300);
+  await page.selectOption("#compare-scan-b", pair.b);
+  await Promise.all([
+    page.waitForResponse((res) => res.url().includes("/api/scans/compare") && res.status() < 400, { timeout: 15000 }),
+    page.getByRole("button", { name: "Compare" }).click(),
+  ]);
+  await page.waitForTimeout(1200);
+}
+
 function insertFreshRuntimeScan() {
   const code = `
 import sqlite3
@@ -283,21 +321,61 @@ async function main() {
     let totalScansAfter = totalScansBefore;
 
     if (smokeMode !== "dashboard_only") {
-      await page.locator("a.nav-item", { hasText: "Scans" }).first().click();
-      await page.waitForTimeout(1500);
+      await clickNav(page, "Scans");
       await page.screenshot({ path: resolve(artifactsDir, "03-scans.png"), fullPage: true });
 
-      await page.locator("a.nav-item", { hasText: "Findings" }).first().click();
-      await page.waitForTimeout(1500);
-      await page.screenshot({ path: resolve(artifactsDir, "04-findings.png"), fullPage: true });
+      await clickNav(page, "Findings");
+      await page.getByRole("button", { name: "Details" }).first().click();
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: resolve(artifactsDir, "04-findings-modal.png"), fullPage: true });
+      await page.locator(".modal-close").first().click();
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: resolve(artifactsDir, "05-findings.png"), fullPage: true });
 
-      await page.locator("a.nav-item", { hasText: "Analytics" }).first().click();
-      await page.waitForTimeout(2500);
-      await page.screenshot({ path: resolve(artifactsDir, "05-analytics.png"), fullPage: true });
+      await clickNav(page, "Analytics");
+      await page.waitForTimeout(1800);
+      await page.screenshot({ path: resolve(artifactsDir, "06-analytics.png"), fullPage: true });
+
+      await clickNav(page, "Compare");
+      await ensureCompareSelection(page);
+      await page.screenshot({ path: resolve(artifactsDir, "07-compare.png"), fullPage: true });
+
+      await clickNav(page, "Settings");
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: resolve(artifactsDir, "08-settings-apikeys.png"), fullPage: true });
+      await page.getByRole("button", { name: "Webhooks" }).click();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks.png"), fullPage: true });
+      await page.getByRole("button", { name: "Notifications" }).click();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: resolve(artifactsDir, "10-settings-notifications.png"), fullPage: true });
+
+      await clickNav(page, "Dashboard");
+      await page.waitForTimeout(700);
+      await page.getByRole("button", { name: "Toggle theme" }).click();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: resolve(artifactsDir, "11-dashboard-light.png"), fullPage: true });
+      await page.getByRole("button", { name: "Toggle theme" }).click();
+      await page.waitForTimeout(900);
+
+      await page.setViewportSize({ width: 430, height: 932 });
+      await page.waitForTimeout(700);
+      await page.getByRole("button", { name: "Open navigation menu" }).click();
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: resolve(artifactsDir, "12-mobile-nav.png"), fullPage: true });
+      await page.locator(".mobile-nav-backdrop").click({ force: true });
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.waitForTimeout(600);
+
+      await page.getByRole("button", { name: /new scan/i }).first().click();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: resolve(artifactsDir, "13-scan-modal.png"), fullPage: true });
+      await page.locator(".modal-close").first().click();
+      await page.waitForTimeout(400);
 
       insertFreshRuntimeScan();
       const dbCountAfterInsert = readDbScanCount();
-      await page.locator("a.nav-item", { hasText: "Dashboard" }).first().click();
+      await clickNav(page, "Dashboard");
       await page.waitForTimeout(1000);
       let refreshTriggeredKpiRequest = false;
       try {
@@ -335,7 +413,7 @@ async function main() {
         );
       }
 
-      await page.screenshot({ path: resolve(artifactsDir, "06-dashboard-refreshed.png"), fullPage: true });
+      await page.screenshot({ path: resolve(artifactsDir, "14-dashboard-refreshed.png"), fullPage: true });
     } else {
       await page.waitForTimeout(5000);
     }

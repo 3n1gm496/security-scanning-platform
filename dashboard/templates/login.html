@@ -7,12 +7,39 @@
   <link rel="stylesheet" href="/static/login.css">
 </head>
 <body>
-  <main class="container">
-    <form method="post" class="login-form">
-      <div class="login-brand">
+  <main class="login-shell">
+    <section class="login-stage">
+      <div class="login-hero">
+        <span class="login-kicker">Hybrid SOC Command Center</span>
         <h1>Security Scanning Platform</h1>
-        <p>Sign in to access the dashboard</p>
+        <p class="login-hero-text">
+          Continuous visibility for scan operations, threat exposure, remediation flow, and intelligence analytics.
+        </p>
+        <div class="login-signal-grid">
+          <article class="login-signal-card">
+            <span>Telemetry</span>
+            <strong>Live posture</strong>
+            <p>Track scans and exposure shifts without leaving the command view.</p>
+          </article>
+          <article class="login-signal-card">
+            <span>Triage</span>
+            <strong>Operator workflow</strong>
+            <p>Move from critical findings to remediation state with minimal friction.</p>
+          </article>
+          <article class="login-signal-card">
+            <span>Intelligence</span>
+            <strong>Risk analytics</strong>
+            <p>Review severity pressure, target hotspots, and compliance mapping.</p>
+          </article>
+        </div>
       </div>
+
+      <form method="post" class="login-form">
+        <div class="login-brand">
+          <span class="login-kicker">Operator authentication</span>
+          <h2>Enter the command center</h2>
+          <p>Sign in to continue to dashboard operations.</p>
+        </div>
       {% if error %}
         <p class="error">{{ error }}</p>
       {% endif %}
@@ -22,8 +49,10 @@
       <label>Password
         <input type="password" name="password" required autocomplete="current-password">
       </label>
-      <button type="submit">Sign In</button>
-    </form>
+        <button type="submit">Authenticate</button>
+        <p class="login-form-note">Session access is limited to authenticated operators and secured by server-side session controls.</p>
+      </form>
+    </section>
   </main>
 </body>
 </html>

@@ -74,11 +74,52 @@ def test_notification_links_escape_identifier_in_href():
         return True
 
     engine._send_email = fake_send  # type: ignore[method-assign]
-    finding = {"id": 'abc" onclick="alert(1)"', "title": "Injected", "description": "desc"}
+    finding = {
+        "id": 'abc" onclick="alert(1)"',
+        "scan_id": "scan-123",
+        "title": "Injected",
+        "description": "desc",
+        "file": "src/app.py",
+        "line": 41,
+        "cve": "CVE-2026-0001",
+    }
 
     assert engine.send_critical_finding_alert("test@example.com", finding, "https://dashboard.example.com")
     assert "onclick=" not in captured["html"]
-    assert "abc%22+onclick%3D%22alert%281%29%22" in captured["html"]
+    assert "/#findings?scan_id=scan-123&amp;search=Injected" in captured["html"]
+    assert "src/app.py" in captured["html"]
+    assert "41" in captured["html"]
+    assert "CVE-2026-0001" in captured["html"]
+    assert "/#settings" in captured["html"]
+
+
+def test_scan_summary_uses_findings_count_fallback_and_spa_link():
+    """Scan summaries should fall back to findings_count and link to a valid SPA route."""
+    engine = EmailNotificationEngine()
+    captured = {}
+
+    def fake_send(_to_email, _subject, text_body, html_body):
+        captured["text"] = text_body
+        captured["html"] = html_body
+        return True
+
+    engine._send_email = fake_send  # type: ignore[method-assign]
+
+    scan_results = {
+        "id": "scan-456",
+        "target_name": "demo-service",
+        "created_at": "2026-03-16T10:00:00Z",
+        "critical_count": 1,
+        "high_count": 2,
+        "medium_count": 3,
+        "findings_count": 6,
+    }
+
+    assert engine.send_scan_summary("test@example.com", scan_results, "https://dashboard.example.com")
+    assert "6" in captured["html"]
+    assert "scan-456" in captured["html"]
+    assert "TOTAL: 6" in captured["text"]
+    assert "/#scans?search=scan-456" in captured["html"]
 
 
 def test_send_email_skips_starttls_when_server_does_not_support_it(monkeypatch):

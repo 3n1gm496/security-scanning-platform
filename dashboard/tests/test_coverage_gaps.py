@@ -285,6 +285,17 @@ def test_api_scans_filter_by_status(client_with_data):
         assert scan["status"] == "COMPLETED"
 
 
+def test_api_scans_supports_search_and_partial_target(client_with_data):
+    """Legacy GET /api/scans should align with the paginated endpoint semantics."""
+    client, _ = client_with_data
+    resp = client.get("/api/scans?search=scan-a&target=repo")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data
+    assert all("scan-a" in scan["id"] or "repo" in (scan.get("target_name") or "") for scan in data)
+    assert all("repo" in (scan.get("target_name") or "") for scan in data)
+
+
 def test_permissions_policy_header(client_with_data):
     """All responses include the Permissions-Policy security header."""
     client, _ = client_with_data

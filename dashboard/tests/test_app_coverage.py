@@ -312,6 +312,22 @@ class TestCompareScans:
         assert data["diff"]["new_count"] == 1
         assert data["diff"]["resolved_count"] == 1
 
+    def test_compare_includes_findings_without_fingerprint(self, client, isolated_db, admin_headers):
+        db_path = isolated_db
+        scan_1 = _insert_scan(db_path, target_name="svc")
+        scan_2 = _insert_scan(db_path, target_name="svc")
+        _insert_finding(db_path, scan_1, fingerprint=None, title="Shared", description="same", file="a.py", line=10)
+        _insert_finding(db_path, scan_2, fingerprint=None, title="Shared", description="same", file="a.py", line=10)
+        _insert_finding(db_path, scan_2, fingerprint=None, title="New", description="new", file="b.py", line=20)
+        resp = client.get(
+            f"/api/scans/compare?scan_id_1={scan_1}&scan_id_2={scan_2}",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["diff"]["unchanged_count"] == 1
+        assert data["diff"]["new_count"] == 1
+
 
 # ---------------------------------------------------------------------------
 # Chart endpoints tests
@@ -405,6 +421,44 @@ class TestExportFindings:
         )
         assert resp.status_code == 422
 
+    def test_export_applies_search_status_and_partial_target_filters(self, client, isolated_db, admin_headers):
+        import sqlite3
+
+        db_path = isolated_db
+        scan_id = _insert_scan(db_path, target_name="svc")
+        finding_id = _insert_finding(
+            db_path,
+            scan_id,
+            title="Unique exported finding",
+            target_name="svc-alpha",
+            tool="bandit",
+        )
+        _insert_finding(
+            db_path,
+            scan_id,
+            title="Other finding",
+            target_name="svc-beta",
+            tool="bandit",
+        )
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO finding_states (finding_id, status, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (finding_id, "resolved", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        )
+        conn.commit()
+        conn.close()
+        _db_adapter.reset_pool()
+
+        resp = client.get(
+            "/api/export/findings?format=json&search=Unique&status=resolved&target=alpha",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_findings"] == 1
+        assert len(data["findings"]) == 1
+        assert data["findings"][0]["id"] == finding_id
+
 
 # ---------------------------------------------------------------------------
 # Pagination endpoints tests
@@ -413,6 +467,43 @@ class TestExportFindings:
 
 class TestPaginationEndpoints:
     """Tests for /api/findings/paginated and /api/scans/paginated."""
+
+    def test_legacy_findings_endpoint_supports_search_status_and_partial_target(
+        self, client, isolated_db, admin_headers
+    ):
+        import sqlite3
+
+        db_path = isolated_db
+        scan_id = _insert_scan(db_path, target_name="svc")
+        finding_id = _insert_finding(
+            db_path,
+            scan_id,
+            title="Legacy visible finding",
+            target_name="svc-alpha",
+        )
+        _insert_finding(
+            db_path,
+            scan_id,
+            title="Another finding",
+            target_name="svc-beta",
+        )
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO finding_states (finding_id, status, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (finding_id, "resolved", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        )
+        conn.commit()
+        conn.close()
+        _db_adapter.reset_pool()
+
+        resp = client.get(
+            "/api/findings?search=Legacy&status=resolved&target=alpha",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["id"] == finding_id
 
     def test_paginate_findings_empty(self, client, isolated_db, admin_headers):
         _init_tables(isolated_db)

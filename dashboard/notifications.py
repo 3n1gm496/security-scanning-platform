@@ -32,6 +32,24 @@ def _safe_dashboard_url(dashboard_url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
 
 
+def _finding_dashboard_path(finding: dict[str, Any]) -> str:
+    scan_id = str(finding.get("scan_id") or "").strip()
+    title = str(finding.get("title") or "").strip()
+    if scan_id:
+        path = f"/#findings?scan_id={quote_plus(scan_id)}"
+        if title:
+            path += f"&search={quote_plus(title)}"
+        return path
+    return "/#findings"
+
+
+def _scan_dashboard_path(scan_results: dict[str, Any]) -> str:
+    scan_id = str(scan_results.get("scan_id") or scan_results.get("id") or "").strip()
+    if scan_id:
+        return f"/#scans?search={quote_plus(scan_id)}"
+    return "/#scans"
+
+
 class EmailNotificationEngine:
     """Send email notifications for security findings."""
 
@@ -48,12 +66,18 @@ class EmailNotificationEngine:
     ) -> bool:
         """Send alert for critical finding."""
         subject = f"[CRITICAL] Security Finding: {finding.get('title', 'Unknown')}"
-        encoded_email = quote_plus(to_email)
         base_url = _safe_dashboard_url(dashboard_url)
-        finding_id = quote_plus(str(finding.get("id", "")))
+        file_path = finding.get("file") or finding.get("file_path") or "N/A"
+        line_number = finding.get("line") or finding.get("line_number") or "N/A"
+        cve_id = finding.get("cve") or finding.get("cve_id") or "N/A"
+        finding_url = html_escape(f"{base_url}{_finding_dashboard_path(finding)}")
+        settings_url = html_escape(f"{base_url}/#settings")
 
         # Escape all user-controlled data for safe HTML embedding
         e = {k: html_escape(str(v)) for k, v in finding.items() if v is not None}
+        file_path_html = html_escape(str(file_path))
+        line_number_html = html_escape(str(line_number))
+        cve_id_html = html_escape(str(cve_id))
 
         html_body = f"""
         <html>
@@ -66,18 +90,18 @@ class EmailNotificationEngine:
                 <p><strong>Description:</strong> {e.get('description', 'N/A')}</p>
 
                 <h3>Location</h3>
-                <p><strong>File:</strong> {e.get('file_path', 'N/A')}</p>
-                <p><strong>Line:</strong> {e.get('line_number', 'N/A')}</p>
+                <p><strong>File:</strong> {file_path_html}</p>
+                <p><strong>Line:</strong> {line_number_html}</p>
 
                 <h3>Details</h3>
                 <ul>
                     <li>Tool: {e.get('tool', 'N/A')}</li>
-                    <li>CVE: {e.get('cve_id', 'N/A')}</li>
+                    <li>CVE: {cve_id_html}</li>
                     <li>Fingerprint: {e.get('fingerprint', 'N/A')}</li>
                 </ul>
 
                 <p>
-                    <a href="{base_url}/findings/{finding_id}"
+                    <a href="{finding_url}"
                        style="background-color: #d32f2f; color: white; padding: 10px 20px;
                               text-decoration: none; border-radius: 5px;">
                         View in Dashboard
@@ -87,7 +111,7 @@ class EmailNotificationEngine:
                 <hr>
                 <p style="color: #999; font-size: 12px;">
                     This is an automated alert from the Security Scanner.
-                    <a href="{base_url}/notifications/unsubscribe?email={encoded_email}">Unsubscribe</a>
+                    <a href="{settings_url}">Manage notification preferences</a>
                 </p>
             </body>
         </html>
@@ -102,14 +126,15 @@ class EmailNotificationEngine:
         Description: {finding.get('description', 'N/A')}
 
         Location:
-        File: {finding.get('file_path', 'N/A')}
-        Line: {finding.get('line_number', 'N/A')}
+        File: {file_path}
+        Line: {line_number}
 
         Details:
         Tool: {finding.get('tool', 'N/A')}
-        CVE: {finding.get('cve_id', 'N/A')}
+        CVE: {cve_id}
 
-        View in dashboard: {base_url}/findings/{finding_id}
+        View in dashboard: {base_url}{_finding_dashboard_path(finding)}
+        Manage notification preferences: {base_url}/#settings
         """
 
         return self._send_email(to_email, subject, text_body, html_body)
@@ -127,12 +152,13 @@ class EmailNotificationEngine:
         critical_count = scan_results.get("critical_count", 0)
         high_count = scan_results.get("high_count", 0)
         medium_count = scan_results.get("medium_count", 0)
-        total_count = scan_results.get("total_count", 0)
+        total_count = scan_results.get("total_count", scan_results.get("findings_count", 0))
+        scan_url = html_escape(f"{base_url}{_scan_dashboard_path(scan_results)}")
+        scan_identifier = str(scan_results.get("scan_id", scan_results.get("id", "N/A")))
 
         # Escape user-controlled strings for safe HTML embedding
         target_name = html_escape(str(scan_results.get("target_name", "N/A")))
-        scan_id = html_escape(str(scan_results.get("scan_id", "N/A")))
-        scan_id_url = quote_plus(str(scan_results.get("scan_id", "")))
+        scan_id = html_escape(scan_identifier)
         created_at = html_escape(str(scan_results.get("created_at", "N/A")))
 
         html_body = f"""
@@ -169,7 +195,7 @@ class EmailNotificationEngine:
                 </table>
 
                 <p style="margin-top: 20px;">
-                    <a href="{base_url}/scan/{scan_id_url}"
+                    <a href="{scan_url}"
                        style="background-color: #1976d2; color: white; padding: 10px 20px;
                               text-decoration: none; border-radius: 5px;">
                         View Full Report
@@ -188,7 +214,7 @@ class EmailNotificationEngine:
         SECURITY SCAN SUMMARY
 
         Target: {scan_results.get('target_name', 'N/A')}
-        Scan ID: {scan_results.get('scan_id', 'N/A')}
+        Scan ID: {scan_identifier}
         Date: {scan_results.get('created_at', 'N/A')}
 
         Findings Summary:
@@ -197,7 +223,7 @@ class EmailNotificationEngine:
         MEDIUM: {medium_count}
         TOTAL: {total_count}
 
-        View full report: {base_url}/scan/{scan_id_url}
+        View full report: {base_url}{_scan_dashboard_path(scan_results)}
         """
 
         return self._send_email(to_email, subject, text_body, html_body)

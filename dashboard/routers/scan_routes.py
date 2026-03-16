@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import uuid as _uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,9 +30,55 @@ if _project_root not in sys.path:
 router = APIRouter(prefix="/api", tags=["scans"])
 
 
+def _finding_compare_key(finding: dict) -> tuple:
+    fingerprint = finding.get("fingerprint")
+    if fingerprint:
+        return ("fingerprint", fingerprint)
+    return (
+        "fallback",
+        finding.get("title"),
+        finding.get("severity"),
+        finding.get("tool"),
+        finding.get("category"),
+        finding.get("file"),
+        finding.get("line"),
+        finding.get("cve"),
+        finding.get("target_name"),
+        finding.get("description"),
+    )
+
+
+def _diff_findings(findings_1: list[dict], findings_2: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    grouped_1: dict[tuple, list[dict]] = defaultdict(list)
+    grouped_2: dict[tuple, list[dict]] = defaultdict(list)
+
+    for finding in findings_1:
+        grouped_1[_finding_compare_key(finding)].append(finding)
+    for finding in findings_2:
+        grouped_2[_finding_compare_key(finding)].append(finding)
+
+    new_findings: list[dict] = []
+    resolved_findings: list[dict] = []
+    unchanged_findings: list[dict] = []
+
+    for key in set(grouped_1) | set(grouped_2):
+        left = grouped_1.get(key, [])
+        right = grouped_2.get(key, [])
+        unchanged_count = min(len(left), len(right))
+        if unchanged_count:
+            unchanged_findings.extend(right[:unchanged_count])
+        if len(left) > unchanged_count:
+            resolved_findings.extend(left[unchanged_count:])
+        if len(right) > unchanged_count:
+            new_findings.extend(right[unchanged_count:])
+
+    return new_findings, resolved_findings, unchanged_findings
+
+
 @router.get("/scans")
 async def api_scans(
     limit: int = 100,
+    search: str | None = None,
     target: str | None = None,
     status_value: str | None = Query(default=None, alias="status"),
     policy_status: str | None = None,
@@ -40,7 +87,9 @@ async def api_scans(
     return list_scans(
         DB_PATH,
         limit=limit,
+        search=search,
         target=target,
+        target_partial=True,
         status=status_value,
         policy_status=policy_status,
     )
@@ -150,18 +199,7 @@ async def compare_scans(
     findings_1_list = [dict(f) for f in findings_1]
     findings_2_list = [dict(f) for f in findings_2]
 
-    # Build fingerprint sets
-    fingerprints_1 = {f["fingerprint"]: f for f in findings_1_list if f.get("fingerprint")}
-    fingerprints_2 = {f["fingerprint"]: f for f in findings_2_list if f.get("fingerprint")}
-
-    # Calculate diff
-    new_fingerprints = set(fingerprints_2.keys()) - set(fingerprints_1.keys())
-    resolved_fingerprints = set(fingerprints_1.keys()) - set(fingerprints_2.keys())
-    unchanged_fingerprints = set(fingerprints_1.keys()) & set(fingerprints_2.keys())
-
-    new_findings = [fingerprints_2[fp] for fp in new_fingerprints]
-    resolved_findings = [fingerprints_1[fp] for fp in resolved_fingerprints]
-    unchanged_findings = [fingerprints_2[fp] for fp in unchanged_fingerprints]
+    new_findings, resolved_findings, unchanged_findings = _diff_findings(findings_1_list, findings_2_list)
 
     # Count by severity
     def count_by_severity(findings_list):

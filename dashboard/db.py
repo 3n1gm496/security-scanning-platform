@@ -154,18 +154,28 @@ def list_scans(
     target: str | None = None,
     status: str | None = None,
     policy_status: str | None = None,
+    search: str | None = None,
+    target_partial: bool = False,
 ) -> list[dict[str, Any]]:
     query = "SELECT * FROM scans WHERE 1=1"
     params: list[Any] = []
+    if search:
+        search_param = f"%{search}%"
+        query += " AND (CAST(id AS TEXT) LIKE ? OR target_name LIKE ? OR error_message LIKE ?)"
+        params.extend([search_param] * 3)
     if target:
-        query += " AND target_name = ?"
-        params.append(target)
+        if target_partial:
+            query += " AND target_name LIKE ?"
+            params.append(f"%{target}%")
+        else:
+            query += " AND target_name = ?"
+            params.append(target)
     if status:
         query += " AND status = ?"
         params.append(status)
     if policy_status:
         query += " AND policy_status = ?"
-        params.append(policy_status)
+        params.append(policy_status.upper())
     query += " ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
     with _conn(db_path, read_only=True) as conn:
@@ -179,10 +189,17 @@ def _findings_where_clause(
     target: str | None,
     scan_id: str | None,
     category: str | None,
+    search: str | None = None,
+    status: str | None = None,
+    target_partial: bool = False,
 ) -> tuple[str, list[Any]]:
     """Build the shared WHERE clause and params for findings queries."""
     clause = "WHERE 1=1"
     params: list[Any] = []
+    if search:
+        search_param = f"%{search}%"
+        clause += " AND (title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)"
+        params.extend([search_param] * 4)
     if severity:
         clause += " AND severity = ?"
         params.append(severity)
@@ -190,14 +207,21 @@ def _findings_where_clause(
         clause += " AND tool = ?"
         params.append(tool)
     if target:
-        clause += " AND target_name = ?"
-        params.append(target)
+        if target_partial:
+            clause += " AND target_name LIKE ?"
+            params.append(f"%{target}%")
+        else:
+            clause += " AND target_name = ?"
+            params.append(target)
     if scan_id:
         clause += " AND scan_id = ?"
         params.append(scan_id)
     if category:
         clause += " AND category = ?"
         params.append(category)
+    if status is not None:
+        clause += " AND COALESCE((SELECT status FROM finding_states WHERE finding_id = findings.id), 'open') = ?"
+        params.append(status)
     return clause, params
 
 
@@ -208,8 +232,20 @@ def count_findings(
     target: str | None = None,
     scan_id: str | None = None,
     category: str | None = None,
+    search: str | None = None,
+    status: str | None = None,
+    target_partial: bool = False,
 ) -> int:
-    clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
+    clause, params = _findings_where_clause(
+        severity,
+        tool,
+        target,
+        scan_id,
+        category,
+        search=search,
+        status=status,
+        target_partial=target_partial,
+    )
     with _conn(db_path, read_only=True) as conn:
         row = conn.execute(f"SELECT COUNT(*) AS n FROM findings {clause}", params).fetchone()  # nosec B608
     return int(row["n"])
@@ -223,9 +259,21 @@ def list_findings(
     target: str | None = None,
     scan_id: str | None = None,
     category: str | None = None,
+    search: str | None = None,
+    status: str | None = None,
+    target_partial: bool = False,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    clause, params = _findings_where_clause(severity, tool, target, scan_id, category)
+    clause, params = _findings_where_clause(
+        severity,
+        tool,
+        target,
+        scan_id,
+        category,
+        search=search,
+        status=status,
+        target_partial=target_partial,
+    )
     query = (
         f"SELECT * FROM findings {clause} "  # nosec
         f"ORDER BY timestamp DESC, {_severity_order_sql()} DESC, severity DESC LIMIT ? OFFSET ?"

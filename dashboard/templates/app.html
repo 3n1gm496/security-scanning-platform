@@ -1031,8 +1031,8 @@
                   <span class="remediation-priority" v-if="selectedFinding.remediation_guide.priority">
                     Priority: <strong>{{ selectedFinding.remediation_guide.priority }}</strong>
                   </span>
-                  <span class="remediation-effort" v-if="selectedFinding.remediation_guide.effort">
-                    Effort: <strong>{{ selectedFinding.remediation_guide.effort }}</strong>
+                  <span class="remediation-effort" v-if="selectedFinding.remediation_guide.estimated_effort">
+                    Effort: <strong>{{ selectedFinding.remediation_guide.estimated_effort }}</strong>
                   </span>
                 </div>
                 <h3 v-if="selectedFinding.remediation_guide.title">{{ selectedFinding.remediation_guide.title }}</h3>

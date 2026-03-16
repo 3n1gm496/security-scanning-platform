@@ -44,40 +44,9 @@ async def api_findings(
     scan_id: str | None = None,
     category: str | None = None,
     search: str | None = None,
+    status: str | None = None,
     auth: AuthContext = Depends(require_auth),
 ) -> list[dict]:
-    if search:
-        # Full-text search across title, description, file
-        query = """
-            SELECT * FROM findings
-            WHERE (title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)
-        """
-        params = [f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"]
-
-        if severity:
-            query += " AND severity = ?"
-            params.append(severity)
-        if tool:
-            query += " AND tool = ?"
-            params.append(tool)
-        if target:
-            query += " AND target_name = ?"
-            params.append(target)
-        if scan_id:
-            query += " AND scan_id = ?"
-            params.append(scan_id)
-        if category:
-            query += " AND category = ?"
-            params.append(category)
-
-        query += " ORDER BY timestamp DESC LIMIT ?"
-        params.append(limit)
-
-        with get_connection(DB_PATH) as conn:
-            rows = conn.execute(query, params).fetchall()
-        return [dict(row) for row in rows]
-
-    # Original logic
     return list_findings(
         DB_PATH,
         limit=limit,
@@ -86,6 +55,9 @@ async def api_findings(
         target=target,
         scan_id=scan_id,
         category=category,
+        search=search,
+        status=status,
+        target_partial=True,
     )
 
 

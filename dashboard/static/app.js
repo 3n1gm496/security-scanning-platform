@@ -355,6 +355,12 @@ createApp({
         if (hp.has(key)) this.findingsFilter[key] = hp.get(key);
       }
     }
+    if (hashQuery && initialPage === 'scans') {
+      const hp = new URLSearchParams(hashQuery);
+      for (const key of ['search', 'target', 'status', 'policy']) {
+        if (hp.has(key)) this.scansFilter[key] = hp.get(key);
+      }
+    }
     history.replaceState({ page: initialPage }, '', '#' + initialPage);
 
     // ── History API: back/forward button support
@@ -1343,6 +1349,17 @@ createApp({
 
     // ── Scans ─────────────────────────────────────────────────────────────────
 
+    _syncScansHash() {
+      const f = this.scansFilter;
+      const hp = new URLSearchParams();
+      for (const key of ['search', 'target', 'status', 'policy']) {
+        if (f[key]) hp.set(key, f[key]);
+      }
+      const qs = hp.toString();
+      const hash = '#scans' + (qs ? '?' + qs : '');
+      history.replaceState({ page: 'scans' }, '', hash);
+    },
+
     async loadScans(reset = false, preservePage = false) {
       this.clearPendingScanUpdates();
       if (reset) {
@@ -1369,6 +1386,7 @@ createApp({
         const scanPag = result.pagination || {};
         this.scansTotal = scanPag.total_count ?? scanPag.count ?? this.scans.length;
         this.scansCursor = scanPag.next_cursor || null;
+        if (this.currentPage === 'scans') this._syncScansHash();
 
         // Update available targets/tools from scan data for adaptive filtering
         this._updateScansFilterOptions();

@@ -25,7 +25,9 @@ async def export_findings_endpoint(
     limit: int = Query(1000, ge=1, le=50000),
     severity: str | None = None,
     tool: str | None = None,
+    status: str | None = None,
     target: str | None = None,
+    search: str | None = None,
     scan_id: str | None = None,
     include_analytics: bool = Query(False),
     auth: AuthContext = Depends(require_auth),
@@ -35,8 +37,27 @@ async def export_findings_endpoint(
     Supported formats: json, csv, sarif, html, pdf
     """
     # Fetch findings and total count (to signal truncation to the client)
-    total = count_findings(DB_PATH, severity=severity, tool=tool, target=target, scan_id=scan_id)
-    findings = list_findings(DB_PATH, limit=limit, severity=severity, tool=tool, target=target, scan_id=scan_id)
+    total = count_findings(
+        DB_PATH,
+        severity=severity,
+        tool=tool,
+        target=target,
+        scan_id=scan_id,
+        search=search,
+        status=status,
+        target_partial=True,
+    )
+    findings = list_findings(
+        DB_PATH,
+        limit=limit,
+        severity=severity,
+        tool=tool,
+        target=target,
+        scan_id=scan_id,
+        search=search,
+        status=status,
+        target_partial=True,
+    )
 
     # Get scan info if scan_id provided
     scan_info = {}
@@ -71,8 +92,11 @@ async def export_findings_endpoint(
                         limit=min(batch_size, limit - offset),
                         severity=severity,
                         tool=tool,
+                        status=status,
                         target=target,
+                        search=search,
                         scan_id=scan_id,
+                        target_partial=True,
                         offset=offset,
                     )
                     if not batch:

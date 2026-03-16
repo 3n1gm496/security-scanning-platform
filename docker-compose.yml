@@ -142,7 +142,7 @@ services:
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-change-me}
       DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-please-change-this}
-      DASHBOARD_CSP_ALLOW_UNSAFE_EVAL: ${DASHBOARD_CSP_ALLOW_UNSAFE_EVAL:-1}
+      DASHBOARD_CSP_ALLOW_UNSAFE_EVAL: ${DASHBOARD_CSP_ALLOW_UNSAFE_EVAL:-0}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       # ZAP integration — forwarded to orchestrator subprocess via scan_runner.py
       ZAP_API_URL: ${ZAP_API_URL:-http://zap:8090}

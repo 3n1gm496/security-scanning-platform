@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
+import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from db import get_connection
 from db_adapter import is_postgres
@@ -101,19 +103,22 @@ def run_scan(
     publish_sync("scan_started", {"scan_id": scan_id, "target_name": name, "target_type": target_type})
 
     try:
+        resolved_root_dir = Path(root_dir).resolve()
+        settings_path = resolved_root_dir / "config" / "settings.yaml"
+
         env = os.environ.copy()
-        env["PYTHONPATH"] = f"{root_dir}:{env.get('PYTHONPATH', '')}"
+        env["PYTHONPATH"] = f"{resolved_root_dir}:{env.get('PYTHONPATH', '')}"
         dashboard_db_path = _db_path()
         env["ORCH_DB_PATH"] = dashboard_db_path
-        env["REPORTS_DIR"] = os.getenv("REPORTS_DIR", f"{root_dir}/data/reports")
-        env["WORKSPACE_DIR"] = os.getenv("WORKSPACE_DIR", f"{root_dir}/data/workspaces")
-        env["ORCH_CACHE_DIR"] = os.getenv("ORCH_CACHE_DIR", f"{root_dir}/data/cache")
+        env["REPORTS_DIR"] = os.getenv("REPORTS_DIR", f"{resolved_root_dir}/data/reports")
+        env["WORKSPACE_DIR"] = os.getenv("WORKSPACE_DIR", f"{resolved_root_dir}/data/workspaces")
+        env["ORCH_CACHE_DIR"] = os.getenv("ORCH_CACHE_DIR", f"{resolved_root_dir}/data/cache")
         env["DASHBOARD_DB_PATH"] = dashboard_db_path
 
         log_level = os.getenv("LOG_LEVEL", "INFO")
 
         cmd = [
-            "python3",
+            sys.executable,
             "-m",
             "orchestrator.main",
             "--target-type",
@@ -123,7 +128,7 @@ def run_scan(
             "--target-name",
             name,
             "--settings",
-            f"{root_dir}/config/settings.yaml",
+            str(settings_path),
             "--scan-id",
             scan_id,
             "--log-level",
@@ -132,9 +137,10 @@ def run_scan(
 
         # stdout=PIPE captures the JSON result; stderr=None lets orchestrator logs
         # flow to the dashboard process stderr (visible via docker compose logs -f).
-        result = subprocess.run(
+        # Command argv is passed as a list with shell=False to the local orchestrator module.
+        result = subprocess.run(  # nosec B603
             cmd,
-            cwd=root_dir,
+            cwd=str(resolved_root_dir),
             stdout=subprocess.PIPE,
             stderr=None,
             text=True,

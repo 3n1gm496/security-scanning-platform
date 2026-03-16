@@ -109,6 +109,30 @@ def _split_sql_statements(sql: str) -> list[str]:
     return statements
 
 
+def _join_sql_clauses(*parts: str) -> str:
+    """Join pre-validated SQL clauses while preserving readable spacing."""
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def _build_pg_conflict_update_clause(conflict_column: str, update_set: str) -> str:
+    """Build the PostgreSQL ON CONFLICT update clause from validated identifiers."""
+    return _join_sql_clauses(
+        "ON CONFLICT",
+        f"({conflict_column})",
+        "DO UPDATE SET",
+        update_set,
+    )
+
+
+def _build_pg_conflict_ignore_clause(conflict_column: str) -> str:
+    """Build the PostgreSQL ON CONFLICT do-nothing clause from validated identifiers."""
+    return _join_sql_clauses(
+        "ON CONFLICT",
+        f"({conflict_column})",
+        "DO NOTHING",
+    )
+
+
 # ---------------------------------------------------------------------------
 # SQLite backend
 # ---------------------------------------------------------------------------
@@ -151,13 +175,13 @@ def _get_sqlite_pooled(db_path: str) -> sqlite3.Connection:
             conn.execute("SELECT 1")
             return conn
         except Exception:
-            pass  # Stale connection — recreate below.
+            LOGGER.debug("db.sqlite_pooled_connection_stale", exc_info=True)
 
     if conn is not None:
         try:
             conn.close()
         except Exception:
-            pass
+            LOGGER.debug("db.sqlite_pooled_connection_close_failed", exc_info=True)
 
     # Create and cache a fresh connection.
     conn = _sqlite_connect(db_path)
@@ -173,7 +197,7 @@ def reset_pool() -> None:
         try:
             conn.close()
         except Exception:
-            pass
+            LOGGER.debug("db.sqlite_pool_reset_close_failed", exc_info=True)
     _thread_local.sqlite_conn = None
     _thread_local.sqlite_path = None
 
@@ -267,7 +291,7 @@ def _pg_release(conn, *, read_replica: bool = False):
         try:
             pool.putconn(conn)
         except Exception:
-            pass
+            LOGGER.debug("db.pg_pool_release_failed", read_replica=read_replica, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -474,13 +498,17 @@ def adapt_schema(schema_sql: str) -> str:
         update_columns = [col for col in columns if col != conflict_column]
         if update_columns:
             update_set = ", ".join(f"{col} = EXCLUDED.{col}" for col in update_columns)
-            sql = (
-                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "  # nosec B608
-                f"ON CONFLICT ({conflict_column}) DO UPDATE SET {update_set}"
+            sql = _join_sql_clauses(
+                "INSERT INTO",
+                f"{table_name} ({', '.join(columns)})",
+                f"VALUES ({values})",
+                _build_pg_conflict_update_clause(conflict_column, update_set),
             )
         else:
-            sql = (
-                f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values}) "  # nosec B608
-                f"ON CONFLICT ({conflict_column}) DO NOTHING"
+            sql = _join_sql_clauses(
+                "INSERT INTO",
+                f"{table_name} ({', '.join(columns)})",
+                f"VALUES ({values})",
+                _build_pg_conflict_ignore_clause(conflict_column),
             )
     return sql

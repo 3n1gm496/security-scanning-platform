@@ -12,8 +12,10 @@ from fastapi import APIRouter, Depends, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
 from runtime_config import DASHBOARD_DB_PATH
+from logging_config import get_logger
 
 router = APIRouter(tags=["monitoring"])
+LOGGER = get_logger(__name__)
 
 # Application start time
 START_TIME = time.time()
@@ -266,7 +268,7 @@ async def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Respo
             SSP_FINDINGS_TOTAL.labels(severity=row["severity"]).set(row["cnt"])
     except Exception:
         # Non-fatal: a failed DB query must not break the metrics scrape.
-        pass
+        LOGGER.warning("monitoring.metrics_scrape_refresh_failed", exc_info=True)
 
     return Response(
         content=generate_latest(),

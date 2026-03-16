@@ -9,11 +9,11 @@ import hmac
 import ipaddress
 import json
 import os
-import random
 import socket
 import time
 from datetime import datetime, timezone
 from enum import Enum
+from secrets import randbelow
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -27,7 +27,8 @@ from runtime_config import DASHBOARD_DB_PATH
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 WEBHOOK_RETRY_COUNT = int(os.getenv("WEBHOOK_RETRY_COUNT", "3"))
 WEBHOOK_CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("WEBHOOK_CIRCUIT_BREAKER_THRESHOLD", "5"))
-WEBHOOK_SECRET_PREFIX = "enc:v1:"
+# Versioned storage marker for encrypted webhook secrets.
+WEBHOOK_SECRET_PREFIX = "enc:v1:"  # nosec B105
 
 # ---------------------------------------------------------------------------
 # SSRF protection — blocked IP ranges
@@ -107,6 +108,14 @@ def validate_webhook_url(url: str, *, resolve_dns: bool = True) -> None:
 
 
 logger = get_logger(__name__)
+
+
+def _retry_jitter(base_delay: int) -> float:
+    """Return a bounded jitter value without using the non-crypto random module."""
+    if base_delay <= 0:
+        return 0.0
+    precision = 1000
+    return (randbelow(base_delay * precision + 1)) / precision
 
 
 def _get_webhook_cipher() -> Fernet:
@@ -370,7 +379,7 @@ async def trigger_webhook(webhook: dict, event_type: WebhookEvent, payload: dict
 
             if attempt < WEBHOOK_RETRY_COUNT - 1:
                 base_delay = 2**attempt
-                jitter = random.uniform(0, base_delay)
+                jitter = _retry_jitter(base_delay)
                 await asyncio.sleep(base_delay + jitter)
 
     duration_ms = int((time.time() - start_time) * 1000)

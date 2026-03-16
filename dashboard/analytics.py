@@ -11,6 +11,9 @@ from typing import Any
 
 from db import get_connection
 
+# Taxonomy label for findings, not a credential.
+OWASP_SECRET_CATEGORY_KEY = "secret"  # nosec B105
+
 # OWASP Top 10 2021 mapping — exact category match.
 # Includes both the orchestrator normalizer categories (sast, sca, iac, etc.)
 # and the fine-grained categories used by nuclei/specific scanners.
@@ -23,7 +26,7 @@ OWASP_TOP_10_CATEGORY_MAPPING: dict[str, str] = {
     # A02 — Cryptographic Failures
     "crypto": "A02:2021 - Cryptographic Failures",
     "encryption": "A02:2021 - Cryptographic Failures",
-    "secret": "A02:2021 - Cryptographic Failures",
+    OWASP_SECRET_CATEGORY_KEY: "A02:2021 - Cryptographic Failures",
     # A03 — Injection (sast covers static analysis findings: injection, XSS, etc.)
     "sast": "A03:2021 - Injection",
     "sqli": "A03:2021 - Injection",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 DEFAULT_DASHBOARD_DB_PATH = "/data/security_scans.db"
@@ -22,6 +23,13 @@ def _path_is_writable(path: Path) -> bool:
         return False
 
 
+def _user_state_db_path() -> Path:
+    state_home = os.getenv("XDG_STATE_HOME")
+    if state_home:
+        return Path(state_home) / "security-scanning-platform" / "security_scans.db"
+    return Path.home() / ".local" / "state" / "security-scanning-platform" / "security_scans.db"
+
+
 def resolve_dashboard_db_path() -> str:
     configured = os.getenv("DASHBOARD_DB_PATH")
     if configured:
@@ -35,7 +43,11 @@ def resolve_dashboard_db_path() -> str:
     if _path_is_writable(repo_path):
         return str(repo_path)
 
-    return "/tmp/security_scans.db"
+    user_state_path = _user_state_db_path()
+    if _path_is_writable(user_state_path):
+        return str(user_state_path)
+
+    return str(Path(tempfile.gettempdir()) / "security-scanning-platform" / "security_scans.db")
 
 
 DASHBOARD_DB_PATH = resolve_dashboard_db_path()

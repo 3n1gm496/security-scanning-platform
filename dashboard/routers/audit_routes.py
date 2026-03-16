@@ -13,10 +13,12 @@ from db_adapter import is_postgres
 from export import _sanitize_csv_value
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
+from logging_config import get_logger
 from rbac import Permission, log_audit, purge_audit_log
 from routers._shared import DB_PATH
 
 router = APIRouter(prefix="/api", tags=["audit"])
+LOGGER = get_logger(__name__)
 
 
 @router.get("/audit", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
@@ -116,7 +118,7 @@ async def purge_audit(
                 )
             webhook_deleted = cursor.rowcount
     except Exception:
-        pass
+        LOGGER.warning("audit.webhook_delivery_purge_failed", retention_days=retention_days, exc_info=True)
 
     log_audit(
         action="audit.purge",

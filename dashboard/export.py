@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from html import escape as html_escape
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
-from xml.sax.saxutils import escape as xml_escape
 
 # ---------------------------------------------------------------------------
 # Sanitisation helpers
@@ -16,6 +15,18 @@ from xml.sax.saxutils import escape as xml_escape
 
 # Characters that spreadsheet applications interpret as formula starters.
 _CSV_FORMULA_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _xml_escape(value: Any) -> str:
+    """Escape a value for safe XML text output without relying on xml.sax."""
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
 
 
 def _sanitize_csv_value(val: Any) -> Any:
@@ -564,15 +575,15 @@ def export_to_pdf(
         story.append(Spacer(1, 0.1 * inch))
 
         for idx, finding in enumerate(findings_list[:50], 1):  # Limit to 50 per severity
-            title = xml_escape(str(finding.get("title", "Untitled")))
-            tool = xml_escape(str(finding.get("tool", "unknown")))
-            category = xml_escape(str(finding.get("category", "N/A")))
+            title = _xml_escape(finding.get("title", "Untitled"))
+            tool = _xml_escape(finding.get("tool", "unknown"))
+            category = _xml_escape(finding.get("category", "N/A"))
 
             finding_text = f"<b>{idx}. {title}</b><br/>"
             finding_text += f"Tool: {tool} | Category: {category}<br/>"
 
             if finding.get("file"):
-                finding_text += f"Location: {xml_escape(str(finding['file']))}"
+                finding_text += f"Location: {_xml_escape(finding['file'])}"
                 if finding.get("line"):
                     finding_text += f":{finding['line']}"
                 finding_text += "<br/>"
@@ -582,7 +593,7 @@ def export_to_pdf(
                 desc = raw_desc[:200]
                 if len(raw_desc) > 200:
                     desc += "..."
-                finding_text += f"<i>{xml_escape(desc)}</i><br/>"
+                finding_text += f"<i>{_xml_escape(desc)}</i><br/>"
 
             story.append(Paragraph(finding_text, styles["Normal"]))
             story.append(Spacer(1, 0.1 * inch))

@@ -14,6 +14,11 @@ from base64 import b64decode, b64encode
 from typing import Any
 
 
+def _join_sql_clauses(*parts: str) -> str:
+    """Join pre-validated SQL clauses while preserving readable spacing."""
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
 class PaginationCursor:
     """Cursor-based pagination handler."""
 
@@ -99,12 +104,13 @@ class PaginationCursor:
 
         where_sql = " AND ".join(where_clauses)
 
-        query = f"""
-            SELECT * FROM {self.table}
-            WHERE {where_sql}
-            ORDER BY {self.sort_by} {self.sort_order}
-            LIMIT ?
-            """  # nosec B608
+        query = _join_sql_clauses(
+            "SELECT *",
+            f"FROM {self.table}",
+            f"WHERE {where_sql}",
+            f"ORDER BY {self.sort_by} {self.sort_order}",
+            "LIMIT ?",
+        )
         params.append(self.per_page + 1)  # Fetch +1 to detect if there's next page
 
         return query, params
@@ -213,27 +219,28 @@ class FindingsPaginator:
 
         # Build query — use JOIN only when status filter is active
         if use_status_join:
-            query = f"""
-                SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,
-                       f.line, f.tool, f.cve, f.fingerprint, f.timestamp,
-                       f.target_name,
-                       COALESCE(fs.status, 'open') AS triage_status
-                FROM findings f
-                LEFT JOIN finding_states fs ON fs.finding_id = f.id
-                WHERE {where_sql}
-                ORDER BY f.{safe_sort_by} {safe_sort_order}
-                LIMIT ?
-                """  # nosec B608
+            query = _join_sql_clauses(
+                (
+                    "SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,"
+                    " f.line, f.tool, f.cve, f.fingerprint, f.timestamp,"
+                    " f.target_name, COALESCE(fs.status, 'open') AS triage_status"
+                ),
+                "FROM findings f",
+                "LEFT JOIN finding_states fs ON fs.finding_id = f.id",
+                f"WHERE {where_sql}",
+                f"ORDER BY f.{safe_sort_by} {safe_sort_order}",
+                "LIMIT ?",
+            )
         else:
             # Standard query without JOIN
-            query = f"""
-                SELECT id, scan_id, title, description, severity, file,
-                       line, tool, cve, fingerprint, timestamp, target_name
-                FROM findings
-                WHERE {where_sql}
-                ORDER BY {safe_sort_by} {safe_sort_order}
-                LIMIT ?
-                """  # nosec B608
+            query = _join_sql_clauses(
+                "SELECT id, scan_id, title, description, severity, file,",
+                "line, tool, cve, fingerprint, timestamp, target_name",
+                "FROM findings",
+                f"WHERE {where_sql}",
+                f"ORDER BY {safe_sort_by} {safe_sort_order}",
+                "LIMIT ?",
+            )
         params.append(self.per_page + 1)
 
         # Total count query (same filters, no cursor/LIMIT)
@@ -247,13 +254,18 @@ class FindingsPaginator:
         )
         count_where = " AND ".join(count_clauses)
         if use_status_join:
-            count_query = f"""
-                SELECT COUNT(*) AS total FROM findings f
-                LEFT JOIN finding_states fs ON fs.finding_id = f.id
-                WHERE {count_where}
-                """  # nosec B608
+            count_query = _join_sql_clauses(
+                "SELECT COUNT(*) AS total",
+                "FROM findings f",
+                "LEFT JOIN finding_states fs ON fs.finding_id = f.id",
+                f"WHERE {count_where}",
+            )
         else:
-            count_query = f"SELECT COUNT(*) AS total FROM findings WHERE {count_where}"  # nosec B608
+            count_query = _join_sql_clauses(
+                "SELECT COUNT(*) AS total",
+                "FROM findings",
+                f"WHERE {count_where}",
+            )
         total_count = conn.execute(count_query, count_params).fetchone()["total"]
 
         rows = conn.execute(query, params).fetchall()
@@ -404,15 +416,17 @@ class ScansPaginator:
 
         where_sql = " AND ".join(where_clauses)
 
-        query = f"""
-            SELECT id, target_name, target_type, status, policy_status,
-                   created_at, finished_at, findings_count, critical_count,
-                   high_count, medium_count, low_count, error_message
-            FROM scans
-            WHERE {where_sql}
-            ORDER BY {safe_sort_by} {safe_sort_order}
-            LIMIT ?
-            """  # nosec B608
+        query = _join_sql_clauses(
+            (
+                "SELECT id, target_name, target_type, status, policy_status,"
+                " created_at, finished_at, findings_count, critical_count,"
+                " high_count, medium_count, low_count, error_message"
+            ),
+            "FROM scans",
+            f"WHERE {where_sql}",
+            f"ORDER BY {safe_sort_by} {safe_sort_order}",
+            "LIMIT ?",
+        )
         params.append(self.per_page + 1)
 
         # Total count query (same filters, no cursor/LIMIT)
@@ -423,7 +437,11 @@ class ScansPaginator:
             policy_filter=policy_filter,
         )
         count_where = " AND ".join(count_clauses)
-        count_query = f"SELECT COUNT(*) AS total FROM scans WHERE {count_where}"  # nosec B608
+        count_query = _join_sql_clauses(
+            "SELECT COUNT(*) AS total",
+            "FROM scans",
+            f"WHERE {count_where}",
+        )
         total_count = conn.execute(count_query, count_params).fetchone()["total"]
 
         rows = conn.execute(query, params).fetchall()

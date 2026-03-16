@@ -98,7 +98,7 @@ def _column_exists(conn, table: str, column: str) -> bool:
             (table, column),
         ).fetchone()
         return row is not None
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()  # nosec B608
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return any(row["name"] == column for row in rows)
 
 

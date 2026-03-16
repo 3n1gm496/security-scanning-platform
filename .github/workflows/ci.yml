@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test-orchestrator:
     runs-on: ubuntu-latest
@@ -143,6 +146,7 @@ jobs:
         file: docker/scanner-tools.Dockerfile
         target: scanner-tools
         push: false
+        outputs: type=cacheonly
         cache-from: type=gha,scope=scanner-tools-image
         cache-to: type=gha,mode=max,scope=scanner-tools-image
 
@@ -194,7 +198,8 @@ jobs:
           --exit-code 1 \
           --severity CRITICAL,HIGH \
           --ignore-unfixed \
-          security-scanner-orchestrator:test
+          security-scanner-orchestrator:test \
+          2> >(grep -Fv "Using severities from other vendors for some vulnerabilities." >&2)
 
     - name: Scan dashboard image with Trivy
       run: |
@@ -203,4 +208,5 @@ jobs:
           --exit-code 1 \
           --severity CRITICAL,HIGH \
           --ignore-unfixed \
-          security-scanner-dashboard:test
+          security-scanner-dashboard:test \
+          2> >(grep -Fv "Using severities from other vendors for some vulnerabilities." >&2)

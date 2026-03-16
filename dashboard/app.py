@@ -109,6 +109,10 @@ SCAN_WATCHDOG_INTERVAL_SECONDS = int(os.getenv("SCAN_WATCHDOG_INTERVAL_SECONDS",
 # Only then will the X-Forwarded-For header be used for rate limiting.
 TRUST_PROXY = os.getenv("DASHBOARD_TRUST_PROXY", "0").strip().lower() in ("1", "true", "yes")
 DISABLE_LIFESPAN = os.getenv("DASHBOARD_DISABLE_LIFESPAN", "0").strip().lower() in ("1", "true", "yes")
+# Vue runtime template compilation needs eval/new Function in-browser.
+# Keep this enabled by default for compatibility; set to 0 only after
+# migrating to precompiled templates.
+ALLOW_UNSAFE_EVAL = os.getenv("DASHBOARD_CSP_ALLOW_UNSAFE_EVAL", "0").strip().lower() in ("1", "true", "yes")
 
 
 async def _scan_timeout_watchdog():
@@ -308,9 +312,12 @@ class SecurityMiddleware:
                 headers["X-Frame-Options"] = "DENY"
                 headers["Referrer-Policy"] = "no-referrer"
                 headers["Cache-Control"] = "no-store"
+                script_src = [f"'nonce-{nonce}'", "'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"]
+                if ALLOW_UNSAFE_EVAL:
+                    script_src.insert(1, "'unsafe-eval'")
                 headers["Content-Security-Policy"] = (
                     "default-src 'self'; "
-                    f"script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://unpkg.com; "
+                    f"script-src {' '.join(script_src)}; "
                     "style-src 'self' 'unsafe-inline'; "
                     "img-src 'self' data:; "
                     "font-src 'self'; "

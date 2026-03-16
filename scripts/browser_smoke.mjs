@@ -202,6 +202,7 @@ async function main() {
     DASHBOARD_PASSWORD: "runtime-pass",
     DASHBOARD_SESSION_SECRET: "runtime-session-secret-1234567890",
     DASHBOARD_DISABLE_LIFESPAN: "1",
+    DASHBOARD_CSP_ALLOW_UNSAFE_EVAL: "1",
   };
   const server = spawn(
     python,
@@ -259,7 +260,23 @@ async function main() {
       page.click("button[type='submit']"),
     ]);
 
-    await page.waitForSelector(".kpi-card .kpi-value", { timeout: 15000 });
+    // Force dashboard view explicitly so hash-based routing state does not
+    // leave us on a non-dashboard tab without KPI cards.
+    if (page.url().includes("/login")) {
+      throw new Error("Login failed: still on /login after submit");
+    }
+    await page.goto(`${baseUrl}/#dashboard`, { waitUntil: "domcontentloaded" });
+    try {
+      await page.waitForSelector(".kpi-card .kpi-value", { timeout: 15000 });
+    } catch (err) {
+      const debugPath = resolve(artifactsDir, "debug-kpi-timeout.png");
+      await page.screenshot({ path: debugPath, fullPage: true }).catch(() => {});
+      const snippet = (await page.textContent("body").catch(() => "") || "").replace(/\s+/g, " ").slice(0, 500);
+      throw new Error(
+        `KPI selector timeout at url=${page.url()} debug_screenshot=${debugPath} ` +
+          `console_issues=${JSON.stringify(consoleIssues)} body_snippet=${snippet}`,
+      );
+    }
     const totalScansBefore = await readTotalScansKpi(page);
     await page.screenshot({ path: resolve(artifactsDir, "02-dashboard.png"), fullPage: true });
 

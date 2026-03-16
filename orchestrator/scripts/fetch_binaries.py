@@ -189,13 +189,7 @@ def ensure_executable(path: str) -> None:
         # (e.g. scanuser in Docker images).
         os.chmod(
             path,
-            st.st_mode
-            | stat.S_IRUSR
-            | stat.S_IRGRP
-            | stat.S_IROTH
-            | stat.S_IXUSR
-            | stat.S_IXGRP
-            | stat.S_IXOTH,
+            st.st_mode | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
         )
     except Exception:
         pass

@@ -17,6 +17,7 @@ on:
 jobs:
   security-scan:
     name: Run Security Scan
+    if: ${{ secrets.SECURITY_SCANNER_URL != '' && secrets.SECURITY_SCANNER_API_KEY != '' }}
     runs-on: ubuntu-latest
     env:
       SECURITY_SCANNER_URL_SECRET_NAME: SECURITY_SCANNER_URL
@@ -35,12 +36,6 @@ jobs:
           # Configure scanner URL
           SCANNER_URL="${{ secrets[env.SECURITY_SCANNER_URL_SECRET_NAME] }}"
           SCANNER_API_KEY="${{ secrets[env.SECURITY_SCANNER_API_KEY_SECRET_NAME] }}"
-
-          if [ -z "${SCANNER_URL}" ] || [ -z "${SCANNER_API_KEY}" ]; then
-            echo "Security scanner secrets are not configured. Skipping remote scan."
-            echo '{"status":"skipped","reason":"missing_secrets"}' > scan-results.json
-            exit 0
-          fi
 
           if ! command -v jq >/dev/null 2>&1; then
             sudo apt-get update

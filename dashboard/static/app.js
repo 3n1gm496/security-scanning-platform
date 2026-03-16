@@ -738,9 +738,16 @@ createApp({
 
       const counts = STATUS_KEYS.map(s => Number(statusMap[s] || 0));
       const nonZeroIdx = counts.map((c, i) => c > 0 ? i : -1).filter(i => i >= 0);
-      const labels = nonZeroIdx.length > 0 ? nonZeroIdx.map(i => STATUS_LABELS[i]) : [...STATUS_LABELS];
-      const values = nonZeroIdx.length > 0 ? nonZeroIdx.map(i => counts[i]) : counts;
-      const colors = nonZeroIdx.length > 0 ? nonZeroIdx.map(i => STATUS_COLORS[i]) : [...STATUS_COLORS];
+      const activeIdx = nonZeroIdx.length > 0 ? nonZeroIdx : counts.map((_, i) => i);
+      const activeStatuses = activeIdx.map(i => ({
+        key: STATUS_KEYS[i],
+        label: STATUS_LABELS[i],
+        value: counts[i],
+        color: STATUS_COLORS[i],
+      }));
+      const total = activeStatuses.reduce((sum, item) => sum + item.value, 0);
+      const onlyNew = total > 0 && activeStatuses.length === 1 && activeStatuses[0].key === 'new';
+      const resolvedCount = Number(statusMap.resolved || 0) + Number(statusMap.false_positive || 0) + Number(statusMap.risk_accepted || 0);
 
       const canvas = this.$refs.remediationChart;
       if (!canvas || !canvas.isConnected) return;
@@ -753,28 +760,88 @@ createApp({
       this.charts.remediation = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
-          labels: [...labels],
-          datasets: [{
-            label: 'Findings',
-            data: values,
-            backgroundColor: [...colors],
-            borderRadius: 6,
+          labels: ['Findings'],
+          datasets: activeStatuses.map((status, idx) => ({
+            label: status.label,
+            data: [status.value],
+            backgroundColor: status.color,
+            borderRadius: activeStatuses.length === 1 ? 10 : 6,
             borderSkipped: false,
-          }],
+            maxBarThickness: 26,
+          })),
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           animation: false,
+          indexAxis: 'y',
           plugins: {
-            legend: { display: false },
+            legend: {
+              position: 'bottom',
+              labels: {
+                boxWidth: 12,
+                padding: 12,
+                color: this.cssVar('--chart-legend'),
+                generateLabels: (chart) => {
+                  return chart.data.datasets.map((dataset, datasetIndex) => {
+                    const value = dataset.data[0] || 0;
+                    const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+                    return {
+                      text: `${dataset.label} (${value}, ${percent}%)`,
+                      fillStyle: dataset.backgroundColor,
+                      strokeStyle: dataset.backgroundColor,
+                      hidden: !chart.isDatasetVisible(datasetIndex),
+                      datasetIndex,
+                    };
+                  });
+                },
+              },
+            },
+            title: {
+              display: onlyNew,
+              text: 'No remediation started yet',
+              color: this.cssVar('--chart-tick'),
+              font: { size: 12, weight: '600' },
+              padding: { bottom: 6 },
+            },
+            subtitle: {
+              display: onlyNew,
+              text: `${total} findings are still in the New state`,
+              color: this.cssVar('--chart-legend'),
+              font: { size: 11 },
+              padding: { bottom: 10 },
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const value = ctx.parsed.x || 0;
+                  const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+                  return ` ${ctx.dataset.label}: ${value} findings (${percent}%)`;
+                },
+                footer: () => `Resolved or closed: ${resolvedCount} / ${total}`,
+              },
+            },
           },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 11 }, color: this.cssVar('--chart-tick') } },
-            y: {
+            x: {
+              stacked: true,
               beginAtZero: true,
               grid: { color: this.cssVar('--chart-grid') },
               ticks: { precision: 0, color: this.cssVar('--chart-tick') },
+              title: {
+                display: true,
+                text: total > 0 ? `Total findings: ${total}` : 'Findings',
+                color: this.cssVar('--chart-tick'),
+                font: { size: 10 },
+              },
+            },
+            y: {
+              stacked: true,
+              grid: { display: false },
+              ticks: {
+                color: this.cssVar('--chart-tick'),
+                callback: () => '',
+              },
             },
           },
         },

@@ -72,6 +72,7 @@ RUN groupadd -g 1000 scanuser && \
     useradd -u 1000 -g scanuser -m -s /bin/bash scanuser
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
@@ -87,8 +88,9 @@ WORKDIR /app
 COPY orchestrator/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     pip install --no-cache-dir semgrep checkov bandit && \
-    # Keep Trivy CI gate clean by forcing patched transitive packages.
-    # Install wheel without deps to avoid upgrading packaging beyond checkov's pin.
+    # Keep Trivy CI gate clean by reinstalling the patched packages after
+    # checkov pins older vulnerable versions.
+    pip uninstall -y wheel jaraco.context && \
     pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
     pip install --no-cache-dir "jaraco.context>=6.1.0"
 

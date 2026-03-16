@@ -11,6 +11,7 @@ RUN groupadd -g 1000 dashuser && \
 
 # ── System dependencies ────────────────────────────────────────────────────────
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git \
     curl \
@@ -35,7 +36,10 @@ RUN pip install --no-cache-dir \
     -r /tmp/requirements-dashboard.txt \
     -r /tmp/requirements-orchestrator.txt \
     semgrep \
-    checkov
+    checkov && \
+    pip uninstall -y wheel jaraco.context && \
+    pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
+    pip install --no-cache-dir "jaraco.context>=6.1.0"
 
 # ── External scanner binaries ──────────────────────────────────────────────────
 # Versions pinned for reproducible builds — update periodically.

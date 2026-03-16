@@ -11,7 +11,7 @@ import os
 import sys
 import types
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -29,10 +29,10 @@ os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from fastapi.testclient import TestClient
-
 from app import app
-from routers._shared import scan_executor as _scan_executor, MAX_SCAN_WORKERS as _MAX_SCAN_WORKERS
+from fastapi.testclient import TestClient
+from routers._shared import MAX_SCAN_WORKERS as _MAX_SCAN_WORKERS
+from routers._shared import scan_executor as _scan_executor
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -48,7 +48,7 @@ def client():
 @pytest.fixture
 def admin_headers(isolated_db):
     """Return Authorization headers with a fresh admin API key."""
-    from rbac import init_rbac_tables, create_api_key, Role
+    from rbac import Role, create_api_key, init_rbac_tables
 
     init_rbac_tables()
     full_key, _ = create_api_key(name="test-admin", role=Role.ADMIN, created_by="pytest")

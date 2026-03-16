@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
-
-from auth import require_auth, require_permission, AuthContext
+from auth import AuthContext, require_auth, require_permission
 from db import get_connection
+from fastapi import APIRouter, Depends, Form, HTTPException
 from notifications import NotificationPreferencesManager
+from pydantic import BaseModel, ConfigDict, Field
 from rbac import Permission
-
 from routers._shared import DB_PATH, notification_engine
 
 router = APIRouter(prefix="/api", tags=["notifications"])

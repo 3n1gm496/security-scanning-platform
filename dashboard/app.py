@@ -2,81 +2,66 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import csv
+import io
 import os
 import secrets
 import time
-import csv
-import io
 from contextlib import asynccontextmanager
-from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from logging_config import configure_logging, get_logger
 
 configure_logging()
 LOGGER = get_logger(__name__)
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from starlette.datastructures import MutableHeaders
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.cors import CORSMiddleware
+import bcrypt
+from auth import AuthContext, require_auth, require_permission
 from csrf import CSRFMiddleware
-
 from db import (
     cache_hit_stats,
     cache_hit_trend,
     distinct_targets,
     distinct_tools,
     fetch_kpis,
+    get_connection,
     list_scans,
     scans_trend,
     severity_breakdown,
     target_breakdown,
     tool_breakdown,
-    get_connection,
 )
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from finding_management import init_finding_management_tables
 from monitoring import router as monitoring_router
 from rate_limit import (
-    is_rate_limited,
-    start_cleanup_timer,
-    RATE_LIMIT_REQUESTS,
-    RATE_LIMIT_WINDOW_SECONDS,
     LOGIN_RATE_LIMIT_REQUESTS,
     LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    RATE_LIMIT_REQUESTS,
+    RATE_LIMIT_WINDOW_SECONDS,
+    is_rate_limited,
+    start_cleanup_timer,
 )
-from rbac import (
-    init_rbac_tables,
-    create_default_admin_key,
-    Permission,
-)
-from auth import require_auth, require_permission, AuthContext
+from rbac import Permission, create_default_admin_key, init_rbac_tables
+from routers import analytics_router, api_keys_router, audit_router, auth_router
+from routers import auth_routes as _auth_routes_module
+from routers import export_router, finding_router, notification_router, scan_router, webhook_router
+from routers._shared import _ttl_cache  # noqa: F401 — re-exported for tests
+from routers._shared import cached as _cached  # noqa: F401 — re-exported for tests
+from routers._shared import scan_executor as _scan_executor  # noqa: F401 — re-exported for tests
+from starlette.datastructures import MutableHeaders
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from webhooks import init_webhook_tables
-from finding_management import init_finding_management_tables
-
-import bcrypt
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Router imports
 # ──────────────────────────────────────────────────────────────────────────────
 
-from routers import (
-    auth_router,
-    api_keys_router,
-    webhook_router,
-    export_router,
-    analytics_router,
-    scan_router,
-    finding_router,
-    notification_router,
-    audit_router,
-)
-from routers import auth_routes as _auth_routes_module
-from routers._shared import scan_executor as _scan_executor  # noqa: F401 — re-exported for tests
-from routers._shared import cached as _cached  # noqa: F401 — re-exported for tests
-from routers._shared import _ttl_cache  # noqa: F401 — re-exported for tests
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")

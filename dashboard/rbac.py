@@ -11,7 +11,6 @@ from enum import Enum
 from typing import Optional
 
 import bcrypt
-
 from db import get_connection
 from db_adapter import adapt_schema, is_postgres
 

@@ -13,9 +13,11 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from common.schema import SCHEMA_SQL, MIGRATIONS as _MIGRATIONS
-from db_adapter import get_connection, adapt_schema, is_postgres
+from db_adapter import adapt_schema, get_connection, is_postgres
 from logging_config import get_logger
+
+from common.schema import MIGRATIONS as _MIGRATIONS
+from common.schema import SCHEMA_SQL
 
 LOGGER = get_logger(__name__)
 
@@ -41,7 +43,8 @@ def _severity_order_sql(column: str = "severity") -> str:
 
 
 _ADD_COLUMN_RE = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<column>[A-Za-z_][A-Za-z0-9_]*)",
+    r"^\s*ALTER\s+TABLE\s+(?P<table>[A-Za-z_][A-Za-z0-9_]*)\s+ADD\s+COLUMN\s+"
+    r"(?:IF\s+NOT\s+EXISTS\s+)?(?P<column>[A-Za-z_][A-Za-z0-9_]*)",
     re.IGNORECASE,
 )
 

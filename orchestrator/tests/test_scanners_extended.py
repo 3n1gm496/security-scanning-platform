@@ -7,18 +7,18 @@ import json
 import pytest
 
 from orchestrator.scanners import (
-    ScannerError,
     RateLimitError,
-    run_semgrep,
-    run_trivy_fs,
-    run_trivy_image,
-    run_gitleaks,
-    run_checkov,
-    run_syft,
-    run_bandit,
-    run_grype,
+    ScannerError,
     ensure_json_file,
     load_json,
+    run_bandit,
+    run_checkov,
+    run_gitleaks,
+    run_grype,
+    run_semgrep,
+    run_syft,
+    run_trivy_fs,
+    run_trivy_image,
 )
 
 # ---------------------------------------------------------------------------

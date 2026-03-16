@@ -7,15 +7,13 @@ import io
 import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import Response
-
-from auth import require_auth, require_permission, AuthContext
+from auth import AuthContext, require_auth, require_permission
 from db import get_connection
 from db_adapter import is_postgres
 from export import _sanitize_csv_value
-from rbac import Permission, purge_audit_log, log_audit
-
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
+from rbac import Permission, log_audit, purge_audit_log
 from routers._shared import DB_PATH
 
 router = APIRouter(prefix="/api", tags=["audit"])

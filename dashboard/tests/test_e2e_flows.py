@@ -21,10 +21,10 @@ sys.path.insert(0, str(root))
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 
-from app import app  # noqa: E402
 import db as _db  # noqa: E402
-from rbac import Role, create_api_key, init_rbac_tables  # noqa: E402
+from app import app  # noqa: E402
 from finding_management import init_finding_management_tables  # noqa: E402
+from rbac import Role, create_api_key, init_rbac_tables  # noqa: E402
 from webhooks import init_webhook_tables  # noqa: E402
 
 # ---------------------------------------------------------------------------

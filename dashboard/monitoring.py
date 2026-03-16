@@ -7,18 +7,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, Response, status
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-    REGISTRY,
-)
-from pydantic import BaseModel
-
 from auth import AuthContext, require_auth
+from fastapi import APIRouter, Depends, Response, status
+from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel
 
 router = APIRouter(tags=["monitoring"])
 

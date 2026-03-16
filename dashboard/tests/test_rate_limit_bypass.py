@@ -11,7 +11,7 @@ import pytest
 root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 
-from rate_limit import is_rate_limited, _rate_buckets
+from rate_limit import _rate_buckets, is_rate_limited
 
 
 @pytest.fixture(autouse=True)

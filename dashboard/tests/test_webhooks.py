@@ -23,16 +23,16 @@ if "bcrypt" not in sys.modules:
     sys.modules["bcrypt"] = fake_bcrypt
 
 from webhooks import (
-    WebhookEvent,
     WEBHOOK_SECRET_PREFIX,
-    init_webhook_tables,
+    WebhookEvent,
+    _generate_signature,
     create_webhook,
-    list_webhooks,
     delete_webhook,
+    init_webhook_tables,
+    list_webhooks,
     toggle_webhook,
     trigger_webhook,
     validate_webhook_url,
-    _generate_signature,
 )
 
 
@@ -376,7 +376,7 @@ class TestWebhookCircuitBreaker:
 
     def test_circuit_breaker_trips_after_threshold(self, db_setup):
         """Webhook is auto-disabled after WEBHOOK_CIRCUIT_BREAKER_THRESHOLD failures."""
-        from webhooks import _update_webhook_stats, WEBHOOK_CIRCUIT_BREAKER_THRESHOLD
+        from webhooks import WEBHOOK_CIRCUIT_BREAKER_THRESHOLD, _update_webhook_stats
 
         wid = create_webhook(
             name="CB Test",

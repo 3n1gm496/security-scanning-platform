@@ -8,9 +8,9 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+import fastapi.testclient as fastapi_testclient
 import httpx
 import pytest
-import fastapi.testclient as fastapi_testclient
 import starlette.testclient as starlette_testclient
 
 # Ensure real bcrypt is loaded before test modules that may install a fallback
@@ -37,6 +37,8 @@ class SyncASGITestClient:
     interaction with the app stack/lifecycle. For these tests we only need
     request/response behavior, cookies, and mutable default headers.
     """
+
+    __test__ = False
 
     def __init__(self, app, base_url="http://testserver", headers=None, cookies=None, **_kwargs):
         self.app = app

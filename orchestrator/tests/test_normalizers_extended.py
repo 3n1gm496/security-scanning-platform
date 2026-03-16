@@ -6,13 +6,13 @@ import json
 
 from orchestrator.models import TargetSpec
 from orchestrator.normalizer import (
-    normalize_trivy,
-    normalize_gitleaks,
-    normalize_checkov,
-    sbom_metadata,
-    _severity,
     _fingerprint,
     _rel_path,
+    _severity,
+    normalize_checkov,
+    normalize_gitleaks,
+    normalize_trivy,
+    sbom_metadata,
 )
 
 TARGET_LOCAL = TargetSpec(name="myrepo", type="local", path="/tmp/repo")

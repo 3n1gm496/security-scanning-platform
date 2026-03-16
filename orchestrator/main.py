@@ -9,44 +9,46 @@ import shutil
 import sys
 import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from concurrent.futures import as_completed
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from orchestrator.cache import build_cache_key, load_cached_output, store_cached_output
+from orchestrator.compatibility import get_compatible_scanners, preflight_check
 from orchestrator.models import ScanResult, TargetSpec, ToolExecutionResult, utc_now_iso
 from orchestrator.normalizer import (
+    normalize_bandit,
     normalize_checkov,
     normalize_gitleaks,
+    normalize_grype,
+    normalize_nuclei,
     normalize_semgrep,
     normalize_trivy,
-    normalize_bandit,
-    normalize_nuclei,
-    normalize_grype,
     normalize_zap,
     sbom_metadata,
 )
+from orchestrator.policy_engine import load_policy_engine
 from orchestrator.retention import apply_retention
-from orchestrator.compatibility import get_compatible_scanners, preflight_check
 from orchestrator.scanners import (
     clone_repo,
     get_git_commit_sha,
     load_json,
+    run_bandit,
     run_checkov,
     run_gitleaks,
+    run_grype,
+    run_nuclei,
+    run_owasp_zap,
     run_semgrep,
     run_syft,
     run_trivy_fs,
     run_trivy_image,
-    run_bandit,
-    run_nuclei,
-    run_grype,
-    run_owasp_zap,
 )
-from orchestrator.storage import init_db, save_scan_result, write_json_file, get_last_scan_sha
-from orchestrator.policy_engine import load_policy_engine
+from orchestrator.storage import get_last_scan_sha, init_db, save_scan_result, write_json_file
 
 LOGGER = logging.getLogger(__name__)
 

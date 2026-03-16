@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+from auth import AuthContext, require_auth, require_permission
 from fastapi import APIRouter, Depends, Form, HTTPException
+from rbac import Permission, Role, create_api_key, list_api_keys, log_audit, revoke_api_key
 from starlette import status
-
-from auth import require_auth, require_permission, AuthContext
-from rbac import Role, Permission, create_api_key, list_api_keys, revoke_api_key, log_audit
 
 router = APIRouter(prefix="/api", tags=["api-keys"])
 

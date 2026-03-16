@@ -22,16 +22,16 @@ if "bcrypt" not in sys.modules:
     sys.modules["bcrypt"] = fake_bcrypt
 
 from rbac import (
-    Role,
     Permission,
-    init_rbac_tables,
+    Role,
     create_api_key,
     create_default_admin_key,
-    verify_api_key,
     has_permission,
+    hash_api_key,
+    init_rbac_tables,
     list_api_keys,
     revoke_api_key,
-    hash_api_key,
+    verify_api_key,
 )
 
 
@@ -176,6 +176,7 @@ def test_api_key_hash_is_bcrypt():
 def test_api_key_legacy_sha256_still_verified():
     """Legacy SHA-256 hashes must still verify during migration period."""
     import hashlib as _hl
+
     from rbac import _verify_key_hash
 
     key = "ssp_legacy_key_1234"

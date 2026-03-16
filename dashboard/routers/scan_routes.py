@@ -10,18 +10,16 @@ import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from auth import AuthContext, require_auth, require_permission
+from db import get_connection, list_scans
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from starlette import status
-
-from auth import require_auth, require_permission, AuthContext
-from db import get_connection, list_scans
-from rbac import Permission
 from pagination import ScansPaginator
-from scan_runner import run_scan
-from scan_events import subscribe, unsubscribe
-
+from rbac import Permission
 from routers._shared import DB_PATH, scan_queue_submit
+from scan_events import subscribe, unsubscribe
+from scan_runner import run_scan
+from starlette import status
 
 # Ensure orchestrator package is importable
 _project_root = str(Path(__file__).resolve().parent.parent.parent)

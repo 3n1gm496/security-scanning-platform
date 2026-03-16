@@ -26,11 +26,11 @@ os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from app import app  # noqa: E402 — import after env vars
-import db as _db  # noqa: E402
-from conftest import SyncASGITestClient  # noqa: E402
 import auth as _auth  # noqa: E402
+import db as _db  # noqa: E402
+from app import app  # noqa: E402 — import after env vars
 from auth import AuthContext  # noqa: E402
+from conftest import SyncASGITestClient  # noqa: E402
 from rbac import Role  # noqa: E402
 
 
@@ -105,10 +105,6 @@ def seeded_client(isolated_db):
                 "A SQL injection vulnerability was found.",
             ),
         )
-    # Retrieve the auto-generated finding id for later use
-    with _db.get_connection(db_path) as conn:
-        row = conn.execute("SELECT id FROM findings LIMIT 1").fetchone()
-        finding_id = row["id"] if row else 1
 
     async def _fake_auth():
         return AuthContext(role=Role.ADMIN, user_id="pytest")

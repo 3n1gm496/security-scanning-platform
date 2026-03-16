@@ -2,24 +2,22 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from starlette import status
-
-from auth import require_auth, require_permission, AuthContext
-from db import get_connection, severity_breakdown
-from rbac import Permission
 from analytics import (
     calculate_risk_score,
-    get_risk_distribution,
     get_compliance_summary,
-    get_trend_analysis,
+    get_risk_distribution,
     get_target_risk_ranking,
     get_tool_effectiveness,
+    get_trend_analysis,
 )
-from remediation import RemediationEngine
+from auth import AuthContext, require_auth, require_permission
 from charting import ChartingEngine
-
+from db import get_connection, severity_breakdown
+from fastapi import APIRouter, Depends, HTTPException, Query
+from rbac import Permission
+from remediation import RemediationEngine
 from routers._shared import DB_PATH, cached
+from starlette import status
 
 router = APIRouter(prefix="/api", tags=["analytics"])
 

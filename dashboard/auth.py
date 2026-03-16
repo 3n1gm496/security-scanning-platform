@@ -6,8 +6,7 @@ from typing import Optional
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBearer
-
-from rbac import Permission, Role, has_permission, verify_api_key, log_audit
+from rbac import Permission, Role, has_permission, log_audit, verify_api_key
 
 security = HTTPBearer(auto_error=False)
 

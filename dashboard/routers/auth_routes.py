@@ -7,10 +7,9 @@ import secrets
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from starlette import status
-
 from rbac import Role, verify_user_credentials
 from routers._shared import templates
+from starlette import status
 
 router = APIRouter(tags=["auth"])
 

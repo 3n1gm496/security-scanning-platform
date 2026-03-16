@@ -81,14 +81,17 @@ def _scans_conn_with_data(n: int = 15) -> sqlite3.Connection:
         """)
     for i in range(n):
         conn.execute(
-            "INSERT INTO scans (target_name, target_type, status, policy_status, created_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "INSERT INTO scans (target_name, target_type, status, policy_status, created_at, finished_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)"
+            ),
             (
                 f"target-{i}",
                 "git",
                 "COMPLETED_CLEAN",
                 "PASSED",
-                f"2026-01-{i+1:02d}T00:00:00",
-                f"2026-01-{i+1:02d}T00:01:00",
+                f"2026-01-{i + 1:02d}T00:00:00",
+                f"2026-01-{i + 1:02d}T00:01:00",
             ),
         )
     conn.commit()
@@ -194,14 +197,36 @@ class TestAddFindingCommentReturnsId:
         db_path = __import__("os").environ["DASHBOARD_DB_PATH"]
         with get_connection(db_path) as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO scans (id, created_at, finished_at, target_type, target_name, target_value, status, policy_status) "
+                "INSERT OR IGNORE INTO scans "
+                "(id, created_at, finished_at, target_type, target_name, target_value, status, policy_status) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                ("scan-1", "2026-01-01T00:00:00", "2026-01-01T00:01:00", "git", "t", "v", "COMPLETED_CLEAN", "PASSED"),
+                (
+                    "scan-1",
+                    "2026-01-01T00:00:00",
+                    "2026-01-01T00:01:00",
+                    "git",
+                    "t",
+                    "v",
+                    "COMPLETED_CLEAN",
+                    "PASSED",
+                ),
             )
             conn.execute(
-                "INSERT OR IGNORE INTO findings (id, scan_id, timestamp, target_type, target_name, tool, category, severity, title, description) "
+                "INSERT OR IGNORE INTO findings "
+                "(id, scan_id, timestamp, target_type, target_name, tool, category, severity, title, description) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (1, "scan-1", "2026-01-01T00:00:00", "git", "t", "tool", "cat", "HIGH", "title", "desc"),
+                (
+                    1,
+                    "scan-1",
+                    "2026-01-01T00:00:00",
+                    "git",
+                    "t",
+                    "tool",
+                    "cat",
+                    "HIGH",
+                    "title",
+                    "desc",
+                ),
             )
 
     def test_returns_positive_int(self, isolated_db):
@@ -230,7 +255,8 @@ class TestBulkUpdateStatusReporting:
         db_path = __import__("os").environ["DASHBOARD_DB_PATH"]
         with get_connection(db_path) as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO scans (id, created_at, finished_at, target_type, target_name, target_value, status, policy_status) "
+                "INSERT OR IGNORE INTO scans "
+                "(id, created_at, finished_at, target_type, target_name, target_value, status, policy_status) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     "scan-bulk",
@@ -244,9 +270,21 @@ class TestBulkUpdateStatusReporting:
                 ),
             )
             conn.execute(
-                "INSERT OR IGNORE INTO findings (id, scan_id, timestamp, target_type, target_name, tool, category, severity, title, description) "
+                "INSERT OR IGNORE INTO findings "
+                "(id, scan_id, timestamp, target_type, target_name, tool, category, severity, title, description) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (1, "scan-bulk", "2026-01-01T00:00:00", "git", "t", "tool", "cat", "HIGH", "title", "desc"),
+                (
+                    1,
+                    "scan-bulk",
+                    "2026-01-01T00:00:00",
+                    "git",
+                    "t",
+                    "tool",
+                    "cat",
+                    "HIGH",
+                    "title",
+                    "desc",
+                ),
             )
 
     def test_bulk_update_reports_failures_instead_of_swallowing(self, isolated_db):

@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import os
 import time
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Lock
 
 from fastapi.templating import Jinja2Templates
-
 from notifications import EmailNotificationEngine
 
 # ── Database path ──────────────────────────────────────────────────────────

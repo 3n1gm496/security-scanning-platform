@@ -8,14 +8,14 @@ from pathlib import Path
 import pytest
 
 from orchestrator.db_adapter import (
-    _sqlite_connect,
     _adapt_sql,
-    get_connection,
-    adapt_schema,
-    is_postgres,
-    _RowProxy,
-    _CursorWrapper,
     _ConnectionWrapper,
+    _CursorWrapper,
+    _RowProxy,
+    _sqlite_connect,
+    adapt_schema,
+    get_connection,
+    is_postgres,
 )
 
 # ---------------------------------------------------------------------------

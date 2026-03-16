@@ -13,7 +13,7 @@ root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 sys.path.insert(0, str(root.parent))
 
-from common.schema import SCHEMA_SQL, MIGRATIONS
+from common.schema import MIGRATIONS, SCHEMA_SQL
 
 
 def _create_db(schema_sql: str) -> dict:
@@ -87,8 +87,8 @@ class TestAdaptSchemaPostgres:
     """Test adapt_schema() transformations for PostgreSQL compatibility."""
 
     def test_autoincrement_to_serial(self):
-        import os
         import importlib
+        import os
 
         # Temporarily set DATABASE_URL to trigger PostgreSQL mode
         old = os.environ.get("DATABASE_URL")
@@ -109,8 +109,8 @@ class TestAdaptSchemaPostgres:
             importlib.reload(db_adapter)
 
     def test_insert_or_replace_transformed(self):
-        import os
         import importlib
+        import os
 
         old = os.environ.get("DATABASE_URL")
         os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/testdb"
@@ -130,8 +130,8 @@ class TestAdaptSchemaPostgres:
             importlib.reload(db_adapter)
 
     def test_placeholder_adaptation_preserves_escaped_quotes(self):
-        import os
         import importlib
+        import os
 
         old = os.environ.get("DATABASE_URL")
         os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/testdb"
@@ -149,8 +149,8 @@ class TestAdaptSchemaPostgres:
             importlib.reload(db_adapter)
 
     def test_executescript_split_ignores_semicolons_in_strings(self):
-        import os
         import importlib
+        import os
 
         old = os.environ.get("DATABASE_URL")
         os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/testdb"

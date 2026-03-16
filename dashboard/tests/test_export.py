@@ -10,7 +10,7 @@ from pathlib import Path
 root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 
-from export import export_to_json, export_to_csv, export_to_sarif, export_to_html
+from export import export_to_csv, export_to_html, export_to_json, export_to_sarif
 
 # Sample findings data
 SAMPLE_FINDINGS = [

@@ -22,9 +22,9 @@ sys.path.insert(0, str(_root))
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 
-from app import app  # noqa: E402  (must come after sys.path setup)
-import db as _db  # noqa: E402
 import app as _app  # noqa: E402
+import db as _db  # noqa: E402
+from app import app  # noqa: E402  (must come after sys.path setup)
 
 _TEST_USER = os.environ["DASHBOARD_USERNAME"]
 _TEST_PASS = os.environ["DASHBOARD_PASSWORD"]

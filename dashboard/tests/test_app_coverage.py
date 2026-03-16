@@ -39,13 +39,13 @@ os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from app import app  # noqa: E402
+import app as _app  # noqa: E402
+import auth as _auth  # noqa: E402
 import db as _db  # noqa: E402
 import db_adapter as _db_adapter  # noqa: E402
-import app as _app  # noqa: E402
-from conftest import SyncASGITestClient  # noqa: E402
-import auth as _auth  # noqa: E402
+from app import app  # noqa: E402
 from auth import AuthContext  # noqa: E402
+from conftest import SyncASGITestClient  # noqa: E402
 from rbac import Role  # noqa: E402
 
 # ---------------------------------------------------------------------------

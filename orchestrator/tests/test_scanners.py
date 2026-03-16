@@ -1,14 +1,15 @@
 import socket
 
 import pytest
+
 from orchestrator.scanners import (
-    run_bandit,
-    run_trivy_fs,
-    run_nuclei,
-    run_grype,
-    run_owasp_zap,
     ScannerError,
     clone_repo,
+    run_bandit,
+    run_grype,
+    run_nuclei,
+    run_owasp_zap,
+    run_trivy_fs,
 )
 
 # monkeypatch command_exists to simulate missing binaries

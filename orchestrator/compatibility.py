@@ -2,6 +2,7 @@
 """Scanner compatibility matrix and preflight checks."""
 
 from __future__ import annotations
+
 import importlib
 import subprocess
 from typing import Any

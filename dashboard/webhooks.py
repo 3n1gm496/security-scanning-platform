@@ -15,15 +15,13 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-
-from logging_config import get_logger
 from urllib.parse import urlparse
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
-
 from db import get_connection
 from db_adapter import adapt_schema, is_postgres
+from logging_config import get_logger
 
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))

@@ -9,7 +9,7 @@ Metrics:
 - System performance
 """
 
-from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 
 class MetricsCollector:

@@ -5,8 +5,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pagination import FindingsPaginator, ScansPaginator, PaginationCursor
 import sqlite3
+
+from pagination import FindingsPaginator, PaginationCursor, ScansPaginator
 
 
 def test_pagination_cursor_encode_decode():
@@ -131,7 +132,10 @@ def _make_full_scans_db(rows: list[tuple]) -> sqlite3.Connection:
     """)
     for row in rows:
         conn.execute(
-            "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            (
+                "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, datetime('now'))"
+            ),
             row,
         )
     conn.commit()
@@ -202,7 +206,7 @@ def test_findings_paginator_with_status_filter():
     for i in range(10):
         conn.execute(
             "INSERT INTO findings (id, title, severity) VALUES (?, ?, ?)",
-            (i + 1, f"Finding {i+1}", "HIGH"),
+            (i + 1, f"Finding {i + 1}", "HIGH"),
         )
 
     # Set status for some findings

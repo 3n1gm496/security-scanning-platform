@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import time
 import threading
+import time
 
 from orchestrator.cache import build_cache_key, load_cached_output, store_cached_output
 

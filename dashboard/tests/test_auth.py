@@ -3,6 +3,7 @@ import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
+
 import pytest
 
 # make sure the dashboard directory is on sys.path so `import app` works
@@ -23,13 +24,13 @@ os.environ.setdefault("DASHBOARD_SESSION_SECRET", "test-session-secret")
 # override database path to avoid writing to /data
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from app import app  # import after env vars
-from conftest import SyncASGITestClient
+import app as _app
 import auth as _auth
 
 # stub out DB calls so index page can render without real database
 import db as _db
-import app as _app
+from app import app  # import after env vars
+from conftest import SyncASGITestClient
 
 
 @pytest.fixture(autouse=True)

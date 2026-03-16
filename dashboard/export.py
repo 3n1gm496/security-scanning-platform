@@ -6,8 +6,8 @@ import csv
 import json
 from datetime import datetime, timezone
 from html import escape as html_escape
-from io import StringIO, BytesIO
-from typing import List, Dict, Any
+from io import BytesIO, StringIO
+from typing import Any, Dict, List
 from xml.sax.saxutils import escape as xml_escape
 
 # ---------------------------------------------------------------------------
@@ -399,11 +399,11 @@ def export_to_pdf(
     """
     try:
         from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
         from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
     except ImportError:
         raise ImportError("reportlab is required for PDF export. Install with: pip install reportlab")
 

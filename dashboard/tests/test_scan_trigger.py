@@ -16,9 +16,8 @@ os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from fastapi.testclient import TestClient
-
 from app import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -30,7 +29,7 @@ def client():
 @pytest.fixture
 def admin_headers(isolated_db):
     """Create a fresh admin API key for each test, using the isolated DB."""
-    from rbac import create_api_key, init_rbac_tables, Role
+    from rbac import Role, create_api_key, init_rbac_tables
 
     init_rbac_tables()
     key, _ = create_api_key(name="test-admin", role=Role.ADMIN, created_by="pytest")

@@ -29,9 +29,9 @@ os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from app import app  # noqa: E402
 import db as _db  # noqa: E402
 import finding_management as _fm  # noqa: E402
+from app import app  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Shared fixture

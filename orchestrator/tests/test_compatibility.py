@@ -6,11 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from orchestrator.compatibility import (
-    SCANNER_COMPATIBILITY,
-    get_compatible_scanners,
-    preflight_check,
-)
+from orchestrator.compatibility import SCANNER_COMPATIBILITY, get_compatible_scanners, preflight_check
 from orchestrator.models import TargetSpec
 
 # ---------------------------------------------------------------------------

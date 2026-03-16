@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
+from auth import AuthContext, require_auth, require_permission
 from fastapi import APIRouter, Depends, Form, HTTPException
-from starlette import status
-
-from auth import require_auth, require_permission, AuthContext
 from rbac import Permission, log_audit
-from webhooks import (
-    WebhookEvent,
-    create_webhook,
-    list_webhooks,
-    delete_webhook,
-    toggle_webhook,
-    rotate_webhook_secret,
-)
+from starlette import status
+from webhooks import WebhookEvent, create_webhook, delete_webhook, list_webhooks, rotate_webhook_secret, toggle_webhook
 
 router = APIRouter(prefix="/api", tags=["webhooks"])
 

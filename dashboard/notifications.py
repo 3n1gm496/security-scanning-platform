@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import os
 import smtplib
-from html import escape as html_escape
-from urllib.parse import quote_plus, urlsplit, urlunsplit
-
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from html import escape as html_escape
 from typing import Any
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 from logging_config import get_logger
 

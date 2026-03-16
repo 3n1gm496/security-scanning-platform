@@ -12,9 +12,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import zipfile
 from pathlib import Path
 from urllib.parse import urlparse
-import zipfile
 
 import requests
 

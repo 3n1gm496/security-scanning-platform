@@ -21,11 +21,10 @@ if "bcrypt" not in sys.modules:
     fake_bcrypt.checkpw = lambda plain, hashed: True
     sys.modules["bcrypt"] = fake_bcrypt
 
-from fastapi import HTTPException
-
-from routers import auth_routes, audit_routes
-from routers.notification_routes import NotificationPreferencesPayload
 from app import SecurityMiddleware
+from fastapi import HTTPException
+from routers import audit_routes, auth_routes
+from routers.notification_routes import NotificationPreferencesPayload
 
 
 def test_logout_get_rejected():

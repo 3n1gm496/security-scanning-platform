@@ -116,13 +116,7 @@ def _scanner_subprocess_env(extra: dict[str, str] | None = None) -> dict[str, st
     return env
 
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
-)
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 LOGGER = logging.getLogger(__name__)
 

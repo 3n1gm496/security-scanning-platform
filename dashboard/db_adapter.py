@@ -14,11 +14,11 @@ The adapter normalises:
 
 from __future__ import annotations
 
+import atexit
 import os
 import re
 import sqlite3
 import threading
-import atexit
 from pathlib import Path
 
 from logging_config import get_logger

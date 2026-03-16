@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Historical dummy test/example secrets committed before Gitleaks enforcement"
+regexes = [
+  '''ssp_abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678''',
+  '''ssp_legacy_key_1234''',
+  '''sk-1234567890abcdef''',
+]

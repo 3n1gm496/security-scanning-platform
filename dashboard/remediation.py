@@ -71,7 +71,7 @@ user = session.query(User).filter(User.username == username).first()
                 "Implement secret scanning in CI/CD pipeline",
             ],
             "code_example": """# VULNERABLE
-API_KEY = "sk-1234567890abcdef"
+API_KEY = "hardcoded-demo-key-not-for-production"
 
 # SAFE: Environment variables
 import os

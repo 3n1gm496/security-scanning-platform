@@ -162,7 +162,7 @@ def test_permissions():
 
 def test_api_key_hash_is_bcrypt():
     """API key hashing must produce a bcrypt hash verifiable by _verify_key_hash."""
-    key = "ssp_abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678"
+    key = "bcrypt-roundtrip-placeholder-key-for-tests-only"
     hashed = hash_api_key(key)
     # bcrypt hashes start with $2b$
     assert hashed.startswith("$2b$")
@@ -179,7 +179,7 @@ def test_api_key_legacy_sha256_still_verified():
 
     from rbac import _verify_key_hash
 
-    key = "ssp_legacy_key_1234"
+    key = "legacy-sha256-placeholder-key"
     legacy_hash = _hl.sha256(key.encode()).hexdigest()
     assert _verify_key_hash(key, legacy_hash) is True
     assert _verify_key_hash("wrong", legacy_hash) is False

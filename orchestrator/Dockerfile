@@ -34,6 +34,11 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
+# Build gitleaks from source with the patched Go toolchain.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+
 # Build trivy from source and bump docker/cli dependency to the fixed version.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/root/go/pkg/mod \
@@ -46,7 +51,6 @@ COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
 
 # Install scanner binaries from GitHub releases with SHA-256 verification.
 RUN python /tmp/fetch_binaries.py \
-      --gitleaks-version "${GITLEAKS_VERSION}" \
       --syft-version "${SYFT_VERSION}" \
       --grype-version "${GRYPE_VERSION}" \
       --nuclei-version "${NUCLEI_VERSION}" && \
@@ -92,7 +96,10 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     # checkov pins older vulnerable versions.
     pip uninstall -y wheel jaraco.context && \
     pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
-    pip install --no-cache-dir "jaraco.context>=6.1.0"
+    pip install --no-cache-dir "jaraco.context>=6.1.0" && \
+    find /usr/local/lib/python3.11/site-packages -maxdepth 1 \
+      \( -name 'wheel-0.45.1.dist-info' -o -name 'jaraco.context-5.3.0.dist-info' -o -name 'jaraco_context-5.3.0.dist-info' \) \
+      -exec rm -rf {} +
 
 COPY --from=scanner-builder /usr/local/bin/gitleaks /usr/local/bin/gitleaks
 COPY --from=scanner-builder /usr/local/bin/trivy /usr/local/bin/trivy

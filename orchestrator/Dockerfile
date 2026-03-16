@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 ARG TRIVY_VERSION=0.69.3
 ARG GITLEAKS_VERSION=8.30.0
 ARG SYFT_VERSION=1.42.2
@@ -33,10 +35,14 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Build gitleaks from source with the patched Go toolchain.
-RUN GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
 
 # Build trivy from source and bump docker/cli dependency to the fixed version.
-RUN git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecurity/trivy.git /tmp/trivy-src && \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecurity/trivy.git /tmp/trivy-src && \
     cd /tmp/trivy-src && \
     go get github.com/docker/cli@v29.2.0 && \
     GOEXPERIMENT=jsonv2 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /usr/local/bin/trivy ./cmd/trivy

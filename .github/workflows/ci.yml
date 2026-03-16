@@ -139,6 +139,8 @@ jobs:
         push: false
         tags: security-scanner-orchestrator:test
         load: true
+        cache-from: type=gha,scope=orchestrator-image
+        cache-to: type=gha,mode=max,scope=orchestrator-image
 
     - name: Build dashboard image
       uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
@@ -149,6 +151,8 @@ jobs:
         push: false
         tags: security-scanner-dashboard:test
         load: true
+        cache-from: type=gha,scope=dashboard-image
+        cache-to: type=gha,mode=max,scope=dashboard-image
 
     - name: Scan orchestrator image with Trivy
       uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1

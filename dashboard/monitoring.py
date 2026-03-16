@@ -11,6 +11,7 @@ from auth import AuthContext, require_auth
 from fastapi import APIRouter, Depends, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
+from runtime_config import DASHBOARD_DB_PATH
 
 router = APIRouter(tags=["monitoring"])
 
@@ -152,7 +153,7 @@ async def health_check(response: Response) -> HealthResponse:
 
     # Verify database connectivity with a real query
     try:
-        db_path = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+        db_path = os.getenv("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
         from db import get_connection
 
         with get_connection(db_path) as conn:
@@ -183,7 +184,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     try:
         from pathlib import Path
 
-        db_path = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+        db_path = os.getenv("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
         if Path(db_path).exists():
             checks["database"] = {"status": "ok", "exists": True}
         else:
@@ -256,7 +257,7 @@ async def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Respo
     # Refresh the findings gauge from the DB on each scrape.
     # This is a cheap aggregation query (indexed by severity).
     try:
-        db_path = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+        db_path = os.getenv("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
         from db import get_connection
 
         with get_connection(db_path) as conn:

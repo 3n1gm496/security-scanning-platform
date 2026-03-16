@@ -15,17 +15,14 @@ from datetime import datetime, timezone
 from db import get_connection
 from db_adapter import is_postgres
 from logging_config import get_logger
+from runtime_config import DASHBOARD_DB_PATH
 from scan_events import publish_sync
 
 LOGGER = get_logger(__name__)
 
-# Resolved at import time so tests can override via env var
-_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
-
-
 def _db_path() -> str:
     """Return the current DB path (reads env var each call so tests can override)."""
-    return os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+    return os.getenv("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
 
 
 def insert_running_scan(scan_id: str, started_at: str, target_type: str, name: str, target: str) -> None:

@@ -16,9 +16,10 @@ from threading import Lock
 
 from fastapi.templating import Jinja2Templates
 from notifications import EmailNotificationEngine
+from runtime_config import DASHBOARD_DB_PATH
 
 # ── Database path ──────────────────────────────────────────────────────────
-DB_PATH: str = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+DB_PATH: str = DASHBOARD_DB_PATH
 
 # ── Templates ──────────────────────────────────────────────────────────────
 templates: Jinja2Templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))

@@ -23,7 +23,7 @@ import random
 import sqlite3
 import sys
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ def _generate_findings(scan_id: str, target_name: str, tool: str, n: int) -> lis
         findings.append(
             {
                 "scan_id": scan_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "target_type": "url",
                 "target_name": target_name,
                 "tool": tool,
@@ -225,7 +225,7 @@ def seed(db_path: str, clear: bool = False) -> None:
         conn.commit()
 
     # Generate 30 scans over the last 90 days
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=90)
 
     scans_inserted = 0

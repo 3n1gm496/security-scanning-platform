@@ -1079,6 +1079,23 @@ tr:last-child td { border-bottom: none; }
 .btn-alert:hover { background: var(--color-danger); border-color: var(--color-danger); }
 .btn-alert:active { transform: translateY(1px); }
 
+.live-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-3);
+  font-size: var(--font-sm);
+}
+
+.live-banner-info {
+  color: var(--color-text-secondary);
+}
+
+.live-banner-subtle {
+  color: var(--color-text-muted);
+}
+
 /* ── Two column grid ──────────────────────────────────────── */
 
 .two-cols-grid {

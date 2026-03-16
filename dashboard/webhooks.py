@@ -22,8 +22,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from db import get_connection
 from db_adapter import adapt_schema, is_postgres
 from logging_config import get_logger
+from runtime_config import DASHBOARD_DB_PATH
 
-DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 WEBHOOK_TIMEOUT_SECONDS = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 WEBHOOK_RETRY_COUNT = int(os.getenv("WEBHOOK_RETRY_COUNT", "3"))
 WEBHOOK_CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("WEBHOOK_CIRCUIT_BREAKER_THRESHOLD", "5"))

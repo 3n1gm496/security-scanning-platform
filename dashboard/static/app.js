@@ -36,6 +36,14 @@ function normalizePerPage(value, fallback = 50) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function stableSerialize(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (_) {
+    return '';
+  }
+}
+
 // CSRF token cache — fetched once, reused for all mutating requests.
 let _csrfToken = null;
 
@@ -131,6 +139,10 @@ createApp({
       refreshInterval: null,
       toasts: [],
       toastCounter: 0,
+      hasPendingScanUpdates: false,
+      hasPendingFindingUpdates: false,
+      scanLiveMessage: '',
+      findingsLiveMessage: '',
 
       // ── Dashboard data
       kpis: init.kpis || {},
@@ -214,6 +226,7 @@ createApp({
       },
       analyticsDays: 30,
       analyticsRefreshing: false,
+      analyticsRefreshingMode: 'silent-sync',
       _analyticsRefreshSeq: 0,
 
       // ── Settings page
@@ -309,6 +322,8 @@ createApp({
 
    async mounted() {
     this._remediationChartVersion = 0;
+    this._lastKpiRefreshAt = 0;
+    this._recentScansSignature = stableSerialize(this._scanSignaturePayload(this.recentScans || []));
     this.debouncedLoadFindings = debounce(() => this.loadFindings(true), 400);
     this.debouncedLoadScans = debounce(() => this.loadScans(true), 400);
 
@@ -392,7 +407,7 @@ createApp({
     // from localStorage before the first paint).
     await nextTick();
     this.applyChartDefaults();
-    await this.initDashboardCharts();
+    await this.initDashboardCharts('mount');
     if (initialPage !== 'dashboard') {
       // Force data loading for the initial page.  navigate() would bail out
       // because currentPage was already set above — so use refreshCurrentPage().
@@ -432,7 +447,7 @@ createApp({
     this.stopScanPolling();
     if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
     if (this._popstateHandler) window.removeEventListener('popstate', this._popstateHandler);
-    Object.values(this.charts).forEach(c => c && c.destroy());
+    Object.keys(this.charts).forEach((key) => this.safeDestroyChart(key));
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
     if (this._toastTimers) {
       this._toastTimers.forEach(timer => clearTimeout(timer));
@@ -460,9 +475,19 @@ createApp({
       const s = getComputedStyle(document.documentElement);
       Chart.defaults.color = s.getPropertyValue('--chart-tick').trim() || '#6b7280';
       Chart.defaults.borderColor = s.getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,0.06)';
-      // Disable animations to avoid race conditions when canvases are unmounted
-      // during fast page navigation (dashboard <-> analytics).
-      Chart.defaults.animation = false;
+      if (!Chart.__sspDetachedCanvasGuardInstalled) {
+        ['clear', 'draw', 'render', 'resize', 'update'].forEach((method) => {
+          const original = Chart.prototype[method];
+          if (typeof original !== 'function') return;
+          Chart.prototype[method] = function guardedChartMethod(...args) {
+            if (!this.canvas || !this.ctx || this.canvas.isConnected === false) {
+              return this;
+            }
+            return original.apply(this, args);
+          };
+        });
+        Chart.__sspDetachedCanvasGuardInstalled = true;
+      }
       if (Chart.defaults.transitions) {
         if (Chart.defaults.transitions.active) {
           Chart.defaults.transitions.active.animation = { duration: 0 };
@@ -478,13 +503,211 @@ createApp({
       return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     },
 
+    isDocumentVisible() {
+      return document.visibilityState !== 'hidden';
+    },
+
+    _scanSignaturePayload(scans) {
+      return (scans || []).map(scan => [
+        scan.id,
+        scan.status,
+        scan.policy_status,
+        scan.findings_count,
+        scan.critical_count,
+        scan.high_count,
+        scan.medium_count,
+        scan.low_count,
+        scan.info_count,
+        scan.created_at,
+      ]);
+    },
+
+    chartMotion(mode = 'background-refresh') {
+      if (mode === 'mount') return { duration: 420, easing: 'easeOutCubic' };
+      if (mode === 'user-change') return { duration: 240, easing: 'easeOutQuad' };
+      return false;
+    },
+
+    withChartMotion(options, mode = 'mount') {
+      return {
+        ...options,
+        animation: this.chartMotion(mode),
+        transitions: {
+          ...(options.transitions || {}),
+          active: { animation: { duration: 0 } },
+          resize: { animation: { duration: 0 } },
+        },
+      };
+    },
+
+    updateChartWithMode(chart, mode = 'background-refresh') {
+      if (!chart) return;
+      if (!chart.canvas || !chart.canvas.isConnected || !chart.ctx) {
+        try { chart.stop(); } catch (_) {}
+        try { chart.destroy(); } catch (_) {}
+        return;
+      }
+      chart.options.animation = this.chartMotion(mode);
+      chart.options.transitions = {
+        ...(chart.options.transitions || {}),
+        active: { animation: { duration: 0 } },
+        resize: { animation: { duration: 0 } },
+      };
+      const updateMode = ['background-refresh', 'resize', 'silent-sync'].includes(mode) ? 'none' : undefined;
+      chart.update(updateMode);
+    },
+
+    safeDestroyChart(keyOrChart) {
+      const chart = typeof keyOrChart === 'string' ? this.charts[keyOrChart] : keyOrChart;
+      if (!chart) return;
+      try { chart.stop(); } catch (_) {}
+      try { chart.destroy(); } catch (_) {}
+      if (typeof keyOrChart === 'string') this.charts[keyOrChart] = null;
+    },
+
+    isDefaultScansLiveView() {
+      return (
+        this.currentPage === 'scans' &&
+        this.scansPage === 1 &&
+        this.scansSort.by === 'created_at' &&
+        this.scansSort.order === 'DESC' &&
+        !this.scansFilter.search &&
+        !this.scansFilter.target &&
+        !this.scansFilter.status &&
+        !this.scansFilter.policy
+      );
+    },
+
+    hasActiveFindingsInteraction() {
+      return this.selectedFindings.length > 0 || !!this.selectedFinding || !!this.bulkStatus;
+    },
+
+    canAutoRefreshFindingsView() {
+      return this.currentPage === 'findings' && this.findingsPage === 1 && !this.hasActiveFindingsInteraction();
+    },
+
+    clearPendingScanUpdates() {
+      this.hasPendingScanUpdates = false;
+      this.scanLiveMessage = '';
+    },
+
+    queuePendingScanUpdates(message = 'New scan data available. Refresh to update the table.') {
+      this.hasPendingScanUpdates = true;
+      this.scanLiveMessage = message;
+    },
+
+    clearPendingFindingUpdates() {
+      this.hasPendingFindingUpdates = false;
+      this.findingsLiveMessage = '';
+    },
+
+    queuePendingFindingUpdates(message = 'New findings are ready. Refresh to load them.') {
+      this.hasPendingFindingUpdates = true;
+      this.findingsLiveMessage = message;
+    },
+
+    applyRecentScans(items) {
+      const nextScans = (items || []).slice(0, 12);
+      const nextSignature = stableSerialize(this._scanSignaturePayload(nextScans));
+      if (nextSignature === this._recentScansSignature) return false;
+      this.recentScans = nextScans;
+      this._recentScansSignature = nextSignature;
+      return true;
+    },
+
+    async refreshKpis(force = false) {
+      const now = Date.now();
+      if (!force && now - this._lastKpiRefreshAt < 20000) return false;
+      try {
+        this.kpis = await apiFetch('/api/kpi');
+        this._lastKpiRefreshAt = now;
+        return true;
+      } catch (e) {
+        console.debug('[refreshKpis] KPI refresh failed:', e.message);
+        return false;
+      }
+    },
+
+    syncVisibleScansFromLatest(items, { final = false } = {}) {
+      if (this.currentPage !== 'scans') return;
+      if (!this.isDefaultScansLiveView()) {
+        this.queuePendingScanUpdates(
+          final ? 'Scan list changed while you were browsing. Refresh to load the latest rows.' : 'New scan data is available. Refresh when ready.'
+        );
+        return;
+      }
+
+      const latestPage = (items || []).slice(0, Math.max(this.scansPerPage, 20));
+      const latestById = new Map(latestPage.map(scan => [scan.id, scan]));
+      const hasNewRows = latestPage.some(scan => !this.scans.some(current => current.id === scan.id));
+      let changed = false;
+      const nextRows = this.scans.map(scan => {
+        const fresh = latestById.get(scan.id);
+        if (!fresh) return scan;
+        const merged = { ...scan, ...fresh };
+        if (stableSerialize(scan) !== stableSerialize(merged)) changed = true;
+        return merged;
+      });
+
+      if (changed) this.scans = nextRows;
+      if (hasNewRows) {
+        this.queuePendingScanUpdates('New scans are available. Refresh to insert them at the top.');
+      } else if (changed) {
+        this.clearPendingScanUpdates();
+      }
+    },
+
+    async refreshScansNow() {
+      this.clearPendingScanUpdates();
+      await this.loadScans(false, true);
+    },
+
+    async refreshFindingsNow() {
+      this.clearPendingFindingUpdates();
+      await this.loadFindings(false, true);
+    },
+
+    async syncCurrentPageAfterScanCompletion() {
+      if (this.currentPage === 'dashboard') {
+        await this.refreshDashboardData();
+        await nextTick();
+        await this.initDashboardCharts('background-refresh');
+        return;
+      }
+      if (this.currentPage === 'scans') {
+        try {
+          const result = await apiFetch('/api/scans/paginated?per_page=20&sort_by=created_at&sort_order=DESC');
+          this.syncVisibleScansFromLatest(result.items || [], { final: true });
+        } catch (e) {
+          console.debug('[scanCompletion] scans sync failed:', e.message);
+        }
+        return;
+      }
+      if (this.currentPage === 'findings') {
+        if (this.canAutoRefreshFindingsView()) {
+          await this.loadFindings(false, true);
+          this.clearPendingFindingUpdates();
+        } else {
+          this.queuePendingFindingUpdates('Scan finished. Refresh when you are ready to review the new results.');
+        }
+        return;
+      }
+      if (this.currentPage === 'analytics') {
+        try {
+          await this._refreshAnalyticsData('background-refresh');
+        } catch (e) {
+          console.debug('[scanCompletion] analytics sync failed:', e.message);
+        }
+      }
+    },
+
     forceResizeCharts() {
       if (!this.chartsAvailable) return;
       requestAnimationFrame(() => {
         Object.values(this.charts).forEach(chart => {
           if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
           chart.resize();
-          chart.update('none');
+          this.updateChartWithMode(chart, 'resize');
         });
       });
     },
@@ -520,11 +743,11 @@ createApp({
       if (prevPage !== page) {
         if (prevPage === 'dashboard') {
           ['severity', 'trend', 'remediation'].forEach(k => {
-            if (this.charts[k]) { this.charts[k].destroy(); this.charts[k] = null; }
+            this.safeDestroyChart(k);
           });
         } else if (prevPage === 'analytics') {
           ['risk', 'owasp', 'analyticsTrend', 'toolEff', 'severityDist'].forEach(k => {
-            if (this.charts[k]) { this.charts[k].destroy(); this.charts[k] = null; }
+            this.safeDestroyChart(k);
           });
         }
       }
@@ -537,11 +760,11 @@ createApp({
       await nextTick();
       if (page === 'dashboard') {
         await this.refreshDashboardData();
-        await this.initDashboardCharts();
+        await this.initDashboardCharts('mount');
       }
       if (page === 'scans') await this.loadScans(true);
       if (page === 'findings') await this.loadFindings(true);
-      if (page === 'analytics') await this.loadAnalytics();
+      if (page === 'analytics') await this.loadAnalytics('mount');
       if (page === 'settings') {
         this.settingsTab = 'apikeys';
         await this.loadApiKeys();
@@ -577,10 +800,11 @@ createApp({
       }
       if (scansRes.status === 'fulfilled') {
         const items = scansRes.value?.items || [];
-        this.recentScans = items.slice(0, 12);
+        this.applyRecentScans(items);
       } else {
         console.debug('[refreshDashboardData] Recent scans refresh failed:', scansRes.reason?.message || scansRes.reason);
       }
+      this._lastKpiRefreshAt = Date.now();
     },
 
     // ── Toast ─────────────────────────────────────────────────────────────────
@@ -608,27 +832,16 @@ createApp({
 
     startAutoRefresh() {
       this.refreshInterval = setInterval(async () => {
-        if (!this.autoRefresh) return;
-        if (this.currentPage === 'dashboard') {
-          await this.refreshDashboardData();
-        } else {
-          try {
-            // Always refresh KPIs
-            this.kpis = await apiFetch('/api/kpi');
-          } catch (e) {
-            console.debug('[autoRefresh] KPI poll failed:', e.message);
-          }
-        }
-        // Refresh data for the currently visible page
+        if (!this.autoRefresh || !this.isDocumentVisible()) return;
         try {
           if (this.currentPage === 'dashboard') {
-            await this.initDashboardCharts();
-          } else if (this.currentPage === 'scans') {
-            await this.loadScans(false, true);
-          } else if (this.currentPage === 'findings') {
-            await this.loadFindings(false, true);
+            await this.refreshDashboardData();
+            await this.initDashboardCharts('background-refresh');
           } else if (this.currentPage === 'analytics') {
-            await this._refreshAnalyticsData();
+            await this.refreshKpis();
+            await this._refreshAnalyticsData('background-refresh');
+          } else {
+            await this.refreshKpis();
           }
         } catch (e) {
           console.debug('[autoRefresh] page refresh failed:', e.message);
@@ -642,17 +855,21 @@ createApp({
       this._pollDeadline = Date.now() + 37 * 60 * 1000; // 37 min (> 30 min subprocess timeout)
       if (this.scanPollingInterval) return;
       this.scanPollingInterval = setInterval(async () => {
+        if (!this.isDocumentVisible()) return;
         try {
           const result = await apiFetch('/api/scans/paginated?per_page=20&sort_by=created_at&sort_order=DESC');
           const items = result.items || [];
-          this.recentScans = items.slice(0, 12);
+          const recentChanged = this.applyRecentScans(items);
 
-          // Refresh KPIs and current page data on every poll tick
-          try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
-          if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
-          else if (this.currentPage === 'scans') { await this.loadScans(false, true); }
-          else if (this.currentPage === 'findings') { await this.loadFindings(false, true); }
-          else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
+          await this.refreshKpis();
+          if (this.currentPage === 'dashboard' && recentChanged) {
+            await nextTick();
+            this.buildTrendChart('background-refresh');
+          } else if (this.currentPage === 'scans') {
+            this.syncVisibleScansFromLatest(items);
+          } else if (this.currentPage === 'findings' && !this.hasPendingFindingUpdates) {
+            this.findingsLiveMessage = 'Scan running. Results will update when ready.';
+          }
 
           // Check if the tracked scan is still RUNNING
           const stillRunning = this._pollScanId
@@ -674,11 +891,8 @@ createApp({
               this.showToast('Scan completed successfully');
             }
             // Final refresh to ensure everything is fully up-to-date
-            try { this.kpis = await apiFetch('/api/kpi'); } catch (_) {}
-            if (this.currentPage === 'dashboard') { await nextTick(); await this.initDashboardCharts(); }
-            else if (this.currentPage === 'scans') { await this.loadScans(false, true); }
-            else if (this.currentPage === 'findings') { await this.loadFindings(false, true); }
-            else if (this.currentPage === 'analytics') { try { await this._refreshAnalyticsData(); } catch (_) {} }
+            await this.refreshKpis(true);
+            await this.syncCurrentPageAfterScanCompletion();
           }
         } catch (e) {
           console.debug('[scanPolling] poll failed:', e.message);
@@ -695,7 +909,7 @@ createApp({
 
     // ── Dashboard Charts ──────────────────────────────────────────────────────
 
-    async initDashboardCharts() {
+    async initDashboardCharts(mode = 'background-refresh') {
       if (!this.chartsAvailable) return;
       if (this._chartsBuilding) return;
       this._chartsBuilding = true;
@@ -714,15 +928,15 @@ createApp({
           sevData = this.severityBreakdown || {};
         }
         await nextTick();
-        this.buildTrendChart();
-        this.buildSeverityChart(sevData);
-        await this.buildRemediationChart();
+        this.buildTrendChart(mode);
+        this.buildSeverityChart(sevData, mode);
+        await this.buildRemediationChart(mode);
       } finally {
         this._chartsBuilding = false;
       }
     },
 
-    async buildRemediationChart() {
+    async buildRemediationChart(mode = 'background-refresh') {
       if (this.currentPage !== 'dashboard') return;
       const chartId = ++this._remediationChartVersion;
 
@@ -748,32 +962,65 @@ createApp({
       const total = activeStatuses.reduce((sum, item) => sum + item.value, 0);
       const onlyNew = total > 0 && activeStatuses.length === 1 && activeStatuses[0].key === 'new';
       const resolvedCount = Number(statusMap.resolved || 0) + Number(statusMap.false_positive || 0) + Number(statusMap.risk_accepted || 0);
+      const signature = stableSerialize({ activeStatuses, total, onlyNew, resolvedCount });
 
       const canvas = this.$refs.remediationChart;
       if (!canvas || !canvas.isConnected) return;
+      if (this.charts.remediation && this.charts.remediation.canvas !== canvas) {
+        this.safeDestroyChart('remediation');
+      }
+
+      const datasets = activeStatuses.map((status) => ({
+        label: status.label,
+        data: [status.value],
+        backgroundColor: status.color,
+        borderRadius: activeStatuses.length === 1 ? 10 : 6,
+        borderSkipped: false,
+        maxBarThickness: 26,
+      }));
 
       if (this.charts.remediation) {
-        this.charts.remediation.destroy();
-        this.charts.remediation = null;
+        if (this.charts.remediation.$sspSignature === signature) return;
+        this.charts.remediation.data.labels = ['Findings'];
+        this.charts.remediation.data.datasets = datasets;
+        this.charts.remediation.options.plugins.legend.labels.generateLabels = (chart) => {
+          return chart.data.datasets.map((dataset, datasetIndex) => {
+            const value = dataset.data[0] || 0;
+            const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+            return {
+              text: `${dataset.label} (${value}, ${percent}%)`,
+              fillStyle: dataset.backgroundColor,
+              strokeStyle: dataset.backgroundColor,
+              hidden: !chart.isDatasetVisible(datasetIndex),
+              datasetIndex,
+            };
+          });
+        };
+        this.charts.remediation.options.plugins.title.display = onlyNew;
+        this.charts.remediation.options.plugins.title.text = 'No remediation started yet';
+        this.charts.remediation.options.plugins.subtitle.display = onlyNew;
+        this.charts.remediation.options.plugins.subtitle.text = `${total} findings are still in the New state`;
+        this.charts.remediation.options.plugins.tooltip.callbacks.label = (ctx) => {
+          const value = ctx.parsed.x || 0;
+          const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+          return ` ${ctx.dataset.label}: ${value} findings (${percent}%)`;
+        };
+        this.charts.remediation.options.plugins.tooltip.callbacks.footer = () => `Resolved or closed: ${resolvedCount} / ${total}`;
+        this.charts.remediation.options.scales.x.title.text = total > 0 ? `Total findings: ${total}` : 'Findings';
+        this.charts.remediation.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.remediation, mode);
+        return;
       }
 
       this.charts.remediation = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
           labels: ['Findings'],
-          datasets: activeStatuses.map((status, idx) => ({
-            label: status.label,
-            data: [status.value],
-            backgroundColor: status.color,
-            borderRadius: activeStatuses.length === 1 ? 10 : 6,
-            borderSkipped: false,
-            maxBarThickness: 26,
-          })),
+          datasets,
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true,
           maintainAspectRatio: false,
-          animation: false,
           indexAxis: 'y',
           plugins: {
             legend: {
@@ -844,28 +1091,32 @@ createApp({
               },
             },
           },
-        },
+        }, mode),
       });
+      this.charts.remediation.$sspSignature = signature;
     },
 
-    buildSeverityChart(data) {
+    buildSeverityChart(data, mode = 'background-refresh') {
       if (this.currentPage !== 'dashboard') return;
       const canvas = this.$refs.severityChart;
       if (!canvas) return;
       // If chart instance points to a canvas removed by v-if, discard it.
       if (this.charts.severity && this.charts.severity.canvas !== canvas) {
-        this.charts.severity.destroy(); this.charts.severity = null;
+        this.safeDestroyChart('severity');
       }
       // Use provided data (pre-fetched by caller) or fall back to init data.
       if (!data || Object.keys(data).length === 0) data = this.severityBreakdown || {};
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
+      const signature = stableSerialize({ labels, values, colors });
       if (this.charts.severity) {
+        if (this.charts.severity.$sspSignature === signature) return;
         this.charts.severity.data.labels = labels;
         this.charts.severity.data.datasets[0].data = values;
         this.charts.severity.data.datasets[0].backgroundColor = colors;
-        this.charts.severity.update();
+        this.charts.severity.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.severity, mode);
         return;
       }
       const legendColor = () => this.cssVar('--chart-legend') || '#374151';
@@ -881,7 +1132,7 @@ createApp({
             borderSkipped: false,
           }],
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true,
           maintainAspectRatio: false,
           indexAxis: 'y',
@@ -917,26 +1168,26 @@ createApp({
             x: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { precision: 0, color: this.cssVar('--chart-tick') } },
             y: { grid: { display: false }, ticks: { font: { weight: '600' }, color: this.cssVar('--chart-tick') } },
           },
-        },
+        }, mode),
       });
+      this.charts.severity.$sspSignature = signature;
     },
 
-    buildTrendChart() {
+    buildTrendChart(mode = 'background-refresh') {
       if (this.currentPage !== 'dashboard') return;
       const canvas = this.$refs.trendChart;
       if (!canvas) return;
       if (this.charts.trend && this.charts.trend.canvas !== canvas) {
-        this.charts.trend.destroy(); this.charts.trend = null;
+        this.safeDestroyChart('trend');
       }
       if (this.charts.trend && (!this.charts.trend.canvas || !this.charts.trend.canvas.isConnected)) {
-        this.charts.trend.destroy(); this.charts.trend = null;
+        this.safeDestroyChart('trend');
       }
 
       const scans = (this.recentScans || []).slice(0, 12);
       if (scans.length === 0) {
         if (this.charts.trend) {
-          this.charts.trend.destroy();
-          this.charts.trend = null;
+          this.safeDestroyChart('trend');
         }
         return;
       }
@@ -953,13 +1204,16 @@ createApp({
         scans.map(s => s.low_count || 0),
         scans.map(s => s.info_count || 0),
       ];
+      const signature = stableSerialize({ labels, dsData });
 
       if (this.charts.trend) {
+        if (this.charts.trend.$sspSignature === signature) return;
         this.charts.trend.data.labels = labels;
         dsData.forEach((d, i) => {
           if (this.charts.trend.data.datasets[i]) this.charts.trend.data.datasets[i].data = d;
         });
-        this.charts.trend.update();
+        this.charts.trend.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.trend, mode);
         return;
       }
 
@@ -975,7 +1229,7 @@ createApp({
             { label: 'Info', data: scans.map(s => s.info_count || 0), backgroundColor: SEVERITY_COLORS.INFO, borderRadius: 3 },
           ],
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
@@ -1012,13 +1266,15 @@ createApp({
               title: { display: true, text: 'Findings', font: { size: 10 }, color: this.cssVar('--chart-tick') },
             },
           },
-        },
+        }, mode),
       });
+      this.charts.trend.$sspSignature = signature;
     },
 
     // ── Scans ─────────────────────────────────────────────────────────────────
 
     async loadScans(reset = false, preservePage = false) {
+      this.clearPendingScanUpdates();
       if (reset) {
         this.scansPage = 1;
         this.scansCursor = null;
@@ -1139,6 +1395,10 @@ createApp({
     },
 
     async loadFindings(reset = false, preservePage = false) {
+      this.clearPendingFindingUpdates();
+      if (this.hasRunningScans) {
+        this.findingsLiveMessage = 'Scan running. Results will update when ready.';
+      }
       if (reset) {
         this.findingsPage = 1;
         this.findingsCursor = null;
@@ -1393,13 +1653,13 @@ createApp({
 
     // ── Analytics ─────────────────────────────────────────────────────────────
 
-    async loadAnalytics() {
+    async loadAnalytics(mode = 'mount') {
       // Show loading overlay only on first load; for subsequent loads the
       // analyticsRefreshing flag drives a subtle inline indicator instead.
       const isFirstLoad = !this.analyticsData.riskDistribution;
       if (isFirstLoad) this.loading = true;
       try {
-        await this._refreshAnalyticsData();
+        await this._refreshAnalyticsData(isFirstLoad ? 'mount' : mode);
       } catch (e) {
         this.showToast('Failed to load analytics: ' + e.message, 'error');
       } finally {
@@ -1408,21 +1668,26 @@ createApp({
     },
 
     /** Build analytics charts if the analytics page is currently visible. */
-    _buildAnalyticsCharts(sevData) {
+    _buildAnalyticsCharts(sevData, mode = 'background-refresh') {
       if (!this.chartsAvailable) return;
       if (this.currentPage !== 'analytics') return;
-      this.buildRiskChart();
-      this.buildOwaspChart();
-      this.buildAnalyticsTrendChart();
-      this.buildToolEffChart();
-      this.buildSeverityDistChart(sevData);
+      this.buildRiskChart(mode);
+      this.buildOwaspChart(mode);
+      this.buildAnalyticsTrendChart(mode);
+      this.buildToolEffChart(mode);
+      this.buildSeverityDistChart(sevData, mode);
     },
 
-    async _refreshAnalyticsData() {
+    async refreshAnalyticsNow() {
+      await this.loadAnalytics('user-change');
+    },
+
+    async _refreshAnalyticsData(mode = 'background-refresh') {
       // Cancel any in-flight refresh — always use the latest request so that
       // chart builders run with fresh $refs after navigation.
       const refreshSeq = ++this._analyticsRefreshSeq;
       this.analyticsRefreshing = true;
+      this.analyticsRefreshingMode = mode;
 
       const stale = () => refreshSeq !== this._analyticsRefreshSeq;
 
@@ -1477,26 +1742,25 @@ createApp({
         await nextTick();
         await new Promise(resolve => requestAnimationFrame(resolve));
 
-        if (!stale()) this._buildAnalyticsCharts(sevData);
+        if (!stale()) this._buildAnalyticsCharts(sevData, mode);
       } finally {
         if (refreshSeq === this._analyticsRefreshSeq) this.analyticsRefreshing = false;
       }
     },
 
-    buildToolEffChart() {
+    buildToolEffChart(mode = 'background-refresh') {
       const canvas = this.$refs.toolEffChart;
       if (!canvas || !this.analyticsData.toolEffectiveness) return;
       if (this.charts.toolEff && this.charts.toolEff.canvas !== canvas) {
-        this.charts.toolEff.destroy(); this.charts.toolEff = null;
+        this.safeDestroyChart('toolEff');
       }
       if (this.charts.toolEff && (!this.charts.toolEff.canvas || !this.charts.toolEff.canvas.isConnected)) {
-        this.charts.toolEff.destroy(); this.charts.toolEff = null;
+        this.safeDestroyChart('toolEff');
       }
       const tools = this.analyticsData.toolEffectiveness;
       if (!Array.isArray(tools) || tools.length === 0) {
         if (this.charts.toolEff) {
-          this.charts.toolEff.destroy();
-          this.charts.toolEff = null;
+          this.safeDestroyChart('toolEff');
         }
         return;
       }
@@ -1508,12 +1772,15 @@ createApp({
         tools.map(t => t.low_count || 0),
         tools.map(t => t.info_count || 0),
       ];
+      const signature = stableSerialize({ labels: newLabels, dsData });
       if (this.charts.toolEff) {
+        if (this.charts.toolEff.$sspSignature === signature) return;
         this.charts.toolEff.data.labels = newLabels;
         dsData.forEach((d, i) => {
           if (this.charts.toolEff.data.datasets[i]) this.charts.toolEff.data.datasets[i].data = d;
         });
-        this.charts.toolEff.update();
+        this.charts.toolEff.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.toolEff, mode);
         return;
       }
       this.charts.toolEff = new Chart(canvas.getContext('2d'), {
@@ -1528,7 +1795,7 @@ createApp({
             { label: 'Info', data: tools.map(t => t.info_count || 0), backgroundColor: SEVERITY_COLORS.INFO, borderRadius: 4 },
           ],
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
           plugins: {
             legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: this.cssVar('--chart-legend'), usePointStyle: false } },
@@ -1554,32 +1821,35 @@ createApp({
               title: { display: true, text: 'Findings', font: { size: 10 }, color: this.cssVar('--chart-tick') },
             },
           },
-        },
+        }, mode),
       });
+      this.charts.toolEff.$sspSignature = signature;
     },
 
-    buildSeverityDistChart(data) {
+    buildSeverityDistChart(data, mode = 'background-refresh') {
       const canvas = this.$refs.severityDistChart;
       if (!canvas) return;
       if (this.charts.severityDist && this.charts.severityDist.canvas !== canvas) {
-        this.charts.severityDist.destroy(); this.charts.severityDist = null;
+        this.safeDestroyChart('severityDist');
       }
       if (!data || Object.keys(data).length === 0) data = this.severityBreakdown || {};
       const labels = SEVERITY_ORDER.filter(k => data[k] !== undefined && data[k] > 0);
       const values = labels.map(k => data[k]);
       const colors = labels.map(k => SEVERITY_COLORS[k] || '#9ca3af');
+      const signature = stableSerialize({ labels, values, colors });
       if (labels.length === 0) {
         if (this.charts.severityDist) {
-          this.charts.severityDist.destroy();
-          this.charts.severityDist = null;
+          this.safeDestroyChart('severityDist');
         }
         return;
       }
       if (this.charts.severityDist) {
+        if (this.charts.severityDist.$sspSignature === signature) return;
         this.charts.severityDist.data.labels = labels;
         this.charts.severityDist.data.datasets[0].data = values;
         this.charts.severityDist.data.datasets[0].backgroundColor = colors;
-        this.charts.severityDist.update();
+        this.charts.severityDist.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.severityDist, mode);
         return;
       }
       const legendColor = () => this.cssVar('--chart-legend') || '#374151';
@@ -1594,7 +1864,7 @@ createApp({
             borderColor: this.cssVar('--chart-border'),
           }],
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
           plugins: {
             legend: {
@@ -1623,21 +1893,21 @@ createApp({
               },
             },
           },
-        },
+        }, mode),
       });
+      this.charts.severityDist.$sspSignature = signature;
     },
 
-    buildRiskChart() {
+    buildRiskChart(mode = 'background-refresh') {
       const canvas = this.$refs.riskChart;
       if (!canvas || !this.analyticsData.riskDistribution) return;
       if (this.charts.risk && this.charts.risk.canvas !== canvas) {
-        this.charts.risk.destroy(); this.charts.risk = null;
+        this.safeDestroyChart('risk');
       }
       const dist = this.analyticsData.riskDistribution.distribution || {};
       if (Object.keys(dist).length === 0) {
         if (this.charts.risk) {
-          this.charts.risk.destroy();
-          this.charts.risk = null;
+          this.safeDestroyChart('risk');
         }
         return;
       }
@@ -1645,10 +1915,13 @@ createApp({
       const rawLabels = Object.keys(dist);
       const labels = rawLabels.map(l => RISK_LABEL_MAP[l] || l);
       const values = Object.values(dist);
+      const signature = stableSerialize({ labels, values });
       if (this.charts.risk) {
+        if (this.charts.risk.$sspSignature === signature) return;
         this.charts.risk.data.labels = labels;
         this.charts.risk.data.datasets[0].data = values;
-        this.charts.risk.update();
+        this.charts.risk.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.risk, mode);
         return;
       }
       this.charts.risk = new Chart(canvas.getContext('2d'), {
@@ -1661,7 +1934,7 @@ createApp({
             borderRadius: 6,
           }],
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
@@ -1675,30 +1948,33 @@ createApp({
             y: { beginAtZero: true, grid: { color: this.cssVar('--chart-grid') }, ticks: { color: this.cssVar('--chart-tick') } },
             x: { grid: { display: false }, ticks: { color: this.cssVar('--chart-tick') } },
           },
-        },
+        }, mode),
       });
+      this.charts.risk.$sspSignature = signature;
     },
 
-    buildOwaspChart() {
+    buildOwaspChart(mode = 'background-refresh') {
       const canvas = this.$refs.owaspChart;
       if (!canvas || !this.analyticsData.compliance) return;
       if (this.charts.owasp && this.charts.owasp.canvas !== canvas) {
-        this.charts.owasp.destroy(); this.charts.owasp = null;
+        this.safeDestroyChart('owasp');
       }
       const owasp = (this.analyticsData.compliance.owasp_top_10 || []).slice(0, 6);
       if (owasp.length === 0) {
         if (this.charts.owasp) {
-          this.charts.owasp.destroy();
-          this.charts.owasp = null;
+          this.safeDestroyChart('owasp');
         }
         return;
       }
       const labels = owasp.map(o => o.category.split(' - ')[0]);
       const values = owasp.map(o => o.count);
+      const signature = stableSerialize({ labels, values });
       if (this.charts.owasp) {
+        if (this.charts.owasp.$sspSignature === signature) return;
         this.charts.owasp.data.labels = labels;
         this.charts.owasp.data.datasets[0].data = values;
-        this.charts.owasp.update();
+        this.charts.owasp.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.owasp, mode);
         return;
       }
       this.charts.owasp = new Chart(canvas.getContext('2d'), {
@@ -1711,35 +1987,38 @@ createApp({
             borderWidth: 2, borderColor: this.cssVar('--chart-border'),
           }],
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, usePointStyle: false } } },
-        },
+        }, mode),
       });
+      this.charts.owasp.$sspSignature = signature;
     },
 
-    buildAnalyticsTrendChart() {
+    buildAnalyticsTrendChart(mode = 'background-refresh') {
       const canvas = this.$refs.analyticsTrendChart;
       if (!canvas || !this.analyticsData.trends) return;
       if (this.charts.analyticsTrend && this.charts.analyticsTrend.canvas !== canvas) {
-        this.charts.analyticsTrend.destroy(); this.charts.analyticsTrend = null;
+        this.safeDestroyChart('analyticsTrend');
       }
       const trendData = this.analyticsData.trends.trend || [];
       if (trendData.length === 0) {
         if (this.charts.analyticsTrend) {
-          this.charts.analyticsTrend.destroy();
-          this.charts.analyticsTrend = null;
+          this.safeDestroyChart('analyticsTrend');
         }
         return;
       }
       const labels = trendData.map(t => t.date);
       const avgData = trendData.map(t => t.average_risk);
       const maxData = trendData.map(t => t.max_risk);
+      const signature = stableSerialize({ labels, avgData, maxData });
       if (this.charts.analyticsTrend) {
+        if (this.charts.analyticsTrend.$sspSignature === signature) return;
         this.charts.analyticsTrend.data.labels = labels;
         this.charts.analyticsTrend.data.datasets[0].data = avgData;
         this.charts.analyticsTrend.data.datasets[1].data = maxData;
-        this.charts.analyticsTrend.update();
+        this.charts.analyticsTrend.$sspSignature = signature;
+        this.updateChartWithMode(this.charts.analyticsTrend, mode);
         return;
       }
       const gridColor = this.cssVar('--chart-grid');
@@ -1765,7 +2044,7 @@ createApp({
             },
           ],
         },
-        options: {
+        options: this.withChartMotion({
           responsive: true, maintainAspectRatio: false,
           plugins: {
             legend: {
@@ -1791,8 +2070,9 @@ createApp({
               ticks: { color: tickColor, font: { size: 11 } },
             },
           },
-        },
+        }, mode),
       });
+      this.charts.analyticsTrend.$sspSignature = signature;
     },
 
     owaspBarWidth(count, series = 'owasp') {
@@ -2237,11 +2517,11 @@ createApp({
         // Destroy existing charts so they get recreated with new CSS variable
         // values for grid, tick, and legend colors.
         Object.keys(this.charts).forEach(k => {
-          if (this.charts[k]) { this.charts[k].destroy(); this.charts[k] = null; }
+          this.safeDestroyChart(k);
         });
         // Rebuild visible charts so legend/tick colors update immediately
-        if (this.currentPage === 'dashboard') this.initDashboardCharts();
-        else if (this.currentPage === 'analytics') this.loadAnalytics();
+        if (this.currentPage === 'dashboard') this.initDashboardCharts('silent-sync');
+        else if (this.currentPage === 'analytics') this.loadAnalytics('silent-sync');
       });
     },
 

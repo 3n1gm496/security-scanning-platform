@@ -15,6 +15,7 @@ if _project_root not in sys.path:
 
 from db_adapter import adapt_schema, get_connection, is_postgres
 from logging_config import get_logger
+from runtime_config import DASHBOARD_DB_PATH
 
 from common.schema import MIGRATIONS as _MIGRATIONS
 from common.schema import SCHEMA_SQL
@@ -113,7 +114,7 @@ def _execute_migration_script(conn, sql: str) -> None:
 # Re-export get_connection so existing callers (app.py etc.) continue to work
 __all__ = ["get_connection", "init_db"]
 
-_DB_PATH = os.environ.get("DASHBOARD_DB_PATH", "/data/security_scans.db")
+_DB_PATH = os.environ.get("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
 
 
 def _conn(db_path: str | None = None, *, read_only: bool = False):

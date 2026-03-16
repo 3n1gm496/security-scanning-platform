@@ -3,7 +3,6 @@ RBAC (Role-Based Access Control) implementation with API key authentication.
 """
 
 import hashlib
-import os
 import secrets
 import threading
 from datetime import datetime, timedelta, timezone
@@ -13,9 +12,8 @@ from typing import Optional
 import bcrypt
 from db import get_connection
 from db_adapter import adapt_schema, is_postgres
+from runtime_config import DASHBOARD_DB_PATH
 
-# Database path
-DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
 _DEFAULT_ADMIN_KEY_LOCK = threading.Lock()
 
 

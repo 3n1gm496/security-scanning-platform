@@ -46,6 +46,7 @@ from rate_limit import (
     is_rate_limited,
     start_cleanup_timer,
 )
+from runtime_config import DASHBOARD_DB_PATH
 from rbac import Permission, create_default_admin_key, init_rbac_tables
 from routers import analytics_router, api_keys_router, audit_router, auth_router
 from routers import auth_routes as _auth_routes_module
@@ -64,7 +65,7 @@ from webhooks import init_webhook_tables
 
 
 APP_TITLE = "Security Scanning Dashboard"
-DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+DB_PATH = DASHBOARD_DB_PATH
 USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")
 # DASHBOARD_PASSWORD accepts either a plain-text password (legacy, not recommended)
 # or a bcrypt hash (recommended). To generate a hash:

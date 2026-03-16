@@ -3,18 +3,15 @@ Finding Management System - Track finding lifecycle and remediation status.
 """
 
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 
 from db import get_connection
 from db_adapter import adapt_schema, is_postgres
+from runtime_config import DASHBOARD_DB_PATH
 
 logger = logging.getLogger(__name__)
-
-DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
-
 
 class FindingStatus(str, Enum):
     """Finding lifecycle status."""

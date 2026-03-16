@@ -22,6 +22,7 @@ import threading
 from pathlib import Path
 
 from logging_config import get_logger
+from runtime_config import DASHBOARD_DB_PATH
 
 LOGGER = get_logger(__name__)
 
@@ -437,7 +438,7 @@ def get_connection(db_path: str | None = None, *, read_only: bool = False) -> _C
         return _ConnectionWrapper(_pg_connect(), is_pg=True)
 
     # SQLite — reuse thread-local connection
-    path = db_path or os.environ.get("DASHBOARD_DB_PATH", "/data/security_scans.db")
+    path = db_path or os.environ.get("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
     return _ConnectionWrapper(_get_sqlite_pooled(path), is_pg=False)
 
 

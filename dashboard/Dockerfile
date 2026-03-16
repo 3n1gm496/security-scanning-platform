@@ -20,6 +20,10 @@ ARG SEMGREP_VERSION
 ARG CHECKOV_VERSION
 ARG GO_VERSION
 
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PATH="/usr/local/bin:/opt/scanner-venv/bin:/usr/local/go/bin:${PATH}"
+
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -36,7 +40,35 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go
     tar -C /usr/local -xzf /tmp/go.tgz && \
     rm -f /tmp/go.tgz
 
-ENV PATH="/usr/local/go/bin:${PATH}"
+RUN python -m venv /opt/scanner-venv && \
+    /opt/scanner-venv/bin/pip install --no-cache-dir --upgrade \
+      "pip>=26.0.1" \
+      "setuptools==80.9.0" \
+      "wheel>=0.46.2"
+
+COPY docker/semgrep-wrapper.sh /usr/local/bin/semgrep
+RUN chmod 0755 /usr/local/bin/semgrep
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    /opt/scanner-venv/bin/pip install --no-cache-dir \
+      "opentelemetry-api==1.25.0" \
+      "opentelemetry-sdk==1.25.0" \
+      "opentelemetry-exporter-otlp-proto-http==1.25.0" \
+      "opentelemetry-exporter-otlp-proto-common==1.25.0" \
+      "opentelemetry-proto==1.25.0" \
+      "opentelemetry-instrumentation==0.46b0" \
+      "opentelemetry-instrumentation-requests==0.46b0" \
+      "opentelemetry-semantic-conventions==0.46b0" \
+      "opentelemetry-util-http==0.46b0" \
+      "semgrep==${SEMGREP_VERSION}" && \
+    /opt/scanner-venv/bin/pip install --no-cache-dir "checkov==${CHECKOV_VERSION}" && \
+    /opt/scanner-venv/bin/pip install --no-cache-dir --upgrade --force-reinstall \
+      "protobuf>=5.29.6,<6" \
+      "jaraco.context>=6.1.0" \
+      "wheel>=0.46.2" && \
+    find /opt/scanner-venv/lib/python3.11/site-packages \
+      \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
+      -exec rm -rf {} +
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/root/go/pkg/mod \
@@ -55,6 +87,8 @@ RUN python /tmp/fetch_binaries.py \
       --syft-version "${SYFT_VERSION}" \
       --grype-version "${GRYPE_VERSION}" \
       --nuclei-version "${NUCLEI_VERSION}" && \
+    semgrep --version && \
+    checkov --version && \
     trivy --version && \
     gitleaks version && \
     syft version && \
@@ -64,7 +98,10 @@ RUN python /tmp/fetch_binaries.py \
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PATH="/usr/local/bin:/opt/scanner-venv/bin:${PATH}"
 
 # ── Non-root user ──────────────────────────────────────────────────────────────
 # Run the dashboard as an unprivileged user. UID/GID 1000 matches the default
@@ -99,27 +136,26 @@ COPY dashboard/requirements.txt /tmp/requirements-dashboard.txt
 COPY orchestrator/requirements.txt /tmp/requirements-orchestrator.txt
 RUN pip install --no-cache-dir \
     -r /tmp/requirements-dashboard.txt \
-    -r /tmp/requirements-orchestrator.txt \
-    "semgrep==${SEMGREP_VERSION}" \
-    "checkov==${CHECKOV_VERSION}" && \
-    pip uninstall -y protobuf wheel jaraco.context && \
-    pip install --no-cache-dir --upgrade --force-reinstall "protobuf>=5.29.6,<6" && \
-    pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
-    pip install --no-cache-dir "jaraco.context>=6.1.0" && \
-    find /usr/local/lib/python3.11/site-packages \
-      \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
-      -exec rm -rf {} +
+    -r /tmp/requirements-orchestrator.txt
 
 # ── External scanner binaries ──────────────────────────────────────────────────
 # Scanner binaries are built or fetched in the builder stage so the runtime
 # image only contains the final patched executables.
+COPY docker/semgrep-wrapper.sh /usr/local/bin/semgrep
+COPY --from=scanner-builder /opt/scanner-venv /opt/scanner-venv
 COPY --from=scanner-builder /usr/local/bin/gitleaks /usr/local/bin/gitleaks
 COPY --from=scanner-builder /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=scanner-builder /usr/local/bin/syft /usr/local/bin/syft
 COPY --from=scanner-builder /usr/local/bin/grype /usr/local/bin/grype
 COPY --from=scanner-builder /usr/local/bin/nuclei /usr/local/bin/nuclei
 
-RUN trivy --version && \
+RUN chmod 0755 /usr/local/bin/semgrep /usr/local/bin/gitleaks /usr/local/bin/trivy /usr/local/bin/syft /usr/local/bin/grype /usr/local/bin/nuclei && \
+    find /opt/scanner-venv/lib/python3.11/site-packages \
+      \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
+      -exec rm -rf {} + && \
+    semgrep --version && \
+    checkov --version && \
+    trivy --version && \
     gitleaks version && \
     syft version && \
     grype version && \
@@ -145,7 +181,7 @@ RUN mkdir -p /data/workspaces /data/reports /data/cache \
 
 # Keep the final runtime image free of stale vendored metadata that Trivy flags
 # even after pip upgrades the active packages.
-RUN find /usr/local/lib/python3.11/site-packages \
+RUN find /opt/scanner-venv/lib/python3.11/site-packages \
       \( -name 'protobuf-4*.dist-info' -o -name 'wheel-0.45*.dist-info' -o -name 'jaraco.context-5*.dist-info' -o -name 'jaraco_context-5*.dist-info' \) \
       -exec rm -rf {} +
 

@@ -1,12 +1,9 @@
 name: Security Scan
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
   schedule:
     - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:
   workflow_call:
     secrets:
       SECURITY_SCANNER_URL:
@@ -15,14 +12,33 @@ on:
         required: false
 
 jobs:
+  config-check:
+    name: Check scanner configuration
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.detect.outputs.enabled }}
+    env:
+      SECURITY_SCANNER_URL: ${{ secrets.SECURITY_SCANNER_URL }}
+      SECURITY_SCANNER_API_KEY: ${{ secrets.SECURITY_SCANNER_API_KEY }}
+    steps:
+      - name: Detect scanner secrets
+        id: detect
+        run: |
+          set -euo pipefail
+
+          if [ -n "${SECURITY_SCANNER_URL}" ] && [ -n "${SECURITY_SCANNER_API_KEY}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Security scanner secrets found. Remote scan will run." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Security scanner secrets are not configured. Remote scan skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   security-scan:
     name: Run Security Scan
-    if: ${{ secrets.SECURITY_SCANNER_URL != '' && secrets.SECURITY_SCANNER_API_KEY != '' }}
+    needs: config-check
+    if: ${{ needs.config-check.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
-    env:
-      SECURITY_SCANNER_URL_SECRET_NAME: SECURITY_SCANNER_URL
-      SECURITY_SCANNER_API_KEY_SECRET_NAME: SECURITY_SCANNER_API_KEY
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,12 +46,11 @@ jobs:
           fetch-depth: 0  # Full history for Gitleaks
       
       - name: Run Security Scan
+        env:
+          SCANNER_URL: ${{ secrets.SECURITY_SCANNER_URL }}
+          SCANNER_API_KEY: ${{ secrets.SECURITY_SCANNER_API_KEY }}
         run: |
           set -euo pipefail
-
-          # Configure scanner URL
-          SCANNER_URL="${{ secrets[env.SECURITY_SCANNER_URL_SECRET_NAME] }}"
-          SCANNER_API_KEY="${{ secrets[env.SECURITY_SCANNER_API_KEY_SECRET_NAME] }}"
 
           if ! command -v jq >/dev/null 2>&1; then
             sudo apt-get update
@@ -88,4 +103,5 @@ jobs:
         with:
           name: security-scan-results
           path: scan-results.json
+          if-no-files-found: error
           retention-days: 30

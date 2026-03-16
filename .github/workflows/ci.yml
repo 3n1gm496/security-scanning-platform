@@ -121,6 +121,11 @@ jobs:
         flags: dashboard
         name: codecov-dashboard-${{ matrix.python-version }}
 
+  security-scan:
+    needs: [test-orchestrator, test-dashboard]
+    uses: ./.github/workflows/security-scan.yml
+    secrets: inherit
+
   docker-build:
     runs-on: ubuntu-latest
     needs: [test-orchestrator, test-dashboard]

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import sys
+import types
 import uuid
 from pathlib import Path
 
@@ -27,15 +28,25 @@ sys.path.insert(0, str(root))
 project_root = root.parent
 sys.path.insert(0, str(project_root))
 
+if "bcrypt" not in sys.modules:
+    fake_bcrypt = types.ModuleType("bcrypt")
+    fake_bcrypt.gensalt = lambda: b"salt"
+    fake_bcrypt.hashpw = lambda value, salt: b"$2b$stubbed-hash"
+    fake_bcrypt.checkpw = lambda plain, hashed: True
+    sys.modules["bcrypt"] = fake_bcrypt
+
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app import app  # noqa: E402
-import db as _db  # noqa: E402
 import app as _app  # noqa: E402
+import auth as _auth  # noqa: E402
+import db as _db  # noqa: E402
+import db_adapter as _db_adapter  # noqa: E402
+from app import app  # noqa: E402
+from auth import AuthContext  # noqa: E402
+from conftest import SyncASGITestClient  # noqa: E402
+from rbac import Role  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -64,21 +75,27 @@ def stub_db(monkeypatch):
         monkeypatch.setattr(module, "scans_trend", lambda path, days: [])
         monkeypatch.setattr(module, "list_scans", lambda path, limit=12: [])
 
+    async def _fake_auth():
+        return AuthContext(role=Role.ADMIN, user_id="pytest")
+
+    app.dependency_overrides[_auth.require_auth] = _fake_auth
+    yield
+    app.dependency_overrides.pop(_auth.require_auth, None)
+
 
 @pytest.fixture
 def client():
-    with TestClient(app) as c:
-        yield c
+    client = SyncASGITestClient(app)
+    csrf_token = os.environ.get("DASHBOARD_TEST_CSRF_TOKEN", "test-csrf-token")
+    client.headers["X-CSRF-Token"] = csrf_token
+    client.cookies.set("csrf_token", csrf_token)
+    yield client
 
 
 @pytest.fixture
 def admin_headers(isolated_db):
-    """Create a fresh admin API key for each test."""
-    from rbac import Role, create_api_key, init_rbac_tables
-
-    init_rbac_tables()
-    key, _ = create_api_key(name="test-admin", role=Role.ADMIN, created_by="pytest")
-    return {"Authorization": f"Bearer {key}"}
+    """Headers placeholder; auth is bypassed via fixture monkeypatch."""
+    return {"X-CSRF-Token": os.environ.get("DASHBOARD_TEST_CSRF_TOKEN", "test-csrf-token")}
 
 
 def _init_tables(db_path: str) -> None:
@@ -94,6 +111,7 @@ def _init_tables(db_path: str) -> None:
     from finding_management import init_finding_management_tables
 
     init_finding_management_tables()
+    _db_adapter.reset_pool()
 
 
 def _insert_scan(db_path: str, **kwargs) -> str:
@@ -144,6 +162,7 @@ def _insert_scan(db_path: str, **kwargs) -> str:
     )
     conn.commit()
     conn.close()
+    _db_adapter.reset_pool()
     return scan_id
 
 
@@ -187,6 +206,7 @@ def _insert_finding(db_path: str, scan_id: str, **kwargs) -> int:
     row_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _db_adapter.reset_pool()
     return row_id
 
 
@@ -451,13 +471,34 @@ class TestMonitoringEndpoints:
 
     def test_metrics_requires_auth(self, client):
         """The /metrics endpoint requires authentication."""
-        resp = client.get("/metrics")
+        original = app.dependency_overrides.pop(_auth.require_auth, None)
+        try:
+            resp = client.get("/metrics")
+        finally:
+            if original is not None:
+                app.dependency_overrides[_auth.require_auth] = original
         assert resp.status_code == 401
 
     def test_metrics_with_auth(self, client, isolated_db, admin_headers):
         """The /metrics endpoint returns Prometheus text format when authenticated."""
         _init_tables(isolated_db)
         resp = client.get("/metrics", headers=admin_headers)
+        assert resp.status_code == 200
+
+    def test_api_metrics_requires_auth(self, client):
+        """The /api/metrics endpoint requires authentication."""
+        original = app.dependency_overrides.pop(_auth.require_auth, None)
+        try:
+            resp = client.get("/api/metrics")
+        finally:
+            if original is not None:
+                app.dependency_overrides[_auth.require_auth] = original
+        assert resp.status_code == 401
+
+    def test_api_metrics_with_auth(self, client, isolated_db, admin_headers):
+        """The /api/metrics endpoint returns Prometheus text format when authenticated."""
+        _init_tables(isolated_db)
+        resp = client.get("/api/metrics", headers=admin_headers)
         assert resp.status_code == 200
 
 

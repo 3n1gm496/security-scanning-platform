@@ -5,8 +5,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pagination import FindingsPaginator, ScansPaginator, PaginationCursor
 import sqlite3
+
+from pagination import FindingsPaginator, PaginationCursor, ScansPaginator
 
 
 def test_pagination_cursor_encode_decode():
@@ -131,7 +132,10 @@ def _make_full_scans_db(rows: list[tuple]) -> sqlite3.Connection:
     """)
     for row in rows:
         conn.execute(
-            "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            (
+                "INSERT INTO scans (id, target_name, target_type, status, policy_status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, datetime('now'))"
+            ),
             row,
         )
     conn.commit()
@@ -149,6 +153,23 @@ def test_scans_paginator_policy_filter():
     assert all(item["policy_status"] == "PASS" for item in pass_result["items"])
     block_result = paginator.paginate(conn, policy_filter="BLOCK")
     assert len(block_result["items"]) == 3
+    conn.close()
+
+
+def test_scans_paginator_total_count_not_affected_by_cursor():
+    """total_count must reflect filters only, not the current page cursor."""
+    conn = _make_scans_db(15)
+    paginator = ScansPaginator(per_page=5)
+    first_page = paginator.paginate(conn, sort_by="id", sort_order="ASC")
+    second_page = paginator.paginate(
+        conn,
+        sort_by="id",
+        sort_order="ASC",
+        cursor=first_page["pagination"]["next_cursor"],
+    )
+
+    assert first_page["pagination"]["total_count"] == 15
+    assert second_page["pagination"]["total_count"] == 15
     conn.close()
 
 
@@ -185,7 +206,7 @@ def test_findings_paginator_with_status_filter():
     for i in range(10):
         conn.execute(
             "INSERT INTO findings (id, title, severity) VALUES (?, ?, ?)",
-            (i + 1, f"Finding {i+1}", "HIGH"),
+            (i + 1, f"Finding {i + 1}", "HIGH"),
         )
 
     # Set status for some findings

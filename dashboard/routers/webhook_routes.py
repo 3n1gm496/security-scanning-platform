@@ -2,31 +2,23 @@
 
 from __future__ import annotations
 
+from auth import AuthContext, require_auth, require_permission
 from fastapi import APIRouter, Depends, Form, HTTPException
-from starlette import status
-
-from auth import require_auth, require_permission, AuthContext
 from rbac import Permission, log_audit
-from webhooks import (
-    WebhookEvent,
-    create_webhook,
-    list_webhooks,
-    delete_webhook,
-    toggle_webhook,
-    rotate_webhook_secret,
-)
+from starlette import status
+from webhooks import WebhookEvent, create_webhook, delete_webhook, list_webhooks, rotate_webhook_secret, toggle_webhook
 
 router = APIRouter(prefix="/api", tags=["webhooks"])
 
 
 @router.get("/webhooks", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def get_webhooks(auth: AuthContext = Depends(require_auth)) -> list[dict]:
+async def get_webhooks(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """List all webhooks (admin/operator only)."""
     return list_webhooks()
 
 
 @router.post("/webhooks", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def create_new_webhook(
+async def create_new_webhook(
     name: str = Form(...),
     url: str = Form(...),
     events: str = Form(...),  # Comma-separated event types
@@ -60,7 +52,7 @@ def create_new_webhook(
 
 
 @router.delete("/webhooks/{webhook_id}", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
+async def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require_auth)) -> dict:
     """Delete a webhook (admin/operator only)."""
     success = delete_webhook(webhook_id)
 
@@ -79,7 +71,7 @@ def delete_webhook_endpoint(webhook_id: int, auth: AuthContext = Depends(require
 
 
 @router.patch("/webhooks/{webhook_id}", dependencies=[Depends(require_permission(Permission.SCAN_WRITE))])
-def toggle_webhook_endpoint(
+async def toggle_webhook_endpoint(
     webhook_id: int, is_active: bool = Form(...), auth: AuthContext = Depends(require_auth)
 ) -> dict:
     """Enable or disable a webhook (admin/operator only)."""

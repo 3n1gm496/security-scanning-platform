@@ -10,10 +10,11 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from common.schema import SCHEMA_SQL, MIGRATIONS as _MIGRATIONS
+from common.schema import MIGRATIONS as _MIGRATIONS
+from common.schema import SCHEMA_SQL
 from orchestrator.db_adapter import adapt_schema, get_connection
 from orchestrator.logging_config import get_logger
-from orchestrator.models import Finding, ScanResult
+from orchestrator.models import ScanResult
 
 LOGGER = get_logger(__name__)
 

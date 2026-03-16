@@ -2,81 +2,66 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import csv
+import io
 import os
 import secrets
 import time
-import csv
-import io
-import json
 from contextlib import asynccontextmanager
-from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from logging_config import configure_logging, get_logger
 
 configure_logging()
 LOGGER = get_logger(__name__)
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.cors import CORSMiddleware
+import bcrypt
+from auth import AuthContext, require_auth, require_permission
 from csrf import CSRFMiddleware
-
 from db import (
     cache_hit_stats,
     cache_hit_trend,
     distinct_targets,
     distinct_tools,
     fetch_kpis,
+    get_connection,
     list_scans,
     scans_trend,
     severity_breakdown,
     target_breakdown,
     tool_breakdown,
-    get_connection,
 )
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from finding_management import init_finding_management_tables
 from monitoring import router as monitoring_router
 from rate_limit import (
-    is_rate_limited,
-    start_cleanup_timer,
-    RATE_LIMIT_REQUESTS,
-    RATE_LIMIT_WINDOW_SECONDS,
     LOGIN_RATE_LIMIT_REQUESTS,
     LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    RATE_LIMIT_REQUESTS,
+    RATE_LIMIT_WINDOW_SECONDS,
+    is_rate_limited,
+    start_cleanup_timer,
 )
-from rbac import (
-    init_rbac_tables,
-    create_default_admin_key,
-)
-from auth import require_auth, AuthContext
+from rbac import Permission, create_default_admin_key, init_rbac_tables
+from routers import analytics_router, api_keys_router, audit_router, auth_router
+from routers import auth_routes as _auth_routes_module
+from routers import export_router, finding_router, notification_router, scan_router, webhook_router
+from routers._shared import _ttl_cache  # noqa: F401 — re-exported for tests
+from routers._shared import cached as _cached  # noqa: F401 — re-exported for tests
+from routers._shared import scan_executor as _scan_executor  # noqa: F401 — re-exported for tests
+from starlette.datastructures import MutableHeaders
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from webhooks import init_webhook_tables
-from finding_management import init_finding_management_tables
-from metrics import get_metrics
-
-import bcrypt
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Router imports
 # ──────────────────────────────────────────────────────────────────────────────
 
-from routers import (
-    auth_router,
-    api_keys_router,
-    webhook_router,
-    export_router,
-    analytics_router,
-    scan_router,
-    finding_router,
-    notification_router,
-    audit_router,
-)
-from routers import auth_routes as _auth_routes_module
-from routers._shared import scan_executor as _scan_executor  # noqa: F401 — re-exported for tests
-from routers._shared import cached as _cached  # noqa: F401 — re-exported for tests
-from routers._shared import _ttl_cache  # noqa: F401 — re-exported for tests
 
 APP_TITLE = "Security Scanning Dashboard"
 DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
@@ -120,6 +105,10 @@ CORS_ORIGINS = [o.strip() for o in os.getenv("DASHBOARD_CORS_ORIGINS", "").split
 SCAN_TIMEOUT_SECONDS = int(os.getenv("SCAN_TIMEOUT_SECONDS", "3600"))  # 1 hour
 # How often the watchdog checks for stale scans (seconds).
 SCAN_WATCHDOG_INTERVAL_SECONDS = int(os.getenv("SCAN_WATCHDOG_INTERVAL_SECONDS", "120"))  # 2 min
+# Set to '1' or 'true' when the dashboard is behind a trusted reverse proxy (e.g. nginx).
+# Only then will the X-Forwarded-For header be used for rate limiting.
+TRUST_PROXY = os.getenv("DASHBOARD_TRUST_PROXY", "0").strip().lower() in ("1", "true", "yes")
+DISABLE_LIFESPAN = os.getenv("DASHBOARD_DISABLE_LIFESPAN", "0").strip().lower() in ("1", "true", "yes")
 
 
 async def _scan_timeout_watchdog():
@@ -170,7 +159,7 @@ async def _lifespan(app):
     _scan_exec.shutdown(wait=True, cancel_futures=False)
 
 
-app = FastAPI(title=APP_TITLE, lifespan=_lifespan)
+app = FastAPI(title=APP_TITLE, lifespan=None if DISABLE_LIFESPAN else _lifespan)
 app.add_middleware(
     CSRFMiddleware,
     exempt_paths={"/login", "/api/health", "/api/ready", "/api/metrics", "/metrics", "/api/scans/events"},
@@ -260,66 +249,85 @@ app.include_router(audit_router)
 
 
 def _client_key(request: Request) -> str:
-    """Return the client IP, preferring X-Forwarded-For when behind a reverse proxy."""
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    """Return the client IP for rate limiting.
+
+    Only trusts X-Forwarded-For when DASHBOARD_TRUST_PROXY is enabled.
+    """
+    if TRUST_PROXY:
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
 
 
-@app.middleware("http")
-async def security_middleware(request: Request, call_next):
-    now = time.monotonic()
-    client_id = _client_key(request)
-    path = request.url.path
+class SecurityMiddleware:
+    """ASGI security middleware for rate limiting and response hardening."""
 
-    # Brute-force protection on the login endpoint
-    if path == "/login" and request.method == "POST":
-        if is_rate_limited("login", client_id, LOGIN_RATE_LIMIT_REQUESTS, LOGIN_RATE_LIMIT_WINDOW_SECONDS, now):
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Too many login attempts. Please wait before retrying."},
-                headers={"Retry-After": str(LOGIN_RATE_LIMIT_WINDOW_SECONDS)},
-            )
+    def __init__(self, app):
+        self.app = app
 
-    # General API rate limiting
-    if path.startswith("/api") and path not in _RATE_LIMIT_EXCLUDED_PATHS:
-        if is_rate_limited("api", client_id, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, now):
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Rate limit exceeded. Retry later."},
-                headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
-            )
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    # Generate a per-request CSP nonce to eliminate 'unsafe-inline' from script-src.
-    nonce = base64.b64encode(secrets.token_bytes(16)).decode()
-    request.state.csp_nonce = nonce
+        request = Request(scope, receive=receive)
+        now = time.monotonic()
+        client_id = _client_key(request)
+        path = request.url.path
 
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Cache-Control"] = "no-store"
-    # Content-Security-Policy: nonce-based script-src replaces 'unsafe-inline'.
-    # 'unsafe-eval' remains required for Vue.js 3 runtime template compilation.
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        f"script-src 'self' 'nonce-{nonce}' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
-        "font-src 'self'; "
-        "connect-src 'self' https://cdn.jsdelivr.net; "
-        "frame-ancestors 'none';"
-    )
-    # HSTS: only sent over HTTPS; max-age 1 year
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Permissions-Policy: disable browser features not needed by this app
-    response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(), geolocation=(), payment=(), usb=(), " "interest-cohort=()"
-    )
-    return response
+        if path == "/login" and request.method == "POST":
+            if is_rate_limited("login", client_id, LOGIN_RATE_LIMIT_REQUESTS, LOGIN_RATE_LIMIT_WINDOW_SECONDS, now):
+                response = JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many login attempts. Please wait before retrying."},
+                    headers={"Retry-After": str(LOGIN_RATE_LIMIT_WINDOW_SECONDS)},
+                )
+                await response(scope, receive, send)
+                return
+
+        if path.startswith("/api") and path not in _RATE_LIMIT_EXCLUDED_PATHS:
+            if is_rate_limited("api", client_id, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, now):
+                response = JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded. Retry later."},
+                    headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+                )
+                await response(scope, receive, send)
+                return
+
+        nonce = base64.b64encode(secrets.token_bytes(16)).decode()
+        scope.setdefault("state", {})["csp_nonce"] = nonce
+
+        async def send_with_security_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["X-Frame-Options"] = "DENY"
+                headers["Referrer-Policy"] = "no-referrer"
+                headers["Cache-Control"] = "no-store"
+                headers["Content-Security-Policy"] = (
+                    "default-src 'self'; "
+                    f"script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net https://unpkg.com; "
+                    "style-src 'self' 'unsafe-inline'; "
+                    "img-src 'self' data:; "
+                    "font-src 'self'; "
+                    "connect-src 'self' https://cdn.jsdelivr.net; "
+                    "frame-ancestors 'none';"
+                )
+                if scope.get("scheme") == "https":
+                    headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+                headers["Permissions-Policy"] = (
+                    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_security_headers)
+
+
+app.add_middleware(SecurityMiddleware)
 
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -331,7 +339,7 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 # ---------------------------------------------------------------------------
 
 
-def get_current_user(request: Request) -> str:
+async def get_current_user(request: Request) -> str:
     """Return the authenticated user.
     - For unauthenticated HTML pages: redirect to /login.
     - For API calls: return 401 Unauthorized.
@@ -354,9 +362,10 @@ def get_current_user(request: Request) -> str:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
+async def index(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
     context = {
         "user": user,
+        "user_role": request.session.get("role", "admin"),
         "csp_nonce": getattr(request.state, "csp_nonce", ""),
         "kpis": fetch_kpis(DB_PATH),
         "severity_breakdown": severity_breakdown(DB_PATH),
@@ -371,13 +380,13 @@ def index(request: Request, user: str = Depends(get_current_user)) -> HTMLRespon
 
 
 @app.get("/scans")
-def scans_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
+async def scans_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
     """Deprecated SSR route — redirect to SPA."""
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#scans"})
 
 
 @app.get("/findings")
-def findings_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
+async def findings_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
     """Deprecated SSR route — redirect to SPA."""
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#findings"})
 
@@ -388,27 +397,27 @@ def findings_page(request: Request, user: str = Depends(get_current_user)) -> HT
 
 
 @app.get("/api/kpi")
-def api_kpi(auth: AuthContext = Depends(require_auth)) -> dict:
+async def api_kpi(auth: AuthContext = Depends(require_auth)) -> dict:
     return fetch_kpis(DB_PATH)
 
 
 @app.get("/api/trends")
-def api_trends(days: int = 30, auth: AuthContext = Depends(require_auth)) -> list[dict]:
+async def api_trends(days: int = 30, auth: AuthContext = Depends(require_auth)) -> list[dict]:
     return scans_trend(DB_PATH, days)
 
 
 @app.get("/api/cache-hits")
-def api_cache_hits(auth: AuthContext = Depends(require_auth)) -> dict:
+async def api_cache_hits(auth: AuthContext = Depends(require_auth)) -> dict:
     return cache_hit_stats(DB_PATH)
 
 
 @app.get("/api/cache-hit-trend")
-def api_cache_hit_trend(days: int = 14, auth: AuthContext = Depends(require_auth)) -> list[dict]:
+async def api_cache_hit_trend(days: int = 14, auth: AuthContext = Depends(require_auth)) -> list[dict]:
     return cache_hit_trend(DB_PATH, days)
 
 
 @app.get("/api/cache-hit-trend.csv")
-def api_cache_hit_trend_csv(days: int = 14, auth: AuthContext = Depends(require_auth)) -> Response:
+async def api_cache_hit_trend_csv(days: int = 14, auth: AuthContext = Depends(require_auth)) -> Response:
     rows = cache_hit_trend(DB_PATH, days)
     output = io.StringIO()
     writer = csv.writer(output)
@@ -433,8 +442,8 @@ def api_cache_hit_trend_csv(days: int = 14, auth: AuthContext = Depends(require_
     )
 
 
-@app.get("/api/users", dependencies=[Depends(require_auth)])
-def list_users() -> dict:
+@app.get("/api/users", dependencies=[Depends(require_permission(Permission.FINDING_WRITE))])
+async def list_users() -> dict:
     """Return the list of active users (username only) for the assignment datalist."""
     with get_connection(DB_PATH) as conn:
         rows = conn.execute("SELECT username FROM users WHERE is_active = 1 ORDER BY username").fetchall()
@@ -442,15 +451,8 @@ def list_users() -> dict:
 
 
 @app.get("/metrics")
-def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Response:
-    """Expose Prometheus metrics in text format."""
-    metrics = get_metrics()
-    with get_connection(DB_PATH) as conn:
-        severity_rows = conn.execute("SELECT severity, COUNT(*) AS total FROM findings GROUP BY severity").fetchall()
-        for row in severity_rows:
-            metrics.set_findings_count(row["severity"] or "UNKNOWN", int(row["total"]))
+async def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Response:
+    """Expose the authenticated Prometheus metrics scrape endpoint."""
+    from monitoring import prometheus_metrics as scrape_metrics
 
-        queue_size = conn.execute("SELECT COUNT(*) AS total FROM scans WHERE UPPER(status) = 'RUNNING'").fetchone()
-        metrics.set_queue_size(int(queue_size["total"]) if queue_size else 0)
-
-    return Response(content=metrics.generate_text(), media_type="text/plain; version=0.0.4")
+    return await scrape_metrics()

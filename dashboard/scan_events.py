@@ -23,7 +23,6 @@ LOGGER = get_logger(__name__)
 # In-memory subscribers: dict of asyncio.Queue per client
 _subscribers: dict[str, asyncio.Queue] = {}
 _subscriber_lock = asyncio.Lock()
-_counter = 0
 
 # Reference to the main event loop, set by set_loop() at app startup.
 _main_loop: asyncio.AbstractEventLoop | None = None
@@ -37,9 +36,7 @@ def set_loop(loop: asyncio.AbstractEventLoop) -> None:
 
 async def subscribe(client_id: str) -> asyncio.Queue:
     """Register a new SSE client and return its event queue."""
-    global _counter
     async with _subscriber_lock:
-        _counter += 1
         queue: asyncio.Queue = asyncio.Queue(maxsize=64)
         _subscribers[client_id] = queue
         LOGGER.info("sse.subscribe", client_id=client_id, total=len(_subscribers))

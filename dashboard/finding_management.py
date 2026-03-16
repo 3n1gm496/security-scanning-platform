@@ -4,12 +4,12 @@ Finding Management System - Track finding lifecycle and remediation status.
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 
 from db import get_connection
-from db_adapter import is_postgres
+from db_adapter import adapt_schema, is_postgres
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class FindingStatus(str, Enum):
 def init_finding_management_tables():
     """Initialize finding management tables."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS finding_states (
                 finding_id INTEGER PRIMARY KEY,
                 status TEXT NOT NULL DEFAULT 'new',
@@ -44,9 +44,9 @@ def init_finding_management_tables():
                 risk_acceptance_expires_at TEXT,
                 FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
             )
-        """)
+        """))
 
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS finding_comments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 finding_id INTEGER NOT NULL,
@@ -55,9 +55,9 @@ def init_finding_management_tables():
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
             )
-        """)
+        """))
 
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS finding_attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 finding_id INTEGER NOT NULL,
@@ -67,7 +67,7 @@ def init_finding_management_tables():
                 uploaded_at TEXT NOT NULL,
                 FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
             )
-        """)
+        """))
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_finding_states_status ON finding_states(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_finding_states_assigned ON finding_states(assigned_to)")
@@ -81,6 +81,70 @@ def get_finding_state(finding_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def _upsert_finding_state(
+    finding_id: int,
+    *,
+    status: str,
+    created_at: str,
+    updated_at: str,
+    assigned_to: Optional[str] = None,
+    resolved_at: Optional[str] = None,
+    resolution_notes: Optional[str] = None,
+    false_positive_reason: Optional[str] = None,
+    risk_acceptance_justification: Optional[str] = None,
+    risk_acceptance_expires_at: Optional[str] = None,
+) -> None:
+    """Atomically insert/update finding state to avoid SELECT-then-INSERT races."""
+    with get_connection(DASHBOARD_DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO finding_states (
+                finding_id,
+                status,
+                assigned_to,
+                created_at,
+                updated_at,
+                resolved_at,
+                resolution_notes,
+                false_positive_reason,
+                risk_acceptance_justification,
+                risk_acceptance_expires_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(finding_id) DO UPDATE SET
+                status = excluded.status,
+                assigned_to = COALESCE(excluded.assigned_to, finding_states.assigned_to),
+                updated_at = excluded.updated_at,
+                resolved_at = excluded.resolved_at,
+                resolution_notes = COALESCE(excluded.resolution_notes, finding_states.resolution_notes),
+                false_positive_reason = COALESCE(
+                    excluded.false_positive_reason,
+                    finding_states.false_positive_reason
+                ),
+                risk_acceptance_justification = COALESCE(
+                    excluded.risk_acceptance_justification,
+                    finding_states.risk_acceptance_justification
+                ),
+                risk_acceptance_expires_at = COALESCE(
+                    excluded.risk_acceptance_expires_at,
+                    finding_states.risk_acceptance_expires_at
+                )
+            """,
+            (
+                finding_id,
+                status,
+                assigned_to,
+                created_at,
+                updated_at,
+                resolved_at,
+                resolution_notes,
+                false_positive_reason,
+                risk_acceptance_justification,
+                risk_acceptance_expires_at,
+            ),
+        )
+
+
 def update_finding_status(
     finding_id: int,
     status: FindingStatus,
@@ -91,43 +155,16 @@ def update_finding_status(
     """Update finding status."""
     now = datetime.now(timezone.utc).isoformat()
 
-    with get_connection(DASHBOARD_DB_PATH) as conn:
-        existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
-
-        if existing:
-            conn.execute(
-                """
-                UPDATE finding_states
-                SET status = ?, updated_at = ?, resolution_notes = ?,
-                    assigned_to = ?, resolved_at = ?
-                WHERE finding_id = ?
-                """,
-                (
-                    status.value,
-                    now,
-                    notes,
-                    assigned_to,
-                    now if status == FindingStatus.RESOLVED else None,
-                    finding_id,
-                ),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO finding_states
-                (finding_id, status, assigned_to, created_at, updated_at, resolution_notes, resolved_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    finding_id,
-                    status.value,
-                    assigned_to,
-                    now,
-                    now,
-                    notes,
-                    now if status == FindingStatus.RESOLVED else None,
-                ),
-            )
+    resolved_at = now if status == FindingStatus.RESOLVED else None
+    _upsert_finding_state(
+        finding_id,
+        status=status.value,
+        assigned_to=assigned_to,
+        created_at=now,
+        updated_at=now,
+        resolution_notes=notes,
+        resolved_at=resolved_at,
+    )
 
     return {"finding_id": finding_id, "status": status.value, "updated_at": now}
 
@@ -136,26 +173,13 @@ def assign_finding(finding_id: int, assigned_to: str, assigned_by: str) -> dict:
     """Assign finding to a user."""
     now = datetime.now(timezone.utc).isoformat()
 
-    with get_connection(DASHBOARD_DB_PATH) as conn:
-        existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
-
-        if existing:
-            conn.execute(
-                """
-                UPDATE finding_states
-                SET assigned_to = ?, updated_at = ?
-                WHERE finding_id = ?
-                """,
-                (assigned_to, now, finding_id),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO finding_states (finding_id, status, assigned_to, created_at, updated_at)
-                VALUES (?, 'new', ?, ?, ?)
-                """,
-                (finding_id, assigned_to, now, now),
-            )
+    _upsert_finding_state(
+        finding_id,
+        status=FindingStatus.NEW.value,
+        assigned_to=assigned_to,
+        created_at=now,
+        updated_at=now,
+    )
 
     # Add comment (uses its own connection)
     add_finding_comment(finding_id, assigned_by, f"Assigned to {assigned_to}")
@@ -167,26 +191,13 @@ def mark_false_positive(finding_id: int, reason: str, user: str) -> dict:
     """Mark finding as false positive."""
     now = datetime.now(timezone.utc).isoformat()
 
-    with get_connection(DASHBOARD_DB_PATH) as conn:
-        existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
-        if existing:
-            conn.execute(
-                """
-                UPDATE finding_states
-                SET status = 'false_positive', false_positive_reason = ?, updated_at = ?
-                WHERE finding_id = ?
-                """,
-                (reason, now, finding_id),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO finding_states
-                (finding_id, status, false_positive_reason, created_at, updated_at)
-                VALUES (?, 'false_positive', ?, ?, ?)
-                """,
-                (finding_id, reason, now, now),
-            )
+    _upsert_finding_state(
+        finding_id,
+        status=FindingStatus.FALSE_POSITIVE.value,
+        created_at=now,
+        updated_at=now,
+        false_positive_reason=reason,
+    )
 
     add_finding_comment(finding_id, user, f"Marked as false positive: {reason}")
 
@@ -197,28 +208,14 @@ def accept_risk(finding_id: int, justification: str, expires_at: str, user: str)
     """Accept risk for finding with expiration."""
     now = datetime.now(timezone.utc).isoformat()
 
-    with get_connection(DASHBOARD_DB_PATH) as conn:
-        existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
-        if existing:
-            conn.execute(
-                """
-                UPDATE finding_states
-                SET status = 'risk_accepted', risk_acceptance_justification = ?,
-                    risk_acceptance_expires_at = ?, updated_at = ?
-                WHERE finding_id = ?
-                """,
-                (justification, expires_at, now, finding_id),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO finding_states
-                (finding_id, status, risk_acceptance_justification, risk_acceptance_expires_at,
-                 created_at, updated_at)
-                VALUES (?, 'risk_accepted', ?, ?, ?, ?)
-                """,
-                (finding_id, justification, expires_at, now, now),
-            )
+    _upsert_finding_state(
+        finding_id,
+        status=FindingStatus.RISK_ACCEPTED.value,
+        created_at=now,
+        updated_at=now,
+        risk_acceptance_justification=justification,
+        risk_acceptance_expires_at=expires_at,
+    )
 
     add_finding_comment(finding_id, user, f"Risk accepted until {expires_at}: {justification}")
 
@@ -261,27 +258,32 @@ def bulk_update_status(finding_ids: list[int], status: FindingStatus, user: str)
     """Bulk update status for multiple findings."""
     now = datetime.now(timezone.utc).isoformat()
     updated_count = 0
+    failures: list[dict[str, str | int]] = []
 
-    with get_connection(DASHBOARD_DB_PATH) as conn:
-        for finding_id in finding_ids:
-            try:
-                existing = conn.execute("SELECT 1 FROM finding_states WHERE finding_id = ?", (finding_id,)).fetchone()
-                if existing:
-                    conn.execute(
-                        "UPDATE finding_states SET status = ?, updated_at = ? WHERE finding_id = ?",
-                        (status.value, now, finding_id),
-                    )
-                else:
-                    conn.execute(
-                        "INSERT INTO finding_states (finding_id, status, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                        (finding_id, status.value, now, now),
-                    )
-                updated_count += 1
-            except Exception:
-                logger.warning("Failed to update finding %d status", finding_id, exc_info=True)
-                continue
+    for finding_id in finding_ids:
+        try:
+            _upsert_finding_state(
+                finding_id,
+                status=status.value,
+                created_at=now,
+                updated_at=now,
+                resolved_at=now if status == FindingStatus.RESOLVED else None,
+            )
+            updated_count += 1
+        except Exception as exc:
+            logger.warning("Failed to update finding %d status", finding_id, exc_info=True)
+            failures.append({"finding_id": finding_id, "error": str(exc)})
 
-    return {"updated_count": updated_count, "status": status.value, "finding_ids": finding_ids}
+    result = {
+        "updated_count": updated_count,
+        "status": status.value,
+        "finding_ids": finding_ids,
+        "failed_ids": [item["finding_id"] for item in failures],
+        "failures": failures,
+    }
+    if failures:
+        result["partial_success"] = True
+    return result
 
 
 def get_findings_by_status(status: Optional[str] = None, limit: int = 100) -> list[dict]:
@@ -361,23 +363,20 @@ def get_triage_summary() -> dict:
     """Return a comprehensive triage summary for the dashboard."""
     stats = get_finding_stats_by_status()
     expired = get_expired_risk_acceptances()
-
-    # Calculate SLA metrics: findings unactioned for more than 7 days
-    if is_postgres():
-        overdue_condition = "f.timestamp < NOW() - INTERVAL '7 days'"
-    else:
-        overdue_condition = "f.timestamp < datetime('now', '-7 days')"
+    overdue_cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        overdue_query = f"""
+        overdue_rows = conn.execute(
+            """
             SELECT f.severity, COUNT(*) as count
             FROM findings f
             LEFT JOIN finding_states fs ON f.id = fs.finding_id
             WHERE COALESCE(fs.status, 'new') = 'new'
-              AND {overdue_condition}
+              AND f.timestamp < ?
             GROUP BY f.severity
-        """  # nosec B608 — overdue_condition is a hardcoded constant, not user input
-        overdue_rows = conn.execute(overdue_query).fetchall()
+            """,
+            (overdue_cutoff,),
+        ).fetchall()
     overdue_by_severity = {row["severity"]: row["count"] for row in overdue_rows}
 
     return {

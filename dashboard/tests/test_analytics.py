@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
@@ -16,13 +15,13 @@ sys.path.insert(0, str(root))
 
 from analytics import (
     calculate_risk_score,
-    map_to_owasp,
-    map_to_cwe,
-    get_risk_distribution,
     get_compliance_summary,
-    get_trend_analysis,
+    get_risk_distribution,
     get_target_risk_ranking,
     get_tool_effectiveness,
+    get_trend_analysis,
+    map_to_cwe,
+    map_to_owasp,
 )
 
 

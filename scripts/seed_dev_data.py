@@ -13,6 +13,7 @@ Options:
                 Defaults to DASHBOARD_DB_PATH env var or ./data/security_scans.db
     --clear     Drop all existing data before seeding (default: append)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -110,6 +111,7 @@ FINDING_STATES = ["open", "open", "open", "in_progress", "resolved", "false_posi
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _random_scan_id() -> str:
     return str(uuid.uuid4())
 
@@ -160,6 +162,7 @@ def _generate_findings(scan_id: str, target_name: str, tool: str, n: int) -> lis
 # ---------------------------------------------------------------------------
 # Main seeding logic
 # ---------------------------------------------------------------------------
+
 
 def seed(db_path: str, clear: bool = False) -> None:
     print(f"Seeding database: {db_path}")

@@ -23,11 +23,11 @@ os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from fastapi.testclient import TestClient
-
 import app as _app
 from app import app
-from rate_limit import is_rate_limited as _is_rate_limited, _rate_buckets, _rate_lock, _evict_stale_buckets
+from fastapi.testclient import TestClient
+from rate_limit import _evict_stale_buckets, _rate_buckets, _rate_lock
+from rate_limit import is_rate_limited as _is_rate_limited
 
 # ---------------------------------------------------------------------------
 # Helpers

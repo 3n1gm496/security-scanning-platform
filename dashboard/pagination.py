@@ -10,9 +10,8 @@ Supports:
 
 from __future__ import annotations
 
+from base64 import b64decode, b64encode
 from typing import Any
-
-from base64 import b64encode, b64decode
 
 
 class PaginationCursor:
@@ -192,43 +191,15 @@ class FindingsPaginator:
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "id"
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 
-        where_clauses = ["1=1"]
-        params: list[Any] = []
-
-        # Search filter (OR across multiple columns)
-        if search:
-            search_param = f"%{search}%"
-            where_clauses.append("(title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)")
-            params.extend([search_param] * 4)
-
-        # Severity filter
-        if severity_filter:
-            placeholders = ",".join(["?"] * len(severity_filter))
-            where_clauses.append(f"severity IN ({placeholders})")
-            params.extend(severity_filter)
-
-        # Tool filter
-        if tool_filter:
-            placeholders = ",".join(["?"] * len(tool_filter))
-            where_clauses.append(f"tool IN ({placeholders})")
-            params.extend(tool_filter)
-
-        # Scan filter
-        if scan_id is not None:
-            where_clauses.append("scan_id = ?")
-            params.append(scan_id)
-
-        # Target filter
-        if target_filter:
-            where_clauses.append("target_name LIKE ?")
-            params.append(f"%{target_filter}%")
-
-        # Status filter: requires LEFT JOIN with finding_states
         use_status_join = status_filter is not None
-        if use_status_join:
-            # Treat findings with no state record as 'open'
-            where_clauses.append("COALESCE(fs.status, 'open') = ?")
-            params.append(status_filter)
+        where_clauses, params = self._build_findings_filters(
+            search=search,
+            severity_filter=severity_filter,
+            tool_filter=tool_filter,
+            scan_id=scan_id,
+            status_filter=status_filter,
+            target_filter=target_filter,
+        )
 
         # Cursor — use table-qualified column when JOIN is active
         if cursor:
@@ -266,23 +237,14 @@ class FindingsPaginator:
         params.append(self.per_page + 1)
 
         # Total count query (same filters, no cursor/LIMIT)
-        count_params: list[Any] = []
-        if search:
-            count_params.extend([f"%{search}%"] * 4)
-        if severity_filter:
-            count_params.extend(severity_filter)
-        if tool_filter:
-            count_params.extend(tool_filter)
-        if scan_id is not None:
-            count_params.append(scan_id)
-        if target_filter:
-            count_params.append(f"%{target_filter}%")
-        if use_status_join:
-            count_params.append(status_filter)
-        # Rebuild WHERE without cursor clause
-        count_clauses = list(where_clauses)
-        if cursor:
-            count_clauses = count_clauses[:-1]
+        count_clauses, count_params = self._build_findings_filters(
+            search=search,
+            severity_filter=severity_filter,
+            tool_filter=tool_filter,
+            scan_id=scan_id,
+            status_filter=status_filter,
+            target_filter=target_filter,
+        )
         count_where = " AND ".join(count_clauses)
         if use_status_join:
             count_query = f"""
@@ -322,6 +284,49 @@ class FindingsPaginator:
                 "per_page": self.per_page,
             },
         }
+
+    @staticmethod
+    def _build_findings_filters(
+        *,
+        search: str = "",
+        severity_filter: list[str] | None = None,
+        tool_filter: list[str] | None = None,
+        scan_id: str | None = None,
+        status_filter: str | None = None,
+        target_filter: str | None = None,
+    ) -> tuple[list[str], list[Any]]:
+        """Build findings WHERE clauses and parameters once for data/count queries."""
+        where_clauses = ["1=1"]
+        params: list[Any] = []
+
+        if search:
+            search_param = f"%{search}%"
+            where_clauses.append("(title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)")
+            params.extend([search_param] * 4)
+
+        if severity_filter:
+            placeholders = ",".join(["?"] * len(severity_filter))
+            where_clauses.append(f"severity IN ({placeholders})")
+            params.extend(severity_filter)
+
+        if tool_filter:
+            placeholders = ",".join(["?"] * len(tool_filter))
+            where_clauses.append(f"tool IN ({placeholders})")
+            params.extend(tool_filter)
+
+        if scan_id is not None:
+            where_clauses.append("scan_id = ?")
+            params.append(scan_id)
+
+        if target_filter:
+            where_clauses.append("target_name LIKE ?")
+            params.append(f"%{target_filter}%")
+
+        if status_filter is not None:
+            where_clauses.append("COALESCE(fs.status, 'open') = ?")
+            params.append(status_filter)
+
+        return where_clauses, params
 
     @staticmethod
     def _encode_cursor(value: str) -> str:
@@ -384,25 +389,12 @@ class ScansPaginator:
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "created_at"
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 
-        where_clauses = ["1=1"]
-        params: list[Any] = []
-
-        if search:
-            search_param = f"%{search}%"
-            where_clauses.append("(CAST(id AS TEXT) LIKE ? OR target_name LIKE ? OR error_message LIKE ?)")
-            params.extend([search_param] * 3)
-
-        if target_filter:
-            where_clauses.append("target_name LIKE ?")
-            params.append(f"%{target_filter}%")
-
-        if status_filter:
-            where_clauses.append("status = ?")
-            params.append(status_filter)
-
-        if policy_filter:
-            where_clauses.append("policy_status = ?")
-            params.append(policy_filter.upper())
+        where_clauses, params = self._build_scans_filters(
+            search=search,
+            target_filter=target_filter,
+            status_filter=status_filter,
+            policy_filter=policy_filter,
+        )
 
         if cursor:
             cursor_val = self._decode_cursor(cursor)
@@ -424,18 +416,12 @@ class ScansPaginator:
         params.append(self.per_page + 1)
 
         # Total count query (same filters, no cursor/LIMIT)
-        count_clauses = list(where_clauses)
-        count_params: list[Any] = []
-        if search:
-            count_params.extend([f"%{search}%"] * 3)
-        if target_filter:
-            count_params.append(f"%{target_filter}%")
-        if status_filter:
-            count_params.append(status_filter)
-        if policy_filter:
-            count_params.append(policy_filter.upper())
-        if cursor:
-            count_clauses = count_clauses[:-1]
+        count_clauses, count_params = self._build_scans_filters(
+            search=search,
+            target_filter=target_filter,
+            status_filter=status_filter,
+            policy_filter=policy_filter,
+        )
         count_where = " AND ".join(count_clauses)
         count_query = f"SELECT COUNT(*) AS total FROM scans WHERE {count_where}"  # nosec B608
         total_count = conn.execute(count_query, count_params).fetchone()["total"]
@@ -474,3 +460,34 @@ class ScansPaginator:
             return b64decode(cursor.encode()).decode()
         except Exception:
             return ""
+
+    @staticmethod
+    def _build_scans_filters(
+        *,
+        search: str = "",
+        target_filter: str = "",
+        status_filter: str = "",
+        policy_filter: str = "",
+    ) -> tuple[list[str], list[Any]]:
+        """Build scans WHERE clauses and parameters once for data/count queries."""
+        where_clauses = ["1=1"]
+        params: list[Any] = []
+
+        if search:
+            search_param = f"%{search}%"
+            where_clauses.append("(CAST(id AS TEXT) LIKE ? OR target_name LIKE ? OR error_message LIKE ?)")
+            params.extend([search_param] * 3)
+
+        if target_filter:
+            where_clauses.append("target_name LIKE ?")
+            params.append(f"%{target_filter}%")
+
+        if status_filter:
+            where_clauses.append("status = ?")
+            params.append(status_filter)
+
+        if policy_filter:
+            where_clauses.append("policy_status = ?")
+            params.append(policy_filter.upper())
+
+        return where_clauses, params

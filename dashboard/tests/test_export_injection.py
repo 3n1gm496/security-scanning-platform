@@ -2,7 +2,6 @@
 Regression tests for export injection sanitisation (CSV, HTML/XSS, PDF markup).
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -11,13 +10,7 @@ sys.path.insert(0, str(root))
 # Make common package importable
 sys.path.insert(0, str(root.parent))
 
-from export import (
-    export_to_csv,
-    export_to_html,
-    export_to_pdf,
-    _sanitize_csv_value,
-    _sanitize_csv_row,
-)
+from export import _sanitize_csv_row, _sanitize_csv_value, export_to_csv, export_to_html, export_to_pdf
 
 # ---------------------------------------------------------------------------
 # CSV injection tests

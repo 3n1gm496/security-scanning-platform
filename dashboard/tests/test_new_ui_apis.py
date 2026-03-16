@@ -6,21 +6,32 @@ chart, CVE distribution chart, and notification preferences.
 
 import os
 import sys
+import types
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 # Ensure the dashboard directory is on sys.path
 root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 
+if "bcrypt" not in sys.modules:
+    fake_bcrypt = types.ModuleType("bcrypt")
+    fake_bcrypt.gensalt = lambda: b"salt"
+    fake_bcrypt.hashpw = lambda value, salt: b"$2b$stubbed-hash"
+    fake_bcrypt.checkpw = lambda plain, hashed: True
+    sys.modules["bcrypt"] = fake_bcrypt
+
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from app import app  # noqa: E402 — import after env vars
+import auth as _auth  # noqa: E402
 import db as _db  # noqa: E402
+from app import app  # noqa: E402 — import after env vars
+from auth import AuthContext  # noqa: E402
+from conftest import SyncASGITestClient  # noqa: E402
+from rbac import Role  # noqa: E402
 
 
 @pytest.fixture
@@ -94,16 +105,19 @@ def seeded_client(isolated_db):
                 "A SQL injection vulnerability was found.",
             ),
         )
-    # Retrieve the auto-generated finding id for later use
-    with _db.get_connection(db_path) as conn:
-        row = conn.execute("SELECT id FROM findings LIMIT 1").fetchone()
-        finding_id = row["id"] if row else 1
 
-    with TestClient(app) as c:
-        from conftest import login_with_csrf
+    async def _fake_auth():
+        return AuthContext(role=Role.ADMIN, user_id="pytest")
 
-        login_with_csrf(c)
-        yield c
+    app.dependency_overrides[_auth.require_auth] = _fake_auth
+    client = SyncASGITestClient(app)
+    csrf_token = os.environ.get("DASHBOARD_TEST_CSRF_TOKEN", "test-csrf-token")
+    client.headers["X-CSRF-Token"] = csrf_token
+    client.cookies.set("csrf_token", csrf_token)
+    try:
+        yield client
+    finally:
+        app.dependency_overrides.pop(_auth.require_auth, None)
 
 
 # ---------------------------------------------------------------------------
@@ -186,10 +200,11 @@ def test_get_notification_preferences_default(seeded_client):
 def test_save_and_retrieve_notification_preferences(seeded_client):
     """POST /api/notifications/preferences saves preferences and GET retrieves them."""
     prefs = {
-        "email": "security@example.com",
-        "notify_critical": True,
-        "notify_high": True,
-        "daily_digest": False,
+        "critical_alerts": True,
+        "high_alerts": True,
+        "scan_summaries": True,
+        "weekly_digest": False,
+        "preferred_channel": "email",
     }
     resp = seeded_client.post("/api/notifications/preferences", json=prefs)
     assert resp.status_code == 200
@@ -201,3 +216,4 @@ def test_save_and_retrieve_notification_preferences(seeded_client):
     prefs_data = data.get("preferences", data)
     # Verify that at least one of the saved fields is present
     assert prefs_data is not None
+    assert prefs_data.get("critical_alerts") is True

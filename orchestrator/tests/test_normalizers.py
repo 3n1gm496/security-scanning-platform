@@ -1,13 +1,11 @@
-import json
-import pytest
+from orchestrator.models import TargetSpec
 from orchestrator.normalizer import (
     normalize_bandit,
-    normalize_nuclei,
     normalize_grype,
-    normalize_zap,
+    normalize_nuclei,
     normalize_semgrep,
+    normalize_zap,
 )
-from orchestrator.models import TargetSpec
 
 # minimal target used in tests
 TARGET = TargetSpec(name="demo", type="local", path="/tmp")

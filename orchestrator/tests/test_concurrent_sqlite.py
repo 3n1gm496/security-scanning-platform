@@ -8,10 +8,7 @@ readers and writers access the database simultaneously.
 import sqlite3
 import tempfile
 import threading
-import time
 from pathlib import Path
-
-import pytest
 
 
 def _init_db(db_path: str):

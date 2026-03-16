@@ -22,9 +22,9 @@ sys.path.insert(0, str(_root))
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 
-from app import app  # noqa: E402  (must come after sys.path setup)
-import db as _db  # noqa: E402
 import app as _app  # noqa: E402
+import db as _db  # noqa: E402
+from app import app  # noqa: E402  (must come after sys.path setup)
 
 _TEST_USER = os.environ["DASHBOARD_USERNAME"]
 _TEST_PASS = os.environ["DASHBOARD_PASSWORD"]
@@ -74,6 +74,9 @@ def logged_in_client(client):
         data={"username": _TEST_USER, "password": _TEST_PASS},
         follow_redirects=True,
     )
+    csrf_token = client.cookies.get("csrf_token")
+    if csrf_token:
+        client.headers["X-CSRF-Token"] = csrf_token
     return client
 
 
@@ -160,7 +163,7 @@ class TestSessionCookieLifecycle:
 
     def test_logout_redirects_to_login(self, logged_in_client):  # noqa: D102
         """After logout, accessing a protected page must redirect to /login."""
-        logged_in_client.get("/logout", follow_redirects=True)
+        logged_in_client.post("/logout", follow_redirects=True)
         response = logged_in_client.get("/", follow_redirects=False)
         assert response.status_code in (302, 303), "After logout, protected page should redirect"
         location = response.headers.get("location", "")

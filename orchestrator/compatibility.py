@@ -2,6 +2,7 @@
 """Scanner compatibility matrix and preflight checks."""
 
 from __future__ import annotations
+
 import importlib
 import subprocess
 from typing import Any
@@ -43,6 +44,11 @@ REQUIRED_BINARIES: dict[str, str] = {
     "nuclei": "nuclei",
     # ZAP uses the python-owasp-zap-v2.4 client library (zapv2 module),
     # not a CLI binary.  Preflight handles this as a special case below.
+}
+
+_TOOL_BINARY_KEYS: dict[str, str] = {
+    "trivy_fs": "trivy",
+    "trivy_image": "trivy",
 }
 
 
@@ -99,7 +105,7 @@ def preflight_check(scanners: list[str]) -> tuple[list[str], list[dict[str, str]
             continue
 
         # Trivy is a special case, as both trivy_fs and trivy_image use the same binary
-        binary_name = REQUIRED_BINARIES.get(tool.replace("_fs", "").replace("_image", ""))
+        binary_name = REQUIRED_BINARIES.get(_TOOL_BINARY_KEYS.get(tool, tool))
         if not binary_name:
             LOGGER.warning("preflight.no_binary_defined", tool=tool)
             runnable.append(tool)

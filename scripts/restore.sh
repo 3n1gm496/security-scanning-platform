@@ -19,6 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BACKUP_ARCHIVE="${1:-}"
+AUTO_YES="${RESTORE_YES:-0}"
 
 if [ -z "${BACKUP_ARCHIVE}" ]; then
     echo "Usage: $0 <backup-archive.tar.gz>"
@@ -36,15 +37,21 @@ fi
 DATA_DIR="${PROJECT_ROOT}/data"
 DB_FILE="${DATA_DIR}/security_scans.db"
 PG_URL="${DATABASE_URL:-}"
+PG_USER="${POSTGRES_USER:-security}"
+PG_DB="${POSTGRES_DB:-security_scans}"
 
 echo "=== SSP Restore ==="
 echo "Archive: ${BACKUP_ARCHIVE}"
 echo ""
 echo "WARNING: This will overwrite current data. The running stack will be stopped."
-read -rp "Continue? [y/N] " CONFIRM
-if [[ ! "${CONFIRM}" =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 0
+if [[ "${AUTO_YES}" = "1" ]]; then
+    echo "[confirm] RESTORE_YES=1 set, proceeding without interactive prompt"
+else
+    read -rp "Continue? [y/N] " CONFIRM
+    if [[ ! "${CONFIRM}" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
 fi
 
 # ── Extract archive ──────────────────────────────────────────────────────────
@@ -83,7 +90,7 @@ if [ -f "${RESTORE_DIR}/database.pgdump" ] && [ -n "${PG_URL}" ]; then
         docker compose up -d postgres 2>/dev/null || true
         sleep 3
         docker compose exec -T postgres pg_restore --clean --if-exists --no-owner \
-            -U postgres -d security_scans < "${RESTORE_DIR}/database.pgdump" 2>/dev/null || true
+            -U "${PG_USER}" -d "${PG_DB}" < "${RESTORE_DIR}/database.pgdump" 2>/dev/null || true
         echo "[db] PostgreSQL restored via docker"
     fi
 elif [ -f "${RESTORE_DIR}/security_scans.db" ]; then

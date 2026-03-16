@@ -13,3 +13,4 @@ bcrypt>=4.0.0
 httpx>=0.28
 anyio>=4.12.1
 psycopg2-binary>=2.9.9
+cryptography>=42.0.0

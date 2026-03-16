@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 
 from db import get_connection
+from db_adapter import is_postgres
 from logging_config import get_logger
 from scan_events import publish_sync
 
@@ -31,17 +32,31 @@ def insert_running_scan(scan_id: str, started_at: str, target_type: str, name: s
     """Pre-insert a RUNNING placeholder row so the scan shows up in the list immediately."""
     try:
         with get_connection(_db_path()) as conn:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO scans (
-                    id, created_at, finished_at, target_type, target_name, target_value,
-                    status, policy_status, findings_count, critical_count, high_count,
-                    medium_count, low_count, info_count, unknown_count,
-                    raw_report_dir, normalized_report_path, artifacts_json, tools_json
-                ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', 'PENDING', 0, 0, 0, 0, 0, 0, 0, '', '', '{}', '[]')
-                """,
-                (scan_id, started_at, started_at, target_type, name, target),
-            )
+            if is_postgres():
+                conn.execute(
+                    """
+                    INSERT INTO scans (
+                        id, created_at, finished_at, target_type, target_name, target_value,
+                        status, policy_status, findings_count, critical_count, high_count,
+                        medium_count, low_count, info_count, unknown_count,
+                        raw_report_dir, normalized_report_path, artifacts_json, tools_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', 'PENDING', 0, 0, 0, 0, 0, 0, 0, '', '', '{}', '[]')
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (scan_id, started_at, started_at, target_type, name, target),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO scans (
+                        id, created_at, finished_at, target_type, target_name, target_value,
+                        status, policy_status, findings_count, critical_count, high_count,
+                        medium_count, low_count, info_count, unknown_count,
+                        raw_report_dir, normalized_report_path, artifacts_json, tools_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', 'PENDING', 0, 0, 0, 0, 0, 0, 0, '', '', '{}', '[]')
+                    """,
+                    (scan_id, started_at, started_at, target_type, name, target),
+                )
     except Exception:
         LOGGER.warning("insert_running_scan failed for %s", scan_id, exc_info=True)
 
@@ -90,11 +105,12 @@ def run_scan(
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = f"{root_dir}:{env.get('PYTHONPATH', '')}"
-        env["ORCH_DB_PATH"] = f"{root_dir}/data/security_scans.db"
-        env["REPORTS_DIR"] = f"{root_dir}/data/reports"
-        env["WORKSPACE_DIR"] = f"{root_dir}/data/workspaces"
-        env["ORCH_CACHE_DIR"] = f"{root_dir}/data/cache"
-        env["DASHBOARD_DB_PATH"] = f"{root_dir}/data/security_scans.db"
+        dashboard_db_path = _db_path()
+        env["ORCH_DB_PATH"] = dashboard_db_path
+        env["REPORTS_DIR"] = os.getenv("REPORTS_DIR", f"{root_dir}/data/reports")
+        env["WORKSPACE_DIR"] = os.getenv("WORKSPACE_DIR", f"{root_dir}/data/workspaces")
+        env["ORCH_CACHE_DIR"] = os.getenv("ORCH_CACHE_DIR", f"{root_dir}/data/cache")
+        env["DASHBOARD_DB_PATH"] = dashboard_db_path
 
         log_level = os.getenv("LOG_LEVEL", "INFO")
 

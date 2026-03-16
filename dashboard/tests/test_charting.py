@@ -5,8 +5,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from charting import ChartingEngine
 import sqlite3
+
+from charting import ChartingEngine
 
 
 def _setup_test_db():
@@ -57,7 +58,7 @@ def _setup_test_db():
     for i in range(20):
         severity = ["CRITICAL", "HIGH", "MEDIUM", "LOW"][i % 4]
         tool = ["semgrep", "bandit", "nuclei"][i % 3]
-        cve = f"CVE-2024-{1000+i}" if i < 10 else None
+        cve = f"CVE-2024-{1000 + i}" if i < 10 else None
         scan_id = (i % 5) + 1
 
         conn.execute(

@@ -46,6 +46,15 @@ class TargetSpec:
         target_type = data.get("type")
         if target_type not in {"git", "local", "image", "url"}:
             raise ValueError(f"Unsupported target type: {target_type}")
+        required_field = {
+            "git": "repo",
+            "local": "path",
+            "image": "image",
+            "url": "url",
+        }[target_type]
+        required_value = data.get(required_field)
+        if not isinstance(required_value, str) or not required_value.strip():
+            raise ValueError(f"Target type '{target_type}' requires a non-empty '{required_field}' field")
         return cls(
             name=name,
             type=target_type,

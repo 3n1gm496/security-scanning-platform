@@ -21,8 +21,8 @@ os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from app import app  # noqa: E402
 import db as _db  # noqa: E402
+from app import app  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixture: isolated DB with a scan and 12 findings

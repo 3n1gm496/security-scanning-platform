@@ -19,7 +19,10 @@
     </nav>
     {% if user %}
     <div class="user-info">
-      <span>{{ user }}</span> | <a href="/logout">Sign out</a>
+      <span>{{ user }}</span>
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit" class="btn-link" style="background:none;border:none;padding:0;color:inherit;text-decoration:underline;cursor:pointer;">Sign out</button>
+      </form>
     </div>
     {% endif %}
   </header>
@@ -88,18 +91,18 @@
       <table>
         <thead>
           <tr>
-            <th>Severity</th>
-            <th>Tool</th>
-            <th>Category</th>
-            <th>Target</th>
-            <th>Title</th>
-            <th>Remediation</th>
-            <th>File</th>
-            <th>Line</th>
-            <th>Package</th>
-            <th>Version</th>
-            <th>CVE / ID</th>
-            <th>Scan ID</th>
+            <th scope="col">Severity</th>
+            <th scope="col">Tool</th>
+            <th scope="col">Category</th>
+            <th scope="col">Target</th>
+            <th scope="col">Title</th>
+            <th scope="col">Remediation</th>
+            <th scope="col">File</th>
+            <th scope="col">Line</th>
+            <th scope="col">Package</th>
+            <th scope="col">Version</th>
+            <th scope="col">CVE / ID</th>
+            <th scope="col">Scan ID</th>
           </tr>
         </thead>
         <tbody>

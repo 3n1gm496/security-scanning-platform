@@ -1,13 +1,15 @@
+import socket
+
 import pytest
-import json
+
 from orchestrator.scanners import (
-    run_bandit,
-    run_nuclei,
-    run_grype,
-    run_owasp_zap,
     ScannerError,
-    command_exists,
     clone_repo,
+    run_bandit,
+    run_grype,
+    run_nuclei,
+    run_owasp_zap,
+    run_trivy_fs,
 )
 
 # monkeypatch command_exists to simulate missing binaries
@@ -17,6 +19,24 @@ from orchestrator.scanners import (
 def disable_commands(monkeypatch):
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: False)
     yield
+
+
+@pytest.fixture(autouse=True)
+def stub_public_dns(monkeypatch):
+    """Keep SSRF tests deterministic even when the test environment has no DNS access."""
+    public_hosts = {
+        "example.com": "93.184.216.34",
+        "github.com": "140.82.112.3",
+        "internal.corp": "198.51.100.10",
+    }
+    real_getaddrinfo = socket.getaddrinfo
+
+    def fake_getaddrinfo(host, *args, **kwargs):
+        if host in public_hosts:
+            return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (public_hosts[host], 0))]
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr("socket.getaddrinfo", fake_getaddrinfo)
 
 
 def test_bandit_not_found(tmp_path, monkeypatch):
@@ -68,7 +88,7 @@ def test_nuclei_command_format_and_templates(tmp_path, monkeypatch):
 
     # with explicit templates — should override auto-inject
     seen.clear()
-    res = run_nuclei("/tmp", str(output), templates=["foo.yaml", "bar/"], target_type="url")
+    res = run_nuclei("https://example.com", str(output), templates=["foo.yaml", "bar/"], target_type="url")
     assert res["exit_code"] == 0
     assert "-t" in seen[0]
     assert "foo.yaml" in seen[0] and "bar/" in seen[0]
@@ -95,6 +115,13 @@ def test_grype_not_found(tmp_path, monkeypatch):
         run_grype("foo", str(output))
 
 
+def test_nuclei_rejects_blocked_url_target(tmp_path, monkeypatch):
+    output = tmp_path / "out.json"
+    monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: True)
+    with pytest.raises(ScannerError, match="blocked IP range"):
+        run_nuclei("http://169.254.169.254/latest/meta-data/", str(output), target_type="url")
+
+
 def test_zap_missing_library(tmp_path, monkeypatch):
     """run_owasp_zap must raise ScannerError when python-owasp-zap-v2.4 is not installed."""
     output = tmp_path / "out.json"
@@ -112,6 +139,12 @@ def test_zap_missing_library(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", mock_import)
     with pytest.raises(ScannerError, match="python-owasp-zap-v2.4 is not installed"):
         run_owasp_zap("http://example.com", str(output))
+
+
+def test_zap_rejects_blocked_url_target(tmp_path):
+    output = tmp_path / "out.json"
+    with pytest.raises(ScannerError, match="blocked IP range"):
+        run_owasp_zap("http://169.254.169.254/latest/meta-data/", str(output))
 
 
 def test_zap_full_scan_flow(tmp_path, monkeypatch):
@@ -203,6 +236,32 @@ def test_clone_repo_env_and_command(monkeypatch, tmp_path):
     assert seen["cmd"][-2:] == ["https://github.com/foo/bar.git", str(dest)]
     # verify environment variable
     assert seen["env"].get("GIT_TERMINAL_PROMPT") == "0"
+    assert "AWS_SECRET_ACCESS_KEY" not in seen["env"]
+
+
+def test_scanner_subprocess_env_is_restricted(monkeypatch, tmp_path):
+    output = tmp_path / "out.json"
+    monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: True)
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "top-secret")
+    seen = {}
+
+    def fake_run_command(cmd, cwd=None, timeout=None, env=None):
+        seen["env"] = env or {}
+        return (0, '{"Results":[]}', "")
+
+    monkeypatch.setattr("orchestrator.scanners.run_command", fake_run_command)
+    run_trivy_fs(str(tmp_path), str(output), [])
+    assert "AWS_SECRET_ACCESS_KEY" not in seen["env"]
+    assert "PATH" in seen["env"]
+
+
+def test_ensure_json_file_rewrites_empty_file(tmp_path):
+    output = tmp_path / "empty.json"
+    output.write_text("", encoding="utf-8")
+    from orchestrator.scanners import ensure_json_file
+
+    ensure_json_file(output, {"results": []})
+    assert output.read_text(encoding="utf-8").strip()
 
 
 def test_clone_repo_shallow_depth(monkeypatch, tmp_path):

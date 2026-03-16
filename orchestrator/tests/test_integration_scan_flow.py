@@ -19,8 +19,6 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -29,12 +27,7 @@ _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from orchestrator.main import (  # noqa: E402
-    evaluate_policy,
-    run_single_scan,
-    run_targets_concurrently,
-    resolve_settings,
-)
+from orchestrator.main import evaluate_policy, run_single_scan, run_targets_concurrently  # noqa: E402
 from orchestrator.models import TargetSpec  # noqa: E402
 from orchestrator.storage import init_db  # noqa: E402
 

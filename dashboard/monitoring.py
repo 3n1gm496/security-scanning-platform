@@ -7,15 +7,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import APIRouter, Response, status
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-    REGISTRY,
-)
+from auth import AuthContext, require_auth
+from fastapi import APIRouter, Depends, Response, status
+from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
 
 router = APIRouter(tags=["monitoring"])
@@ -226,7 +220,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
 
 
 @router.get("/metrics/json")
-async def metrics_json() -> Dict[str, Any]:
+async def metrics_json(auth: AuthContext = Depends(require_auth)) -> Dict[str, Any]:
     """
     Basic metrics in JSON format (for dashboards that prefer JSON over Prometheus text).
     For Prometheus scraping use GET /api/metrics instead.
@@ -257,7 +251,7 @@ async def metrics_json() -> Dict[str, Any]:
         "- Standard `process_*` and `python_*` metrics"
     ),
 )
-async def prometheus_metrics() -> Response:
+async def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Response:
     """Expose Prometheus metrics for scraping."""
     # Refresh the findings gauge from the DB on each scrape.
     # This is a cheap aggregation query (indexed by severity).

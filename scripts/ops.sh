@@ -201,10 +201,33 @@ open_url() {
   fi
 }
 
+redact_database_url() {
+  local url="$1"
+  if [[ -z "${url}" ]]; then
+    printf ''
+    return
+  fi
+  printf '%s' "${url}" | sed -E 's#(postgresql://[^:/@]+:)[^@]+@#\1***@#'
+}
+
 db_exec_python() {
   local code="$1"
   require_compose
   ${COMPOSE} exec -T dashboard python -c "${code}"
+}
+
+require_numeric() {
+  local value="$1"
+  local name="${2:-value}"
+  [[ "${value}" =~ ^[0-9]+$ ]] || die "${name} deve essere numerico"
+}
+
+require_api_key_role() {
+  local role="$1"
+  case "${role}" in
+    admin|operator|viewer) ;;
+    *) die "Ruolo non valido: ${role}. Usa: admin, operator, viewer" ;;
+  esac
 }
 
 db_is_postgres() {
@@ -215,7 +238,7 @@ init_scan_db() {
   require_compose
   ensure_dirs
   if db_is_postgres; then
-    info "Inizializzazione database PostgreSQL (${DATABASE_URL})"
+    info "Inizializzazione database PostgreSQL ($(redact_database_url "${DATABASE_URL}"))"
     ${COMPOSE} run --rm --entrypoint python orchestrator -c \
       'import os; from orchestrator.storage import init_db; init_db(os.environ.get("ORCH_DB_PATH","/data/security_scans.db"))' >/dev/null
   else
@@ -686,6 +709,7 @@ cmd_db_counts() {
 
 cmd_db_last() {
   local limit="${1:-10}"
+  require_numeric "${limit}" "limit"
   header "Ultime ${limit} scansioni"
   db_exec_python "import os; from orchestrator.db_adapter import get_connection; conn=get_connection(); rows=conn.execute('SELECT id,target_name,status,policy_status,created_at FROM scans ORDER BY created_at DESC LIMIT ${limit}').fetchall(); [print(dict(r)) for r in rows]"
 }
@@ -889,15 +913,24 @@ cmd_api_key() {
       done
       [[ -n "${name}" ]] || die "Manca --name"
       [[ -n "${role}" ]] || die "Manca --role (admin|operator|viewer)"
+      require_api_key_role "${role}"
+      [[ -z "${expires_days}" ]] || require_numeric "${expires_days}" "expires-days"
 
       header "Creazione API key"
       if compose_available; then
-        local py_code="from rbac import create_api_key, Role; k,p = create_api_key('${name}', Role('${role}')${expires_days:+, expires_days=${expires_days}}); print(f'Key: {k}'); print(f'Prefix: {p}')"
-        ${COMPOSE} exec -T dashboard python -c "${py_code}" 2>&1
+        ${COMPOSE} exec -T \
+          -e SSP_API_KEY_NAME="${name}" \
+          -e SSP_API_KEY_ROLE="${role}" \
+          -e SSP_API_KEY_EXPIRES_DAYS="${expires_days}" \
+          dashboard python -c \
+          "import os; from rbac import create_api_key, Role; expires = os.environ.get('SSP_API_KEY_EXPIRES_DAYS') or None; k,p = create_api_key(os.environ['SSP_API_KEY_NAME'], Role(os.environ['SSP_API_KEY_ROLE']), expires_days=int(expires) if expires else None); print(f'Key: {k}'); print(f'Prefix: {p}')" 2>&1
       else
         export PYTHONPATH="${ROOT_DIR}"
         export DASHBOARD_DB_PATH="${DB_FILE}"
-        python3 -c "import sys; sys.path.insert(0,'${ROOT_DIR}/dashboard'); from rbac import create_api_key, Role; k,p = create_api_key('${name}', Role('${role}')${expires_days:+, expires_days=${expires_days}}); print(f'Key: {k}'); print(f'Prefix: {p}')" 2>&1
+        SSP_API_KEY_NAME="${name}" \
+        SSP_API_KEY_ROLE="${role}" \
+        SSP_API_KEY_EXPIRES_DAYS="${expires_days}" \
+        python3 -c "import os, sys; sys.path.insert(0,'${ROOT_DIR}/dashboard'); from rbac import create_api_key, Role; expires = os.environ.get('SSP_API_KEY_EXPIRES_DAYS') or None; k,p = create_api_key(os.environ['SSP_API_KEY_NAME'], Role(os.environ['SSP_API_KEY_ROLE']), expires_days=int(expires) if expires else None); print(f'Key: {k}'); print(f'Prefix: {p}')" 2>&1
       fi
       ;;
     list)

@@ -21,10 +21,10 @@ sys.path.insert(0, str(root))
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 
-from app import app  # noqa: E402
 import db as _db  # noqa: E402
-from rbac import Role, create_api_key, init_rbac_tables  # noqa: E402
+from app import app  # noqa: E402
 from finding_management import init_finding_management_tables  # noqa: E402
+from rbac import Role, create_api_key, init_rbac_tables  # noqa: E402
 from webhooks import init_webhook_tables  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -88,10 +88,7 @@ def auth_client(full_db):
     """Session-authenticated TestClient with CSRF token."""
     client = TestClient(app, raise_server_exceptions=True)
     client.post("/login", data={"username": "testuser", "password": "testpass"})
-    # Fetch CSRF token and set as default header for all subsequent requests
-    csrf_resp = client.get("/api/csrf-token")
-    csrf_token = csrf_resp.json().get("csrf_token", "")
-    client.headers["X-CSRF-Token"] = csrf_token
+    client.headers["X-CSRF-Token"] = os.environ.get("DASHBOARD_TEST_CSRF_TOKEN", "test-csrf-token")
     return client
 
 

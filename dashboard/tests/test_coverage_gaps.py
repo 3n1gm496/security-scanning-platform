@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -17,13 +18,20 @@ from fastapi.testclient import TestClient
 root = Path(__file__).parent.parent
 sys.path.insert(0, str(root))
 
+if "bcrypt" not in sys.modules:
+    fake_bcrypt = types.ModuleType("bcrypt")
+    fake_bcrypt.gensalt = lambda: b"salt"
+    fake_bcrypt.hashpw = lambda value, salt: b"$2b$stubbed-hash"
+    fake_bcrypt.checkpw = lambda plain, hashed: True
+    sys.modules["bcrypt"] = fake_bcrypt
+
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 os.environ.setdefault("DASHBOARD_DB_PATH", str(root / "test.db"))
 
-from app import app  # noqa: E402
 import db as _db  # noqa: E402
 import finding_management as _fm  # noqa: E402
+from app import app  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Shared fixture
@@ -207,11 +215,49 @@ def test_update_finding_status_overwrite(client_with_data):
     assert state["resolution_notes"] == "Fixed in v2"
 
 
+def test_update_finding_status_preserves_existing_assignment_and_notes(client_with_data):
+    """Updating status without optional fields must preserve existing assignment and notes."""
+    _, db_path = client_with_data
+    with _db.get_connection(db_path) as conn:
+        row = conn.execute("SELECT id FROM findings LIMIT 1").fetchone()
+    finding_id = row["id"]
+
+    _fm.update_finding_status(
+        finding_id,
+        _fm.FindingStatus.ACKNOWLEDGED,
+        user="admin",
+        notes="Keep me",
+        assigned_to="alice",
+    )
+    _fm.update_finding_status(
+        finding_id,
+        _fm.FindingStatus.IN_PROGRESS,
+        user="admin",
+    )
+    state = _fm.get_finding_state(finding_id)
+
+    assert state["status"] == "in_progress"
+    assert state["assigned_to"] == "alice"
+    assert state["resolution_notes"] == "Keep me"
+
+
 def test_get_finding_state_not_found(client_with_data):
     """get_finding_state returns None for a finding with no state record."""
     _, db_path = client_with_data
     state = _fm.get_finding_state(99999)
     assert state is None
+
+
+def test_triage_summary_overdue_new_findings(client_with_data):
+    """get_triage_summary counts overdue new findings using a Python-calculated cutoff."""
+    _, db_path = client_with_data
+    with _db.get_connection(db_path) as conn:
+        conn.execute(
+            "UPDATE findings SET timestamp = ? WHERE id = 1",
+            ("2000-01-01T00:00:00+00:00",),
+        )
+    summary = _fm.get_triage_summary()
+    assert summary["overdue_by_severity"]
 
 
 # ---------------------------------------------------------------------------

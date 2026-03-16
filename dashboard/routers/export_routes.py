@@ -6,23 +6,21 @@ import csv
 import io
 from datetime import datetime, timezone
 
+from analytics import get_compliance_summary, get_risk_distribution
+from auth import AuthContext, require_auth, require_permission
+from db import count_findings, list_findings
+from export import _sanitize_csv_row, export_to_csv, export_to_html, export_to_json, export_to_pdf, export_to_sarif
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
-from starlette import status
-
-from auth import require_auth, require_permission, AuthContext
-from db import count_findings, list_findings
 from rbac import Permission
-from export import export_to_json, export_to_csv, export_to_sarif, export_to_html, export_to_pdf, _sanitize_csv_row
-from analytics import get_risk_distribution, get_compliance_summary
-
 from routers._shared import DB_PATH
+from starlette import status
 
 router = APIRouter(prefix="/api", tags=["export"])
 
 
 @router.get("/export/findings", dependencies=[Depends(require_permission(Permission.FINDING_READ))])
-def export_findings_endpoint(
+async def export_findings_endpoint(
     format: str = Query(..., pattern="^(json|csv|sarif|html|pdf)$"),
     limit: int = Query(1000, ge=1, le=50000),
     severity: str | None = None,
@@ -62,9 +60,11 @@ def export_findings_endpoint(
         if total > 1000:
             filename = f"findings_{ts}.csv"
             batch_size = 1000
+            fieldnames = []
+            header_written = False
 
             def _csv_stream():
-                header_written = False
+                nonlocal fieldnames, header_written
                 for offset in range(0, limit, batch_size):
                     batch = list_findings(
                         DB_PATH,
@@ -78,16 +78,14 @@ def export_findings_endpoint(
                     if not batch:
                         break
                     if not header_written:
-                        all_fields = sorted({k for row in batch for k in row})
+                        fieldnames = sorted(batch[0].keys())
                         buf = io.StringIO()
-                        w = csv.DictWriter(buf, fieldnames=all_fields)
+                        w = csv.DictWriter(buf, fieldnames=fieldnames)
                         w.writeheader()
                         yield buf.getvalue()
                         header_written = True
-                    else:
-                        all_fields = sorted({k for row in batch for k in row})
                     buf = io.StringIO()
-                    w = csv.DictWriter(buf, fieldnames=all_fields)
+                    w = csv.DictWriter(buf, fieldnames=fieldnames)
                     for row in batch:
                         w.writerow(_sanitize_csv_row(row))
                     yield buf.getvalue()

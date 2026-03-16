@@ -6,7 +6,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/security-scanner
+WorkingDirectory=/opt/security-scanning-platform
 ExecStart=/usr/bin/docker compose up -d dashboard orchestrator
 ExecStop=/usr/bin/docker compose down
 User=securityscan

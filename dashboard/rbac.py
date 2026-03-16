@@ -5,16 +5,18 @@ RBAC (Role-Based Access Control) implementation with API key authentication.
 import hashlib
 import os
 import secrets
+import threading
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 
 import bcrypt
-
 from db import get_connection
+from db_adapter import adapt_schema, is_postgres
 
 # Database path
 DASHBOARD_DB_PATH = os.getenv("DASHBOARD_DB_PATH", "/data/security_scans.db")
+_DEFAULT_ADMIN_KEY_LOCK = threading.Lock()
 
 
 class Role(str, Enum):
@@ -66,7 +68,7 @@ ROLE_PERMISSIONS = {
 def init_rbac_tables():
     """Initialize RBAC tables in the database."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS api_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 key_hash TEXT UNIQUE NOT NULL,
@@ -79,9 +81,9 @@ def init_rbac_tables():
                 is_active INTEGER DEFAULT 1,
                 created_by TEXT
             )
-        """)
+        """))
 
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
@@ -91,9 +93,9 @@ def init_rbac_tables():
                 last_login_at TEXT,
                 is_active INTEGER DEFAULT 1
             )
-        """)
+        """))
 
-        conn.execute("""
+        conn.execute(adapt_schema("""
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
@@ -104,7 +106,7 @@ def init_rbac_tables():
                 result TEXT,
                 ip_address TEXT
             )
-        """)
+        """))
 
 
 def generate_api_key() -> tuple[str, str]:
@@ -218,6 +220,43 @@ def has_permission(role: Role, permission: Permission) -> bool:
     return permission in ROLE_PERMISSIONS.get(role, [])
 
 
+def _verify_password_hash(password: str, stored_hash: str) -> bool:
+    """Verify a dashboard user password hash.
+
+    Supports bcrypt hashes and a legacy plain-text fallback for older setups.
+    """
+    if not stored_hash:
+        return False
+    if stored_hash.startswith("$2b$") or stored_hash.startswith("$2a$"):
+        try:
+            return bcrypt.checkpw(password.encode(), stored_hash.encode())
+        except Exception:
+            return False
+    return secrets.compare_digest(password, stored_hash)
+
+
+def verify_user_credentials(username: str, password: str) -> Optional[dict]:
+    """Verify an active dashboard user from the users table."""
+    with get_connection(DASHBOARD_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT id, username, password_hash, role FROM users WHERE username = ? AND is_active = 1",
+            (username,),
+        ).fetchone()
+        if not row:
+            return None
+        if not _verify_password_hash(password, row["password_hash"]):
+            return None
+        conn.execute(
+            "UPDATE users SET last_login_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), row["id"]),
+        )
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "role": row["role"],
+    }
+
+
 def list_api_keys() -> list[dict]:
     """List all API keys (without sensitive data)."""
     with get_connection(DASHBOARD_DB_PATH) as conn:
@@ -263,20 +302,26 @@ def purge_audit_log(retention_days: int = 90) -> int:
 
     Returns the number of rows deleted.
     """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     with get_connection(DASHBOARD_DB_PATH) as conn:
-        cursor = conn.execute(
-            "DELETE FROM audit_log WHERE timestamp < date('now', ?)",
-            (f"-{retention_days} day",),
-        )
+        if is_postgres():
+            cursor = conn.execute("DELETE FROM audit_log WHERE timestamp < ?", (cutoff.isoformat(),))
+        else:
+            cursor = conn.execute(
+                "DELETE FROM audit_log WHERE timestamp < ?",
+                (cutoff.date().isoformat(),),
+            )
     return cursor.rowcount
 
 
 def create_default_admin_key():
     """Create a default admin API key if no keys exist."""
-    with get_connection(DASHBOARD_DB_PATH) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM api_keys").fetchone()[0]
+    with _DEFAULT_ADMIN_KEY_LOCK:
+        with get_connection(DASHBOARD_DB_PATH) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM api_keys").fetchone()[0]
+            if count != 0:
+                return None
 
-    if count == 0:
         full_key, prefix = create_api_key(name="Default Admin Key", role=Role.ADMIN, created_by="system")
         return full_key
     return None

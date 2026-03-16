@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
+from auth import AuthContext, require_auth, require_permission
 from fastapi import APIRouter, Depends, Form, HTTPException
+from rbac import Permission, Role, create_api_key, list_api_keys, log_audit, revoke_api_key
 from starlette import status
-
-from auth import require_auth, require_permission, AuthContext
-from rbac import Role, Permission, create_api_key, list_api_keys, revoke_api_key, log_audit
 
 router = APIRouter(prefix="/api", tags=["api-keys"])
 
 
 @router.get("/keys", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
-def get_api_keys(auth: AuthContext = Depends(require_auth)) -> list[dict]:
+async def get_api_keys(auth: AuthContext = Depends(require_auth)) -> list[dict]:
     """List all API keys (admin/operator only)."""
     return list_api_keys()
 
 
 @router.post("/keys", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
-def create_new_api_key(
+async def create_new_api_key(
     name: str = Form(...),
     role: str = Form(...),
     expires_days: int | None = Form(None),
@@ -63,7 +62,7 @@ def create_new_api_key(
 
 
 @router.delete("/keys/{key_prefix}", dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))])
-def delete_api_key(key_prefix: str, auth: AuthContext = Depends(require_auth)) -> dict:
+async def delete_api_key(key_prefix: str, auth: AuthContext = Depends(require_auth)) -> dict:
     """Revoke an API key (admin/operator only)."""
     success = revoke_api_key(key_prefix)
 

@@ -13,18 +13,23 @@ from __future__ import annotations
 
 import os
 import smtplib
-from html import escape as html_escape
-from urllib.parse import quote_plus
-
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+from html import escape as html_escape
 from typing import Any
-from hashlib import sha256
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 from logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def _safe_dashboard_url(dashboard_url: str) -> str:
+    """Normalize dashboard URLs used in emails to http/https only."""
+    parsed = urlsplit(dashboard_url or "")
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return "http://localhost:8000"
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
 
 
 class EmailNotificationEngine:
@@ -44,6 +49,8 @@ class EmailNotificationEngine:
         """Send alert for critical finding."""
         subject = f"[CRITICAL] Security Finding: {finding.get('title', 'Unknown')}"
         encoded_email = quote_plus(to_email)
+        base_url = _safe_dashboard_url(dashboard_url)
+        finding_id = quote_plus(str(finding.get("id", "")))
 
         # Escape all user-controlled data for safe HTML embedding
         e = {k: html_escape(str(v)) for k, v in finding.items() if v is not None}
@@ -70,7 +77,7 @@ class EmailNotificationEngine:
                 </ul>
 
                 <p>
-                    <a href="{dashboard_url}/findings/{finding.get('id', '')}"
+                    <a href="{base_url}/findings/{finding_id}"
                        style="background-color: #d32f2f; color: white; padding: 10px 20px;
                               text-decoration: none; border-radius: 5px;">
                         View in Dashboard
@@ -80,7 +87,7 @@ class EmailNotificationEngine:
                 <hr>
                 <p style="color: #999; font-size: 12px;">
                     This is an automated alert from the Security Scanner.
-                    <a href="{dashboard_url}/notifications/unsubscribe?email={encoded_email}">Unsubscribe</a>
+                    <a href="{base_url}/notifications/unsubscribe?email={encoded_email}">Unsubscribe</a>
                 </p>
             </body>
         </html>
@@ -102,7 +109,7 @@ class EmailNotificationEngine:
         Tool: {finding.get('tool', 'N/A')}
         CVE: {finding.get('cve_id', 'N/A')}
 
-        View in dashboard: {dashboard_url}/findings/{finding.get('id', '')}
+        View in dashboard: {base_url}/findings/{finding_id}
         """
 
         return self._send_email(to_email, subject, text_body, html_body)
@@ -115,6 +122,7 @@ class EmailNotificationEngine:
     ) -> bool:
         """Send scan summary digest email."""
         subject = f"Security Scan Summary - {scan_results.get('target_name', 'Unknown')}"
+        base_url = _safe_dashboard_url(dashboard_url)
 
         critical_count = scan_results.get("critical_count", 0)
         high_count = scan_results.get("high_count", 0)
@@ -124,6 +132,7 @@ class EmailNotificationEngine:
         # Escape user-controlled strings for safe HTML embedding
         target_name = html_escape(str(scan_results.get("target_name", "N/A")))
         scan_id = html_escape(str(scan_results.get("scan_id", "N/A")))
+        scan_id_url = quote_plus(str(scan_results.get("scan_id", "")))
         created_at = html_escape(str(scan_results.get("created_at", "N/A")))
 
         html_body = f"""
@@ -160,7 +169,7 @@ class EmailNotificationEngine:
                 </table>
 
                 <p style="margin-top: 20px;">
-                    <a href="{dashboard_url}/scan/{scan_results.get('scan_id', '')}"
+                    <a href="{base_url}/scan/{scan_id_url}"
                        style="background-color: #1976d2; color: white; padding: 10px 20px;
                               text-decoration: none; border-radius: 5px;">
                         View Full Report
@@ -188,7 +197,7 @@ class EmailNotificationEngine:
         MEDIUM: {medium_count}
         TOTAL: {total_count}
 
-        View full report: {dashboard_url}/scan/{scan_results.get('scan_id', '')}
+        View full report: {base_url}/scan/{scan_id_url}
         """
 
         return self._send_email(to_email, subject, text_body, html_body)
@@ -201,6 +210,7 @@ class EmailNotificationEngine:
     ) -> bool:
         """Send weekly digest email."""
         subject = "Weekly Security Report"
+        base_url = _safe_dashboard_url(dashboard_url)
 
         html_body = f"""
         <html>
@@ -218,7 +228,7 @@ class EmailNotificationEngine:
                 </ul>
 
                 <p>
-                    <a href="{dashboard_url}/"
+                    <a href="{base_url}/"
                        style="background-color: #1976d2; color: white; padding: 10px 20px;
                               text-decoration: none; border-radius: 5px;">
                         View Dashboard
@@ -242,7 +252,7 @@ class EmailNotificationEngine:
         Resolved Findings: {digest_data.get('resolved_findings', 0)}
         Critical Findings: {digest_data.get('critical_count', 0)}
 
-        View dashboard: {dashboard_url}/
+        View dashboard: {base_url}/
         """
 
         return self._send_email(to_email, subject, text_body, html_body)
@@ -262,7 +272,10 @@ class EmailNotificationEngine:
 
             # Send email
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
+                server.ehlo()
+                if server.has_extn("starttls"):
+                    server.starttls()
+                    server.ehlo()
                 if self.smtp_user and self.smtp_password:
                     server.login(self.smtp_user, self.smtp_password)
                 server.send_message(msg)
@@ -336,7 +349,11 @@ class NotificationPreferencesManager:
             ).fetchone()
 
             if row:
-                return dict(row)
+                prefs = dict(row)
+                for key in ("critical_alerts", "high_alerts", "scan_summaries", "weekly_digest"):
+                    if key in prefs:
+                        prefs[key] = bool(prefs[key])
+                return prefs
             return None
         except Exception:
             return None

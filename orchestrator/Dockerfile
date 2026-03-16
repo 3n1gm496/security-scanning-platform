@@ -54,6 +54,11 @@ RUN git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecu
     GOEXPERIMENT=jsonv2 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /usr/local/bin/trivy ./cmd/trivy && \
     rm -rf /tmp/trivy-src
 
+# Remove Go toolchain and module caches so the final runtime image does not
+# retain build-only sources, sample secrets, or unnecessary attack surface.
+RUN go clean -cache -modcache && \
+    rm -rf /root/go /usr/local/go
+
 COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
 
 # Install scanner binaries from GitHub releases with SHA-256 verification.

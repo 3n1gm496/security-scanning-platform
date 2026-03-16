@@ -97,7 +97,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     pip uninstall -y wheel jaraco.context && \
     pip install --no-cache-dir --no-deps "wheel>=0.46.2" && \
     pip install --no-cache-dir "jaraco.context>=6.1.0" && \
-    find /usr/local/lib/python3.11/site-packages -maxdepth 1 \
+    pip install --no-cache-dir --upgrade --force-reinstall "setuptools>=82.0.1" && \
+    find /usr/local/lib/python3.11/site-packages \
       \( -name 'wheel-0.45.1.dist-info' -o -name 'jaraco.context-5.3.0.dist-info' -o -name 'jaraco_context-5.3.0.dist-info' \) \
       -exec rm -rf {} +
 

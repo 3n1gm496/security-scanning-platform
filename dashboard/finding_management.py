@@ -13,6 +13,7 @@ from runtime_config import DASHBOARD_DB_PATH
 
 logger = logging.getLogger(__name__)
 
+
 class FindingStatus(str, Enum):
     """Finding lifecycle status."""
 

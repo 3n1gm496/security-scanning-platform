@@ -20,6 +20,7 @@ from scan_events import publish_sync
 
 LOGGER = get_logger(__name__)
 
+
 def _db_path() -> str:
     """Return the current DB path (reads env var each call so tests can override)."""
     return os.getenv("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)

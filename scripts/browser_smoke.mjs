@@ -343,9 +343,19 @@ async function main() {
       await clickNav(page, "Settings");
       await page.waitForTimeout(700);
       await page.screenshot({ path: resolve(artifactsDir, "08-settings-apikeys.png"), fullPage: true });
+      await page.getByRole("button", { name: /new key/i }).click();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: resolve(artifactsDir, "08-settings-apikeys-modal.png"), fullPage: true });
+      await page.locator(".modal-close").first().click();
+      await page.waitForTimeout(300);
       await page.getByRole("button", { name: "Webhooks" }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks.png"), fullPage: true });
+      await page.getByRole("button", { name: /new webhook/i }).click();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks-modal.png"), fullPage: true });
+      await page.locator(".modal-close").first().click();
+      await page.waitForTimeout(300);
       await page.getByRole("button", { name: "Notifications" }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "10-settings-notifications.png"), fullPage: true });
@@ -414,6 +424,11 @@ async function main() {
       }
 
       await page.screenshot({ path: resolve(artifactsDir, "14-dashboard-refreshed.png"), fullPage: true });
+
+      await page.getByRole("button", { name: "Sign out" }).click();
+      await page.waitForURL((url) => url.href.startsWith(`${baseUrl}/login`), { timeout: 15000 });
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: resolve(artifactsDir, "15-logout.png"), fullPage: true });
     } else {
       await page.waitForTimeout(5000);
     }

@@ -98,8 +98,9 @@
             <span class="user-role">{{ currentUserRoleLabel }}</span>
           </div>
         </div>
-        <button type="button" @click="logout" class="logout-link" title="Sign out" aria-label="Sign out">
-          <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <button type="button" @click="logout" class="logout-btn" title="Sign out" aria-label="Sign out">
+          <svg class="logout-btn-icon" viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="logout-btn-label">Sign out</span>
         </button>
       </div>
     </aside>
@@ -689,7 +690,7 @@
         <div class="intel-summary-grid">
           <article v-for="tile in analyticsSummaryTiles" :key="tile.key" class="signal-tile signal-tile-analytics" :class="tile.tone" :title="tile.fullValue || tile.value">
             <span class="signal-label">{{ tile.label }}</span>
-            <strong class="signal-value">{{ tile.value }}</strong>
+            <strong class="signal-value" :class="{ 'signal-value-wrap': tile.wrapValue }">{{ tile.value }}</strong>
             <span class="signal-hint">{{ tile.hint }}</span>
           </article>
         </div>
@@ -728,6 +729,7 @@
           <div class="card chart-card">
             <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>OWASP exposure map</h2></div></div>
             <div class="chart-container chart-container-roomy"><canvas ref="owaspChart"></canvas></div>
+            <p class="chart-hint">Top mapped OWASP 2021 categories by finding volume, with full category names shown in the tooltip.</p>
           </div>
           <div class="card chart-card">
             <div class="card-header"><div><span class="panel-kicker">Coverage</span><h2>Tool effectiveness</h2></div></div>
@@ -1338,10 +1340,13 @@
     <div class="modal-overlay" v-if="showScanModal" @click.self="showScanModal = false" role="dialog" aria-modal="true" aria-label="New scan">
       <div class="modal modal-sm modal-shell-form" ref="scanModal">
         <div class="modal-header">
-          <h2 class="modal-title">New Scan</h2>
+          <div class="modal-title-stack">
+            <span class="panel-kicker">Scan orchestration</span>
+            <h2 class="modal-title">New Scan</h2>
+          </div>
           <button class="modal-close" @click="showScanModal = false">&#x2715;</button>
         </div>
-        <form class="modal-body" @submit.prevent="triggerScan">
+        <form class="modal-body modal-body-form" @submit.prevent="triggerScan">
           <p class="modal-subtitle">Configure and start a new security scan.</p>
           <div class="form-group">
             <label class="form-label" for="new-scan-name">Scan name</label>
@@ -1381,10 +1386,14 @@
     <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="showCreateKeyModal = false" role="dialog" aria-modal="true" aria-label="Create API key">
       <div class="modal modal-sm modal-shell-form">
         <div class="modal-header">
-          <h2 class="modal-title">New API Key</h2>
+          <div class="modal-title-stack">
+            <span class="panel-kicker">Access automation</span>
+            <h2 class="modal-title">New API Key</h2>
+          </div>
           <button class="modal-close" @click="showCreateKeyModal = false">&#x2715;</button>
         </div>
-        <form class="modal-body" @submit.prevent="createApiKey">
+        <form class="modal-body modal-body-form" @submit.prevent="createApiKey">
+          <p class="modal-subtitle">Issue a role-scoped credential for CI, automation, or external integrations.</p>
           <div class="form-group">
             <label class="form-label" for="api-key-name">Name</label>
             <input id="api-key-name" name="api_key_name" type="text" v-model="newKeyForm.name" class="filter-input" placeholder="e.g. ci-runner" required>
@@ -1423,10 +1432,14 @@
     <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="showCreateWebhookModal = false" role="dialog" aria-modal="true" aria-label="Create webhook">
       <div class="modal modal-sm modal-shell-form">
         <div class="modal-header">
-          <h2 class="modal-title">New Webhook</h2>
+          <div class="modal-title-stack">
+            <span class="panel-kicker">Outbound automation</span>
+            <h2 class="modal-title">New Webhook</h2>
+          </div>
           <button class="modal-close" @click="showCreateWebhookModal = false">&#x2715;</button>
         </div>
-        <form class="modal-body" @submit.prevent="createWebhook">
+        <form class="modal-body modal-body-form" @submit.prevent="createWebhook">
+          <p class="modal-subtitle">Register an event endpoint for scan and finding notifications.</p>
           <div class="form-group">
             <label class="form-label" for="webhook-name">Name</label>
             <input id="webhook-name" name="webhook_name" type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="e.g. slack-alerts" required>

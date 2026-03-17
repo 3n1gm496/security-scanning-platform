@@ -422,7 +422,8 @@ createApp({
       const targetRisk = Array.isArray(this.analyticsData.targetRisk) ? this.analyticsData.targetRisk : [];
       const highestTarget = targetRisk.slice().sort((a, b) => (b.average_risk || 0) - (a.average_risk || 0))[0];
       const hotspotTarget = highestTarget?.target || '—';
-      const hotspotShort = hotspotTarget.length > 26 ? hotspotTarget.slice(0, 24) + '…' : hotspotTarget;
+      const hotspotShort = hotspotTarget.length > 44 ? hotspotTarget.slice(0, 42) + '…' : hotspotTarget;
+      const hotspotCount = Number(highestTarget?.findings_count || 0);
       return [
         {
           key: 'avg-risk',
@@ -443,7 +444,10 @@ createApp({
           label: 'Most exposed target',
           value: hotspotShort,
           fullValue: hotspotTarget,
-          hint: highestTarget ? `${highestTarget.average_risk}/100 average risk` : 'No analytics hotspot yet',
+          wrapValue: hotspotTarget.length > 22,
+          hint: highestTarget
+            ? `${highestTarget.average_risk}/100 average risk · ${formatCompactNumber(hotspotCount)} findings`
+            : 'No analytics hotspot yet',
           tone: 'signal-amber',
         },
       ];
@@ -2152,10 +2156,21 @@ createApp({
         }
         return;
       }
-      const RISK_LABEL_MAP = { '0-25': 'Low Risk (0-25)', '25-50': 'Medium Risk (25-50)', '50-75': 'High Risk (50-75)', '75-100': 'Critical Risk (75-100)' };
-      const rawLabels = Object.keys(dist);
+      const RISK_LABEL_MAP = {
+        '0-25': 'Low · 0-25',
+        '25-50': 'Moderate · 25-50',
+        '50-75': 'Elevated · 50-75',
+        '75-100': 'Severe · 75-100',
+      };
+      const RISK_TOOLTIP_MAP = {
+        '0-25': 'Low exposure band',
+        '25-50': 'Moderate exposure band',
+        '50-75': 'Elevated exposure band',
+        '75-100': 'Severe exposure band',
+      };
+      const rawLabels = ['0-25', '25-50', '50-75', '75-100'].filter((label) => dist[label] !== undefined);
       const labels = rawLabels.map(l => RISK_LABEL_MAP[l] || l);
-      const values = Object.values(dist);
+      const values = rawLabels.map((label) => dist[label]);
       const signature = stableSerialize({ labels, values });
       if (this.charts.risk) {
         if (this.charts.risk.$sspSignature === signature) return;
@@ -2182,7 +2197,8 @@ createApp({
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: ctx => ` ${ctx.parsed.y} findings in this risk range`,
+                title: (items) => RISK_TOOLTIP_MAP[rawLabels[items[0]?.dataIndex]] || 'Risk band',
+                label: ctx => ` ${ctx.parsed.y} findings`,
               },
             },
           },
@@ -2195,7 +2211,7 @@ createApp({
             },
             x: {
               grid: { display: false },
-              ticks: { color: this.cssVar('--chart-tick'), font: { size: 11 }, maxRotation: 18, minRotation: 0 },
+              ticks: { color: this.cssVar('--chart-tick'), font: { size: 11 }, maxRotation: 0, minRotation: 0 },
             },
           },
         }, mode),
@@ -2216,7 +2232,21 @@ createApp({
         }
         return;
       }
-      const labels = owasp.map(o => o.category.split(' - ')[0]);
+      const fullLabels = owasp.map(o => o.category);
+      const SHORT_OWASP_LABELS = {
+        'A01:2021': 'A01 Access',
+        'A02:2021': 'A02 Crypto',
+        'A03:2021': 'A03 Injection',
+        'A05:2021': 'A05 Misconfig',
+        'A06:2021': 'A06 Components',
+        'A08:2021': 'A08 Integrity',
+        'A09:2021': 'A09 Logging',
+        'A10:2021': 'A10 SSRF',
+      };
+      const labels = fullLabels.map((category) => {
+        const code = String(category).split(' - ')[0];
+        return SHORT_OWASP_LABELS[code] || code || category;
+      });
       const values = owasp.map(o => o.count);
       const signature = stableSerialize({ labels, values });
       if (this.charts.owasp) {
@@ -2248,6 +2278,7 @@ createApp({
             legend: { display: false },
             tooltip: {
               callbacks: {
+                title: (items) => fullLabels[items[0]?.dataIndex] || 'OWASP category',
                 label: ctx => ` ${ctx.parsed.x} findings`,
               },
             },
@@ -2304,13 +2335,13 @@ createApp({
           labels: trendData.map(t => t.date),
           datasets: [
             {
-              label: 'Avg Risk', data: trendData.map(t => t.average_risk),
+              label: 'Average risk', data: trendData.map(t => t.average_risk),
               borderColor: primaryColor,
               backgroundColor: primaryColor + '18',
               tension: 0.3, fill: true, borderWidth: 2,
             },
             {
-              label: 'Max Risk', data: trendData.map(t => t.max_risk),
+              label: 'Peak risk', data: trendData.map(t => t.max_risk),
               borderColor: dangerColor,
               backgroundColor: dangerColor + '10',
               tension: 0.3, fill: false, borderDash: [4, 4], borderWidth: 2,
@@ -2331,6 +2362,9 @@ createApp({
               bodyColor: this.cssVar('--chart-tooltip-body'),
               borderColor: this.cssVar('--chart-tooltip-border'),
               borderWidth: 1,
+              callbacks: {
+                label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y}/100`,
+              },
             },
           },
           scales: {
@@ -2594,10 +2628,12 @@ createApp({
     async logout() {
       try {
         await apiSend('/logout', { method: 'POST' });
+        _csrfToken = null;
+        this.toasts = [];
+        window.location.replace('/login');
       } catch (e) {
+        this.showToast('Sign out failed. Please retry.', 'error');
         console.debug('[logout] failed:', e.message);
-      } finally {
-        window.location.href = '/login';
       }
     },
 

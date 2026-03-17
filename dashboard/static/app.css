@@ -362,16 +362,37 @@ html, body {
   font-size: var(--font-xs);
 }
 
-.logout-link {
+.logout-btn {
   color: var(--sidebar-text);
-  text-decoration: none;
-  opacity: 0.6;
-  transition: opacity var(--transition);
+  opacity: 0.88;
+  background: rgba(14, 30, 44, 0.9);
+  border: 1px solid rgba(90, 126, 156, 0.24);
+  border-radius: 999px;
+  transition: opacity var(--transition), border-color var(--transition), transform var(--transition), background var(--transition);
   display: flex;
   align-items: center;
-  padding: var(--space-1);
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-.logout-link:hover { opacity: 1; }
+.logout-btn:hover {
+  opacity: 1;
+  border-color: rgba(110, 216, 255, 0.42);
+  background: rgba(19, 40, 58, 0.96);
+  transform: translateY(-1px);
+}
+
+.logout-btn-icon {
+  color: var(--color-danger);
+  flex-shrink: 0;
+}
+
+.logout-btn-label {
+  white-space: nowrap;
+}
 
 /* ── Main Content ─────────────────────────────────────────── */
 
@@ -2400,7 +2421,7 @@ body::before {
   font-weight: 700;
 }
 
-.logout-link {
+.logout-btn {
   color: var(--sidebar-text);
 }
 
@@ -3396,6 +3417,7 @@ code,
   font-size: 13px;
   color: var(--color-text-secondary);
   margin-bottom: 16px;
+  max-width: 54ch;
 }
 
 .input-hint {
@@ -3662,6 +3684,18 @@ table.col-resizing * {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.signal-tile-analytics .signal-value.signal-value-wrap {
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: clip;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  max-width: 14ch;
+  font-size: clamp(18px, 1.55vw, 24px);
+  line-height: 1.08;
 }
 
 .signal-tile-analytics .signal-hint {
@@ -3990,6 +4024,12 @@ textarea {
   max-width: 480px;
 }
 
+.modal-title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .modal-header {
   padding: 16px 18px;
 }
@@ -4011,6 +4051,11 @@ textarea {
 
 .modal-body {
   padding: 18px;
+}
+
+.modal-body-form {
+  display: flex;
+  flex-direction: column;
 }
 
 .detail-grid {

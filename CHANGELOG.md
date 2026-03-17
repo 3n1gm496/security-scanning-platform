@@ -25,6 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - **Metrics, reporting, and backend parity**: Prometheus counters/gauges are now wired to real dashboard activity, scan trend charts count legacy terminal statuses correctly, SARIF/HTML exports preserve `target_name` metadata, and notification URL fallbacks now point to the actual dashboard port.
 - **Operations runtime parity**: backup/restore now respect custom report paths, preserve compatibility with historical report archives, choose container-side PostgreSQL tooling correctly for Compose-hosted `postgres`, and keep Compose DB path wiring consistent between dashboard and orchestrator.
 - **Backend notification and analytics parity**: scan completion/failure now emits the runtime webhook events already modeled by the product, notification preferences drive automatic scan summary and high/critical finding emails, and analytics/breakdown queries normalize blank target/tool labels instead of leaking empty values into the UI.
+- **Technical debt cleanup**: removed the unused standalone `dashboard/metrics.py` collector and its orphaned tests so Prometheus behavior now has a single runtime path in `dashboard/monitoring.py`.
 
 ## [1.5.1] — 2026-03-11
 

@@ -28,7 +28,7 @@ pytest -q
 ```
 
 Expected result:
-- full repository suite green from repo root (`633` tests in the current baseline)
+- full repository suite green from repo root (`627` tests in the current baseline)
 
 ### Frontend syntax check
 

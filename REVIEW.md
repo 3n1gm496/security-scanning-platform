@@ -114,17 +114,17 @@ any authenticated user can trigger XSS via HTML export download.
 - **Status:** `FULLY FIXED`
 - **Evidence:** `prometheus-client==0.24.1` in `dashboard/requirements.txt:69`.
   `dashboard/monitoring.py:11` imports Counter, Gauge, Histogram from prometheus_client.
-  `dashboard/metrics.py:12` also uses prometheus_client. `dashboard/app.py:1539` exposes
-  `/metrics` endpoint. Rate-limited paths exclude `/metrics` (line 216).
+  `dashboard/app.py:1539` exposes `/metrics` endpoint. Rate-limited paths exclude `/metrics`
+  (line 216).
 - **What changed:** Full Prometheus integration with counters, gauges, histograms.
 
 ### #10 — `app.py` god-class (62 KB+)
 - **Status:** `PARTIALLY FIXED`
 - **Evidence:** `dashboard/app.py` is now 1551 lines (down from original). Significant
   extraction has occurred: `rbac.py`, `webhooks.py`, `finding_management.py`, `pagination.py`,
-  `remediation.py`, `analytics.py`, `monitoring.py`, `metrics.py`, `export.py`, `auth.py`,
-  `db.py`, `db_adapter.py`, `notifications.py`. However, all route definitions still live in
-  `app.py` — no `APIRouter` decomposition yet.
+  `remediation.py`, `analytics.py`, `monitoring.py`, `export.py`, `auth.py`, `db.py`,
+  `db_adapter.py`, `notifications.py`. However, all route definitions still live in `app.py`
+  — no `APIRouter` decomposition yet.
 - **What changed:** Business logic extracted to modules; route registration not yet decomposed.
 
 ---

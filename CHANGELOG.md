@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - **Live refresh and chart lifecycle**: scan polling, analytics refresh, and chart motion were stabilized so the UI updates more quietly and reliably during active scan activity.
 - **Browser smoke coverage**: the end-to-end smoke flow now covers login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile navigation, with screenshots written to `artifacts/browser-smoke/`.
 - **Documentation refresh**: the README and operational docs were realigned with the current UI, CI behavior, runtime configuration, and verification workflow.
+- **Architecture and product docs**: added dedicated architecture, API, deployment, operations, and security-model documentation, and updated the Mermaid architecture source to reflect the current system shape.
 
 ### Fixed
 

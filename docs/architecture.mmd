@@ -1,41 +1,74 @@
 graph TD
-    subgraph User Interface
-        A[Web Dashboard - Vue.js] --> B{FastAPI Backend}
-    end
+    User[Operator Browser]
+    SPA[Dashboard SPA<br/>Vue + Chart.js]
+    FastAPI[FastAPI Dashboard<br/>app.py + routers]
+    Auth[Auth / RBAC / CSRF]
+    Monitoring[Health / Ready / Metrics]
+    DB[(SQLite or PostgreSQL)]
+    ScanRunner[scan_runner.py]
+    Orch[Orchestrator CLI<br/>main.py]
+    Compat[Compatibility Matrix]
+    Cache[Scanner Cache]
+    Normalizer[Normalizer]
+    Policy[Policy Engine]
+    Reports[Reports / Artifacts]
+    Notify[Email Notifications]
+    Webhooks[Webhook Delivery]
+    CI[GitHub / GitLab / External CI]
 
-    subgraph Core Services
-        B --> C[Orchestrator CLI]
-        B --> D[SQLite Database]
-    end
+    Semgrep[Semgrep]
+    Bandit[Bandit]
+    Checkov[Checkov]
+    Gitleaks[Gitleaks]
+    Trivy[Trivy]
+    Grype[Grype]
+    Syft[Syft]
+    Nuclei[Nuclei]
+    ZAP[OWASP ZAP]
 
-    subgraph Scanners
-        C --> E[Semgrep]
-        C --> F[Bandit]
-        C --> G[Gitleaks]
-        C --> H[Trivy]
-        C --> I[Checkov]
-        C --> J[Syft]
-        C --> K[Grype]
-        C --> L[Nuclei]
-        C --> M[OWASP ZAP]
-    end
+    GitTarget[Git / Local Repo]
+    UrlTarget[URL Target]
+    ImageTarget[Container Image]
 
-    subgraph Inputs
-        N[Git Repository] --> C
-        O[Docker Image] --> C
-        P[Local Filesystem] --> C
-    end
+    User --> SPA
+    SPA --> FastAPI
+    CI --> FastAPI
 
-    subgraph Outputs
-        B --> Q[JSON API]
-        B --> R[Prometheus Metrics]
-        B --> S[Email Notifications]
-    end
+    FastAPI --> Auth
+    FastAPI --> Monitoring
+    FastAPI --> DB
+    FastAPI --> ScanRunner
+    FastAPI --> Notify
+    FastAPI --> Webhooks
 
-    style A fill:#42b883,stroke:#35495e,stroke-width:2px
-    style B fill:#009688,stroke:#fff,stroke-width:2px,color:#fff
-    style C fill:#333,stroke:#fff,stroke-width:2px,color:#fff
-    style D fill:#f29111,stroke:#fff,stroke-width:2px,color:#fff
-    style N fill:#f1502f,stroke:#fff,stroke-width:2px,color:#fff
-    style O fill:#0db7ed,stroke:#fff,stroke-width:2px,color:#fff
-    style P fill:#ccc,stroke:#333,stroke-width:2px
+    ScanRunner --> Orch
+    Orch --> Compat
+    Orch --> Cache
+    Orch --> Normalizer
+    Orch --> Policy
+    Orch --> Reports
+    Orch --> DB
+
+    Orch --> GitTarget
+    Orch --> UrlTarget
+    Orch --> ImageTarget
+
+    Orch --> Semgrep
+    Orch --> Bandit
+    Orch --> Checkov
+    Orch --> Gitleaks
+    Orch --> Trivy
+    Orch --> Grype
+    Orch --> Syft
+    Orch --> Nuclei
+    Orch --> ZAP
+
+    Notify --> DB
+    Webhooks --> DB
+
+    style SPA fill:#34d5ff,stroke:#04131d,color:#04131d
+    style FastAPI fill:#0d9488,stroke:#062f2d,color:#ffffff
+    style DB fill:#f59e0b,stroke:#5b3b00,color:#111827
+    style Orch fill:#111827,stroke:#93c5fd,color:#ffffff
+    style Policy fill:#ef4444,stroke:#450a0a,color:#ffffff
+    style Reports fill:#64748b,stroke:#0f172a,color:#ffffff

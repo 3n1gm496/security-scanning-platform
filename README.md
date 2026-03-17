@@ -66,6 +66,12 @@ Compatibility is resolved centrally in `orchestrator/compatibility.py`, so incom
 
 ![Platform Architecture Diagram](docs/architecture.png)
 
+At a high level:
+- the **dashboard service** owns the FastAPI API surface, SPA delivery, auth, analytics, exports, notifications, webhooks, monitoring, and scan-trigger flow
+- the **orchestrator** prepares targets, routes compatible scanners, normalizes results, applies policy, and persists reports
+- the **database layer** stores scans, findings, triage state, audit data, keys, notification preferences, and webhook metadata
+- the **frontend** is a command-center SPA on top of those APIs, with restrained live refresh and chart lifecycle controls
+
 Repository layout, trimmed to the parts that matter most today:
 
 ```text
@@ -98,12 +104,24 @@ Repository layout, trimmed to the parts that matter most today:
 │   └── schedule_scan.sh
 ├── docs/
 │   ├── architecture.mmd
+│   ├── architecture.md
+│   ├── api-reference.md
+│   ├── deployment.md
 │   ├── development-and-verification.md
 │   ├── gitlab-integration.md
+│   ├── operations.md
+│   ├── security-model.md
 │   ├── ui-audit-matrix.md
 │   └── ui-operations-guide.md
 └── docker-compose*.yml
 ```
+
+Deep references:
+- [docs/architecture.md](docs/architecture.md)
+- [docs/api-reference.md](docs/api-reference.md)
+- [docs/deployment.md](docs/deployment.md)
+- [docs/operations.md](docs/operations.md)
+- [docs/security-model.md](docs/security-model.md)
 
 ---
 
@@ -363,6 +381,11 @@ Accepted but still present by choice:
 
 ## Documentation index
 
+- [docs/architecture.md](docs/architecture.md)
+- [docs/api-reference.md](docs/api-reference.md)
+- [docs/deployment.md](docs/deployment.md)
+- [docs/operations.md](docs/operations.md)
+- [docs/security-model.md](docs/security-model.md)
 - [docs/ui-operations-guide.md](docs/ui-operations-guide.md)
 - [docs/development-and-verification.md](docs/development-and-verification.md)
 - [docs/ui-audit-matrix.md](docs/ui-audit-matrix.md)

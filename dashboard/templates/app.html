@@ -913,7 +913,7 @@
           </div>
         </div>
         <div class="card compare-setup-card">
-          <div class="card-header"><div><span class="panel-kicker">Comparison setup</span><h2>Select scans to compare</h2></div></div>
+          <div class="card-header"><div><span class="panel-kicker">Comparison setup</span><h2>Select scans to compare</h2><p class="card-subtitle">Baseline A is the earlier reference point; B is the run you want to measure drift against.</p></div></div>
           <div class="compare-selectors">
             <div class="compare-selector-group">
               <label class="filter-label" for="compare-scan-a">Scan A (baseline)</label>
@@ -939,6 +939,18 @@
               <span v-else>Compare</span>
             </button>
           </div>
+          <div class="compare-context-inline" v-if="compareContext.scanA || compareContext.scanB">
+            <div class="compare-context-inline-card" v-if="compareContext.scanA">
+              <span class="panel-kicker">Baseline selected</span>
+              <strong>{{ compareContext.scanA.target_name }}</strong>
+              <span>Run {{ formatShortScanId(compareContext.scanA.id) }} · {{ formatDate(compareContext.scanA.created_at) }}</span>
+            </div>
+            <div class="compare-context-inline-card" v-if="compareContext.scanB">
+              <span class="panel-kicker">Comparison selected</span>
+              <strong>{{ compareContext.scanB.target_name }}</strong>
+              <span>Run {{ formatShortScanId(compareContext.scanB.id) }} · {{ formatDate(compareContext.scanB.created_at) }}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Compare results -->
@@ -947,13 +959,13 @@
             <div class="compare-context-card">
               <span class="panel-kicker">Baseline</span>
               <strong>{{ compareResult.scan_1.target_name }}</strong>
-              <span>{{ formatDate(compareResult.scan_1.created_at) }}</span>
+              <span>Run {{ formatShortScanId(compareResult.scan_1.id) }} · {{ formatDate(compareResult.scan_1.created_at) }}</span>
             </div>
             <div class="compare-context-divider">A/B</div>
             <div class="compare-context-card">
               <span class="panel-kicker">Comparison</span>
               <strong>{{ compareResult.scan_2.target_name }}</strong>
-              <span>{{ formatDate(compareResult.scan_2.created_at) }}</span>
+              <span>Run {{ formatShortScanId(compareResult.scan_2.id) }} · {{ formatDate(compareResult.scan_2.created_at) }}</span>
             </div>
           </div>
           <div class="compare-summary-grid">
@@ -974,6 +986,19 @@
             </div>
           </div>
 
+          <div class="card compare-severity-card" v-if="compareSeveritySummary.length > 0">
+            <div class="card-header">
+              <div><span class="panel-kicker">Severity drift</span><h2>Change by severity</h2><p class="card-subtitle">Quick view of which severities entered or left the comparison window.</p></div>
+            </div>
+            <div class="compare-severity-grid">
+              <div v-for="item in compareSeveritySummary" :key="item.severity" class="compare-severity-row">
+                <span class="severity-badge" :class="'sev-' + item.severity.toLowerCase()">{{ item.severity }}</span>
+                <span class="compare-severity-delta compare-severity-new">+{{ item.newCount }} new</span>
+                <span class="compare-severity-delta compare-severity-resolved">-{{ item.resolvedCount }} resolved</span>
+              </div>
+            </div>
+          </div>
+
           <div v-if="compareResult.new_findings.length === 0 && compareResult.resolved_findings.length === 0" class="card compare-no-diff-card">
             <div class="card-header">
               <div><span class="panel-kicker">Diff result</span><h2>No drift detected</h2></div>
@@ -987,7 +1012,7 @@
           <!-- New findings table -->
           <div class="card" v-if="compareResult.new_findings.length > 0">
             <div class="card-header">
-              <div><span class="panel-kicker">Diff result</span><h2>New findings <span class="count-badge count-badge-danger">{{ compareResult.new_findings.length }}</span></h2></div>
+              <div><span class="panel-kicker">Diff result</span><h2>New findings <span class="count-badge count-badge-danger">{{ compareResult.new_findings.length }}</span></h2><p class="card-subtitle">Findings present in the comparison scan but absent from the baseline.</p></div>
             </div>
             <div class="table-wrap">
               <table class="soc-table">
@@ -1007,7 +1032,7 @@
           <!-- Resolved findings table -->
           <div class="card" v-if="compareResult.resolved_findings.length > 0">
             <div class="card-header">
-              <div><span class="panel-kicker">Diff result</span><h2>Resolved findings <span class="count-badge count-badge-success">{{ compareResult.resolved_findings.length }}</span></h2></div>
+              <div><span class="panel-kicker">Diff result</span><h2>Resolved findings <span class="count-badge count-badge-success">{{ compareResult.resolved_findings.length }}</span></h2><p class="card-subtitle">Findings present in the baseline that no longer appear in the comparison scan.</p></div>
             </div>
             <div class="table-wrap">
               <table class="soc-table">

@@ -84,6 +84,10 @@ async function clickNav(page, label) {
   await page.waitForTimeout(900);
 }
 
+function topbarRefreshButton(page) {
+  return page.locator(".topbar-right > button.btn-secondary").filter({ hasText: "Refresh" }).first();
+}
+
 async function ensureCompareSelection(page) {
   const pair = await page.evaluate(() => {
     const selectA = document.querySelector("#compare-scan-a");
@@ -390,21 +394,21 @@ async function main() {
 
       insertFreshRuntimeScan();
       const dbCountAfterInsert = readDbScanCount();
-      await clickNav(page, "Dashboard");
-      await page.waitForTimeout(1000);
-      let refreshTriggeredKpiRequest = false;
-      try {
-        await Promise.all([
-          page.waitForResponse(
-            (res) => res.url().startsWith(`${baseUrl}/api/kpi`) && res.status() < 400,
-            { timeout: 5000 },
-          ),
-          page.getByRole("button", { name: "Refresh" }).first().click(),
-        ]);
-        refreshTriggeredKpiRequest = true;
-      } catch (_) {
-        await page.getByRole("button", { name: "Refresh" }).first().click();
-      }
+        await clickNav(page, "Dashboard");
+        await page.waitForTimeout(1000);
+        let refreshTriggeredKpiRequest = false;
+        try {
+          await Promise.all([
+            page.waitForResponse(
+              (res) => res.url().startsWith(`${baseUrl}/api/kpi`) && res.status() < 400,
+              { timeout: 5000 },
+            ),
+            topbarRefreshButton(page).click(),
+          ]);
+          refreshTriggeredKpiRequest = true;
+        } catch (_) {
+          await topbarRefreshButton(page).click();
+        }
 
       const expected = totalScansBefore + 1;
       const timeoutAt = Date.now() + 10000;

@@ -165,6 +165,7 @@ createApp({
       hasPendingFindingUpdates: false,
       scanLiveMessage: '',
       findingsLiveMessage: '',
+      _kpiRefreshSeq: 0,
 
       // ── Dashboard data
       kpis: init.kpis || {},
@@ -454,6 +455,15 @@ createApp({
       const scanA = this.compareScanList.find(s => s.id === this.compareIdA);
       const scanB = this.compareScanList.find(s => s.id === this.compareIdB);
       return { scanA, scanB };
+    },
+    compareSeveritySummary() {
+      if (!this.compareResult) return [];
+      const severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
+      return severities.map((severity) => ({
+        severity,
+        newCount: Number(this.compareResult.new_by_severity?.[severity] || 0),
+        resolvedCount: Number(this.compareResult.resolved_by_severity?.[severity] || 0),
+      })).filter((item) => item.newCount > 0 || item.resolvedCount > 0);
     },
     findingsTableHasLongValues() {
       return this.findings.some((finding) => {
@@ -806,8 +816,11 @@ createApp({
     async refreshKpis(force = false) {
       const now = Date.now();
       if (!force && now - this._lastKpiRefreshAt < 20000) return false;
+      const refreshSeq = ++this._kpiRefreshSeq;
       try {
-        this.kpis = await apiFetch('/api/kpi');
+        const nextKpis = await apiFetch('/api/kpi');
+        if (refreshSeq !== this._kpiRefreshSeq) return false;
+        this.kpis = nextKpis;
         this._lastKpiRefreshAt = now;
         return true;
       } catch (e) {
@@ -973,21 +986,60 @@ createApp({
     },
 
     async refreshCurrentPage() {
-      if (this.currentPage !== 'dashboard') {
-        try {
-          this.kpis = await apiFetch('/api/kpi');
-        } catch (e) {
-          console.debug('[refreshCurrentPage] KPI refresh failed:', e.message);
-        }
+      if (this.currentPage === 'dashboard') {
+        await this.refreshDashboardData();
+        await nextTick();
+        await this.initDashboardCharts('user-change');
+        return;
       }
+
+      try {
+        this.kpis = await apiFetch('/api/kpi');
+      } catch (e) {
+        console.debug('[refreshCurrentPage] KPI refresh failed:', e.message);
+      }
+
+      if (this.currentPage === 'scans') {
+        await this.loadScans(false, true);
+        return;
+      }
+
+      if (this.currentPage === 'findings') {
+        await this.loadFindings(false, true);
+        return;
+      }
+
+      if (this.currentPage === 'analytics') {
+        await this.loadAnalytics('user-change');
+        return;
+      }
+
+      if (this.currentPage === 'settings') {
+        if (this.settingsTab === 'apikeys') {
+          await this.loadApiKeys();
+        } else if (this.settingsTab === 'webhooks') {
+          await this.loadWebhooks();
+        } else if (this.settingsTab === 'notifications') {
+          await this.loadNotificationPrefs();
+        }
+        return;
+      }
+
+      if (this.currentPage === 'compare') {
+        await this.loadCompareScanList();
+        return;
+      }
+
       await this.navigate(this.currentPage, { force: true });
     },
 
     async refreshDashboardData() {
+      const refreshSeq = ++this._kpiRefreshSeq;
       const [kpiRes, scansRes] = await Promise.allSettled([
         apiFetch('/api/kpi'),
         apiFetch('/api/scans/paginated?per_page=12&sort_by=created_at&sort_order=DESC'),
       ]);
+      if (refreshSeq !== this._kpiRefreshSeq) return;
       if (kpiRes.status === 'fulfilled') {
         this.kpis = kpiRes.value || {};
       } else {
@@ -2502,6 +2554,11 @@ createApp({
     formatModalTarget(target) {
       const text = String(target || '—');
       return text.length > 54 ? text.slice(0, 52) + '…' : text;
+    },
+
+    formatShortScanId(scanId) {
+      const text = String(scanId || '');
+      return text.length > 12 ? text.slice(0, 12) + '…' : text || '—';
     },
 
     // ── Compare ───────────────────────────────────────────────────────────────

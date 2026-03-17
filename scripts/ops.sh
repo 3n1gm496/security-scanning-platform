@@ -6,12 +6,12 @@ cd "${ROOT_DIR}"
 
 COMPOSE="docker compose"
 DATA_DIR="${ROOT_DIR}/data"
-DB_FILE="${DATA_DIR}/security_scans.db"
+DB_FILE="${DASHBOARD_DB_PATH:-${DATA_DIR}/security_scans.db}"
 DATABASE_URL="${DATABASE_URL:-}"
-REPORTS_DIR="${DATA_DIR}/reports"
-WORKSPACES_DIR="${DATA_DIR}/workspaces"
-CACHE_DIR="${DATA_DIR}/cache"
-TRIVY_CACHE_DIR="${CACHE_DIR}/trivy"
+REPORTS_DIR="${REPORTS_DIR:-${DATA_DIR}/reports}"
+WORKSPACES_DIR="${WORKSPACE_DIR:-${DATA_DIR}/workspaces}"
+CACHE_DIR="${CACHE_DIR:-${DATA_DIR}/cache}"
+TRIVY_CACHE_DIR="${TRIVY_CACHE_DIR:-${CACHE_DIR}/trivy}"
 BACKUP_DIR="${DATA_DIR}/backups"
 TMP_DIR="${DATA_DIR}/tmp"
 
@@ -414,7 +414,7 @@ cmd_health() {
 
   # /health endpoint
   local health_body health_code
-  health_body="$(curl -sS -w '\n%{http_code}' "${url}/health" 2>/dev/null || echo '{}'$'\n000')"
+  health_body="$(curl -sS -w '\n%{http_code}' "${url}/api/health" 2>/dev/null || echo '{}'$'\n000')"
   health_code="$(echo "${health_body}" | tail -n1)"
   if [[ "${health_code}" == "200" ]]; then
     info "  /health    HTTP ${health_code} OK"
@@ -425,7 +425,7 @@ cmd_health() {
 
   # /ready endpoint
   local ready_code
-  ready_code="$(curl -sS -o /dev/null -w "%{http_code}" "${url}/ready" 2>/dev/null || echo "000")"
+  ready_code="$(curl -sS -o /dev/null -w "%{http_code}" "${url}/api/ready" 2>/dev/null || echo "000")"
   if [[ "${ready_code}" == "200" ]]; then
     info "  /ready     HTTP ${ready_code} OK"
   else
@@ -758,7 +758,12 @@ cmd_backup() {
       info "DB backup (PostgreSQL via container): ${db_backup}.sql"
     fi
   elif [[ -f "${DB_FILE}" ]]; then
-    cp "${DB_FILE}" "${db_backup}"
+    if command -v sqlite3 &>/dev/null; then
+      sqlite3 "${DB_FILE}" ".backup '${db_backup}'"
+    else
+      warn "sqlite3 non trovato, uso copia file semplice per il backup SQLite"
+      cp "${DB_FILE}" "${db_backup}"
+    fi
     info "DB backup (SQLite): ${db_backup}"
   else
     warn "DB non trovato: ${DB_FILE}"
@@ -774,9 +779,11 @@ cmd_retention() {
   [[ "${days}" =~ ^[0-9]+$ ]] || die "Il parametro days deve essere numerico"
 
   header "Retention cleanup"
-  info "Cancello report più vecchi di ${days} giorni"
-  find "${REPORTS_DIR}" -mindepth 1 -maxdepth 1 -type d -mtime "+${days}" -exec rm -rf {} \; || true
-  info "Cleanup completato"
+  info "Cancello report, workspace e cache più vecchi di ${days} giorni"
+  find "${REPORTS_DIR}" -mindepth 1 -maxdepth 1 -mtime "+${days}" -exec rm -rf {} + || true
+  find "${WORKSPACES_DIR}" -mindepth 1 -maxdepth 1 -mtime "+${days}" -exec rm -rf {} + || true
+  find "${TRIVY_CACHE_DIR}" -mindepth 1 -maxdepth 1 -mtime "+${days}" -exec rm -rf {} + || true
+  info "Cleanup completato su reports/workspaces/cache"
 }
 
 cmd_cache_clear_trivy() {

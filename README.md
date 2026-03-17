@@ -372,6 +372,7 @@ Useful commands:
 ./scripts/ops.sh health
 ./scripts/ops.sh scan demo
 ./scripts/ops.sh backup
+RESTORE_YES=1 ./scripts/restore.sh data/backups/<archive>.tar.gz
 ./scripts/ops.sh retention --days 30
 ./scripts/ops.sh api-key list
 ```

@@ -42,6 +42,7 @@ Scans:
 
 Maintenance:
 - `./scripts/ops.sh backup`
+- `RESTORE_YES=1 ./scripts/restore.sh data/backups/<archive>.tar.gz`
 - `./scripts/ops.sh retention --days 30`
 - `./scripts/ops.sh cache clear-trivy`
 
@@ -78,9 +79,26 @@ The project provides:
 This backs up:
 - the SQLite database, or a PostgreSQL dump when PostgreSQL is active
 - report artifacts as a tarball
+- the tracked config directory
+
+Behavior details:
+- SQLite backups prefer `sqlite3 .backup` for a consistent live snapshot and fall back to plain copy only if `sqlite3` is unavailable
+- the scripts honor `DASHBOARD_DB_PATH` when the dashboard DB lives outside the default `/data/security_scans.db`
 
 Backup destination:
 - `${DATA_DIR}/backups`
+
+Restore:
+
+```bash
+RESTORE_YES=1 ./scripts/restore.sh data/backups/<archive>.tar.gz
+```
+
+Restore behavior:
+- stops the Compose stack before applying data
+- restores the configured SQLite path or PostgreSQL dump
+- replaces the current reports directory before extracting the archived one
+- restores config contents without creating nested `config/config` paths
 
 ---
 
@@ -91,6 +109,11 @@ Backup destination:
 ```
 
 Use this to trim historical data and keep storage bounded.
+
+Current `ops.sh retention` cleanup scope:
+- reports
+- workspaces
+- Trivy cache
 
 Retention policy behavior depends on configuration and current data layout, so validate the resulting reports and backup posture before using aggressive values.
 

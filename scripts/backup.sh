@@ -3,7 +3,7 @@
 # backup.sh — Back up the Security Scanning Platform database and reports.
 #
 # Usage:
-#   ./scripts/backup.sh                          # default: backs up to ./backups/
+#   ./scripts/backup.sh                          # default: backs up to ./data/backups/
 #   ./scripts/backup.sh /mnt/backups             # custom destination
 #   BACKUP_RETAIN_DAYS=30 ./scripts/backup.sh    # auto-prune backups older than 30 days
 #
@@ -14,7 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BACKUP_DIR="${1:-${BACKUP_DIR:-$PROJECT_ROOT/backups}}"
+BACKUP_DIR="${1:-${BACKUP_DIR:-$PROJECT_ROOT/data/backups}}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_NAME="ssp-backup-${TIMESTAMP}"
 BACKUP_PATH="${BACKUP_DIR}/${BACKUP_NAME}"
@@ -23,8 +23,8 @@ INCLUDE_DOT_ENV="${BACKUP_INCLUDE_DOT_ENV:-0}"
 
 # Paths
 DATA_DIR="${PROJECT_ROOT}/data"
-DB_FILE="${DATA_DIR}/security_scans.db"
-REPORTS_DIR="${DATA_DIR}/reports"
+DB_FILE="${DASHBOARD_DB_PATH:-${DATA_DIR}/security_scans.db}"
+REPORTS_DIR="${REPORTS_DIR:-${DATA_DIR}/reports}"
 
 # PostgreSQL env vars (from .env or environment)
 PG_URL="${DATABASE_URL:-}"
@@ -47,15 +47,24 @@ if [ -n "${PG_URL}" ]; then
         echo "[db] PostgreSQL dump saved: database.pgdump ($(du -h "${BACKUP_PATH}/database.pgdump" | cut -f1))"
     else
         echo "[db] WARNING: pg_dump not found — attempting via docker..."
-        docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T postgres \
-            pg_dump -U "${PG_USER}" -Fc "${PG_DB}" > "${BACKUP_PATH}/database.pgdump" 2>/dev/null \
-            && echo "[db] PostgreSQL dump saved via docker" \
-            || echo "[db] ERROR: Could not dump PostgreSQL database"
+        if docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T postgres \
+            pg_dump -U "${PG_USER}" -Fc "${PG_DB}" > "${BACKUP_PATH}/database.pgdump" 2>/dev/null; then
+            echo "[db] PostgreSQL dump saved via docker"
+        else
+            rm -f "${BACKUP_PATH}/database.pgdump"
+            echo "[db] ERROR: Could not dump PostgreSQL database" >&2
+            exit 1
+        fi
     fi
 elif [ -f "${DB_FILE}" ]; then
     echo "[db] SQLite detected — creating online backup..."
-    # Use .backup command for a consistent snapshot (safe even while the app is running)
-    sqlite3 "${DB_FILE}" ".backup '${BACKUP_PATH}/security_scans.db'" 2>&1
+    if command -v sqlite3 >/dev/null 2>&1; then
+        # Use .backup command for a consistent snapshot (safe even while the app is running)
+        sqlite3 "${DB_FILE}" ".backup '${BACKUP_PATH}/security_scans.db'" 2>&1
+    else
+        echo "[db] WARNING: sqlite3 not found — falling back to plain file copy"
+        cp "${DB_FILE}" "${BACKUP_PATH}/security_scans.db"
+    fi
     echo "[db] SQLite backup saved: security_scans.db ($(du -h "${BACKUP_PATH}/security_scans.db" | cut -f1))"
 else
     echo "[db] WARNING: No database found at ${DB_FILE} and DATABASE_URL is not set"

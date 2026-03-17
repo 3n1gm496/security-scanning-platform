@@ -25,7 +25,7 @@ if [ -z "${BACKUP_ARCHIVE}" ]; then
     echo "Usage: $0 <backup-archive.tar.gz>"
     echo ""
     echo "Available backups:"
-    ls -lhrt "${PROJECT_ROOT}/backups"/ssp-backup-*.tar.gz 2>/dev/null || echo "  (none found in ./backups/)"
+    ls -lhrt "${PROJECT_ROOT}/data/backups"/ssp-backup-*.tar.gz 2>/dev/null || echo "  (none found in ./data/backups/)"
     exit 1
 fi
 
@@ -35,7 +35,7 @@ if [ ! -f "${BACKUP_ARCHIVE}" ]; then
 fi
 
 DATA_DIR="${PROJECT_ROOT}/data"
-DB_FILE="${DATA_DIR}/security_scans.db"
+DB_FILE="${DASHBOARD_DB_PATH:-${DATA_DIR}/security_scans.db}"
 PG_URL="${DATABASE_URL:-}"
 PG_USER="${POSTGRES_USER:-security}"
 PG_DB="${POSTGRES_DB:-security_scans}"
@@ -83,19 +83,19 @@ if [ -f "${RESTORE_DIR}/database.pgdump" ] && [ -n "${PG_URL}" ]; then
         # Start only postgres for the restore
         docker compose up -d postgres 2>/dev/null || true
         sleep 3
-        pg_restore --clean --if-exists --no-owner -d "${PG_URL}" "${RESTORE_DIR}/database.pgdump" 2>&1 || true
+        pg_restore --clean --if-exists --no-owner -d "${PG_URL}" "${RESTORE_DIR}/database.pgdump" 2>&1
         echo "[db] PostgreSQL restored"
     else
         echo "[db] WARNING: pg_restore not found — attempting via docker..."
         docker compose up -d postgres 2>/dev/null || true
         sleep 3
         docker compose exec -T postgres pg_restore --clean --if-exists --no-owner \
-            -U "${PG_USER}" -d "${PG_DB}" < "${RESTORE_DIR}/database.pgdump" 2>/dev/null || true
+            -U "${PG_USER}" -d "${PG_DB}" < "${RESTORE_DIR}/database.pgdump" 2>/dev/null
         echo "[db] PostgreSQL restored via docker"
     fi
 elif [ -f "${RESTORE_DIR}/security_scans.db" ]; then
     echo "[db] Restoring SQLite database..."
-    mkdir -p "${DATA_DIR}"
+    mkdir -p "$(dirname "${DB_FILE}")"
     cp "${RESTORE_DIR}/security_scans.db" "${DB_FILE}"
     echo "[db] SQLite restored: $(du -h "${DB_FILE}" | cut -f1)"
 else
@@ -107,6 +107,7 @@ fi
 if [ -f "${RESTORE_DIR}/reports.tar.gz" ]; then
     echo "[reports] Restoring reports..."
     mkdir -p "${DATA_DIR}"
+    rm -rf "${DATA_DIR}/reports"
     tar -xzf "${RESTORE_DIR}/reports.tar.gz" -C "${DATA_DIR}"
     echo "[reports] Reports restored"
 else
@@ -117,7 +118,8 @@ fi
 
 if [ -d "${RESTORE_DIR}/config" ]; then
     echo "[config] Restoring configuration..."
-    cp -r "${RESTORE_DIR}/config" "${PROJECT_ROOT}/config"
+    mkdir -p "${PROJECT_ROOT}/config"
+    cp -a "${RESTORE_DIR}/config/." "${PROJECT_ROOT}/config/"
     echo "[config] Configuration restored"
 fi
 

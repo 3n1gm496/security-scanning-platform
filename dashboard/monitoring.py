@@ -184,17 +184,12 @@ async def readiness_check(response: Response) -> ReadinessResponse:
 
     # Check database connectivity
     try:
-        from pathlib import Path
+        from db import get_connection
 
         db_path = os.getenv("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
-        if Path(db_path).exists():
-            checks["database"] = {"status": "ok", "exists": True}
-        else:
-            checks["database"] = {
-                "status": "warning",
-                "exists": False,
-                "message": "Database will be created on first scan",
-            }
+        with get_connection(db_path) as conn:
+            conn.execute("SELECT 1")
+        checks["database"] = {"status": "ok", "path": db_path}
     except Exception as e:
         checks["database"] = {"status": "error", "error": str(e)}
         all_ready = False
@@ -264,6 +259,8 @@ async def prometheus_metrics(auth: AuthContext = Depends(require_auth)) -> Respo
 
         with get_connection(db_path) as conn:
             rows = conn.execute("SELECT severity, COUNT(*) AS cnt FROM findings GROUP BY severity").fetchall()
+        if hasattr(SSP_FINDINGS_TOTAL, "clear"):
+            SSP_FINDINGS_TOTAL.clear()
         for row in rows:
             SSP_FINDINGS_TOTAL.labels(severity=row["severity"]).set(row["cnt"])
     except Exception:

@@ -196,6 +196,7 @@ class FindingsPaginator:
         sort_by = _col_alias.get(sort_by, sort_by)
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "id"
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
+        has_cwe_column = self._findings_has_cwe_column(conn)
 
         use_status_join = status_filter is not None
         where_clauses, params = self._build_findings_filters(
@@ -205,6 +206,7 @@ class FindingsPaginator:
             scan_id=scan_id,
             status_filter=status_filter,
             target_filter=target_filter,
+            has_cwe_column=has_cwe_column,
         )
 
         # Cursor — use table-qualified column when JOIN is active
@@ -222,7 +224,8 @@ class FindingsPaginator:
             query = _join_sql_clauses(
                 (
                     "SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,"
-                    " f.line, f.tool, f.cve, f.fingerprint, f.timestamp,"
+                    f" f.line, f.tool, f.cve, {'f.cwe' if has_cwe_column else 'NULL AS cwe'},"
+                    " f.fingerprint, f.timestamp,"
                     " f.target_name, COALESCE(fs.status, 'open') AS triage_status"
                 ),
                 "FROM findings f",
@@ -235,7 +238,7 @@ class FindingsPaginator:
             # Standard query without JOIN
             query = _join_sql_clauses(
                 "SELECT id, scan_id, title, description, severity, file,",
-                "line, tool, cve, fingerprint, timestamp, target_name",
+                f"line, tool, cve, {'cwe' if has_cwe_column else 'NULL AS cwe'}, fingerprint, timestamp, target_name",
                 "FROM findings",
                 f"WHERE {where_sql}",
                 f"ORDER BY {safe_sort_by} {safe_sort_order}",
@@ -251,6 +254,7 @@ class FindingsPaginator:
             scan_id=scan_id,
             status_filter=status_filter,
             target_filter=target_filter,
+            has_cwe_column=has_cwe_column,
         )
         count_where = " AND ".join(count_clauses)
         if use_status_join:
@@ -306,6 +310,7 @@ class FindingsPaginator:
         scan_id: str | None = None,
         status_filter: str | None = None,
         target_filter: str | None = None,
+        has_cwe_column: bool = True,
     ) -> tuple[list[str], list[Any]]:
         """Build findings WHERE clauses and parameters once for data/count queries."""
         where_clauses = ["1=1"]
@@ -313,8 +318,12 @@ class FindingsPaginator:
 
         if search:
             search_param = f"%{search}%"
-            where_clauses.append("(title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)")
-            params.extend([search_param] * 4)
+            if has_cwe_column:
+                where_clauses.append("(title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ? OR cwe LIKE ?)")
+                params.extend([search_param] * 5)
+            else:
+                where_clauses.append("(title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)")
+                params.extend([search_param] * 4)
 
         if severity_filter:
             placeholders = ",".join(["?"] * len(severity_filter))
@@ -339,6 +348,14 @@ class FindingsPaginator:
             params.append(status_filter)
 
         return where_clauses, params
+
+    @staticmethod
+    def _findings_has_cwe_column(conn: Any) -> bool:
+        try:
+            rows = conn.execute("PRAGMA table_info(findings)").fetchall()
+        except Exception:
+            return True
+        return any(row["name"] == "cwe" for row in rows)
 
     @staticmethod
     def _encode_cursor(value: str) -> str:

@@ -301,7 +301,7 @@ class ChartingEngine:
                 cve,
                 COUNT(*) as count
             FROM findings
-            WHERE cve IS NOT NULL AND cve != ''
+            WHERE cve IS NOT NULL AND cve != '' AND UPPER(cve) LIKE 'CVE-%'
             GROUP BY cve
             ORDER BY count DESC
             LIMIT 15

@@ -130,18 +130,8 @@ class PolicyEngine:
                 # false positives (e.g. "CWE-22" must not match "CWE-220").
                 if exemption.get("cwe") and exemption.get("target_pattern"):
                     pattern = r"(?<!\w)" + re.escape(str(exemption["cwe"])) + r"(?!\w)"
-                    cwe_candidates: list[str] = []
                     explicit_cwe = finding.get("cwe")
-                    if explicit_cwe:
-                        cwe_candidates.append(str(explicit_cwe))
-
-                    # Backward compatibility: some normalizers still store CWE IDs
-                    # in the cve field. Only consider explicit CWE-like tokens.
-                    legacy_cve = finding.get("cve")
-                    if legacy_cve:
-                        cwe_candidates.extend(re.findall(r"CWE-\d+", str(legacy_cve), flags=re.IGNORECASE))
-
-                    cwe_match = any(re.search(pattern, candidate, flags=re.IGNORECASE) for candidate in cwe_candidates)
+                    cwe_match = bool(explicit_cwe and re.search(pattern, str(explicit_cwe), flags=re.IGNORECASE))
                     target_match = fnmatch.fnmatch(target_name, exemption["target_pattern"])
                     if cwe_match and target_match:
                         is_exempted = True

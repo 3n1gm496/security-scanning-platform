@@ -84,6 +84,7 @@ class Finding:
     package: str | None = None
     version: str | None = None
     cve: str | None = None
+    cwe: str | None = None
     remediation: str | None = None
     raw_reference: str | None = None
     fingerprint: str | None = None

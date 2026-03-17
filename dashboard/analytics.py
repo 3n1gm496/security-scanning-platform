@@ -6,9 +6,11 @@ trend analysis, and report generation capabilities.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from common.schema import extract_cwe_values
 from db import get_connection
 
 # Taxonomy label for findings, not a credential.
@@ -329,7 +331,7 @@ def get_compliance_summary(db_path: str) -> dict[str, Any]:
     cwe_query_template = """
         SELECT mapped_cwe AS cwe, COUNT(*) AS count
         FROM (
-            SELECT __CWE_CASE__ AS mapped_cwe
+            SELECT __MAPPED_CWE_EXPR__ AS mapped_cwe
             FROM findings
         ) mapped
         WHERE mapped_cwe IS NOT NULL
@@ -342,20 +344,45 @@ def get_compliance_summary(db_path: str) -> dict[str, Any]:
             COALESCE(SUM(CASE WHEN __OWASP_CASE__ IS NULL THEN 1 ELSE 0 END), 0) AS unmapped_findings
         FROM findings
         """
-    owasp_query = owasp_query_template.replace("__OWASP_CASE__", owasp_case)
-    cwe_query = cwe_query_template.replace("__CWE_CASE__", cwe_case)
-    totals_query = totals_query_template.replace("__OWASP_CASE__", owasp_case)
     with get_connection(db_path) as conn:
+        has_cwe_column = _findings_has_cwe_column(conn)
+        mapped_cwe_expr = (
+            f"CASE WHEN COALESCE(cwe, '') <> '' THEN NULL ELSE {cwe_case} END" if has_cwe_column else cwe_case
+        )
+        owasp_query = owasp_query_template.replace("__OWASP_CASE__", owasp_case)
+        cwe_query = cwe_query_template.replace("__MAPPED_CWE_EXPR__", mapped_cwe_expr)
+        totals_query = totals_query_template.replace("__OWASP_CASE__", owasp_case)
         owasp_rows = conn.execute(owasp_query).fetchall()
         cwe_rows = conn.execute(cwe_query).fetchall()
+        explicit_cwe_rows = (
+            conn.execute("SELECT cwe FROM findings WHERE cwe IS NOT NULL AND cwe != ''").fetchall()
+            if has_cwe_column
+            else []
+        )
         totals = conn.execute(totals_query).fetchone()
+
+    cwe_counts: Counter[str] = Counter()
+    for row in explicit_cwe_rows:
+        for cwe in extract_cwe_values(row["cwe"]):
+            cwe_counts[cwe] += 1
+    for row in cwe_rows:
+        cwe_counts[row["cwe"]] += int(row["count"])
 
     return {
         "owasp_top_10": [{"category": row["category"], "count": row["count"]} for row in owasp_rows],
-        "cwe_top": [{"cwe": row["cwe"], "count": row["count"]} for row in cwe_rows[:20]],
+        "cwe_top": [{"cwe": cwe, "count": count} for cwe, count in cwe_counts.most_common(20)],
         "unmapped_findings": int(totals["unmapped_findings"]),
         "total_findings": int(totals["total_findings"]),
     }
+
+
+def _findings_has_cwe_column(conn: Any) -> bool:
+    """Return True when the findings table already exposes the cwe column."""
+    try:
+        rows = conn.execute("PRAGMA table_info(findings)").fetchall()
+    except Exception:
+        return True
+    return any(row["name"] == "cwe" for row in rows)
 
 
 def get_trend_analysis(db_path: str, days: int = 90) -> dict[str, Any]:

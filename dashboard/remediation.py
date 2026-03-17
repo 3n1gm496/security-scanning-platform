@@ -177,10 +177,11 @@ icmplib.ping(user_input, count=4)
         title = finding.get("title", "")
         description = finding.get("description", "")
         cve = finding.get("cve", "")
+        explicit_cwe = finding.get("cwe", "")
 
         # Extract CWE from various fields
         cwe = None
-        for field in [cve, title, description, category]:
+        for field in [explicit_cwe, cve, title, description, category]:
             if field and "CWE-" in str(field).upper():
                 match = re.search(r"CWE-(\d+)", str(field).upper())
                 if match:

@@ -74,7 +74,7 @@ def test_exemption_by_fingerprint():
 
 def test_exemption_by_cwe_and_target_pattern():
     engine = PolicyEngine(_engine_config())
-    findings = [{"severity": "CRITICAL", "fingerprint": "fp1", "cve": "CWE-79"}]
+    findings = [{"severity": "CRITICAL", "fingerprint": "fp1", "cwe": "CWE-79"}]
     result = engine.evaluate(findings, target_name="dev-service", target_type="git")
     assert result["status"] == "PASS"
     assert result["exempted_count"] == 1
@@ -172,15 +172,15 @@ class TestCweWordBoundaryMatch:
 
     def test_cwe_exact_match_is_exempt(self):
         engine = PolicyEngine(self._config_with_cwe("CWE-22"))
-        findings = [{"severity": "HIGH", "fingerprint": "fp1", "cve": "CWE-22"}]
+        findings = [{"severity": "HIGH", "fingerprint": "fp1", "cwe": "CWE-22"}]
         result = engine.evaluate(findings, target_name="dev-svc", target_type="git")
         assert result["exempted_count"] == 1
         assert result["status"] == "PASS"
 
     def test_cwe_substring_is_not_exempt(self):
-        """CWE-22 must NOT exempt a finding whose cve field contains CWE-220."""
+        """CWE-22 must NOT exempt a finding whose cwe field contains CWE-220."""
         engine = PolicyEngine(self._config_with_cwe("CWE-22"))
-        findings = [{"severity": "HIGH", "fingerprint": "fp2", "cve": "CWE-220"}]
+        findings = [{"severity": "HIGH", "fingerprint": "fp2", "cwe": "CWE-220"}]
         result = engine.evaluate(findings, target_name="dev-svc", target_type="git")
         assert result["exempted_count"] == 0
         assert result["status"] == "BLOCK"
@@ -188,7 +188,7 @@ class TestCweWordBoundaryMatch:
     def test_cwe_prefix_is_not_exempt(self):
         """CWE-7 must NOT match CWE-79."""
         engine = PolicyEngine(self._config_with_cwe("CWE-7"))
-        findings = [{"severity": "HIGH", "fingerprint": "fp3", "cve": "CWE-79"}]
+        findings = [{"severity": "HIGH", "fingerprint": "fp3", "cwe": "CWE-79"}]
         result = engine.evaluate(findings, target_name="dev-svc", target_type="git")
         assert result["exempted_count"] == 0
         assert result["status"] == "BLOCK"
@@ -196,7 +196,7 @@ class TestCweWordBoundaryMatch:
     def test_cwe_match_in_comma_separated_list(self):
         """CWE-22 should match when it appears as one of multiple values."""
         engine = PolicyEngine(self._config_with_cwe("CWE-22"))
-        findings = [{"severity": "HIGH", "fingerprint": "fp4", "cve": "CWE-22,CWE-35"}]
+        findings = [{"severity": "HIGH", "fingerprint": "fp4", "cwe": "CWE-22,CWE-35"}]
         result = engine.evaluate(findings, target_name="dev-svc", target_type="git")
         assert result["exempted_count"] == 1
 

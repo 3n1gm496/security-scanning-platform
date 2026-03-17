@@ -70,6 +70,7 @@ class EmailNotificationEngine:
         file_path = finding.get("file") or finding.get("file_path") or "N/A"
         line_number = finding.get("line") or finding.get("line_number") or "N/A"
         cve_id = finding.get("cve") or finding.get("cve_id") or "N/A"
+        cwe_id = finding.get("cwe") or finding.get("cwe_id") or None
         finding_url = html_escape(f"{base_url}{_finding_dashboard_path(finding)}")
         settings_url = html_escape(f"{base_url}/#settings")
 
@@ -78,6 +79,7 @@ class EmailNotificationEngine:
         file_path_html = html_escape(str(file_path))
         line_number_html = html_escape(str(line_number))
         cve_id_html = html_escape(str(cve_id))
+        cwe_id_html = html_escape(str(cwe_id)) if cwe_id else None
 
         html_body = f"""
         <html>
@@ -97,6 +99,7 @@ class EmailNotificationEngine:
                 <ul>
                     <li>Tool: {e.get('tool', 'N/A')}</li>
                     <li>CVE: {cve_id_html}</li>
+                    {f"<li>CWE: {cwe_id_html}</li>" if cwe_id_html else ""}
                     <li>Fingerprint: {e.get('fingerprint', 'N/A')}</li>
                 </ul>
 
@@ -132,6 +135,7 @@ class EmailNotificationEngine:
         Details:
         Tool: {finding.get('tool', 'N/A')}
         CVE: {cve_id}
+        {f"CWE: {cwe_id}" if cwe_id else ""}
 
         View in dashboard: {base_url}{_finding_dashboard_path(finding)}
         Manage notification preferences: {base_url}/#settings

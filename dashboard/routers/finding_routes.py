@@ -91,7 +91,7 @@ async def paginate_findings(
     """Get paginated findings with cursor-based pagination.
 
     Query Parameters:
-    - search: Full-text search across title, description, file_path, cve_id
+    - search: Full-text search across title, description, file_path, cve_id/CWE
     - severity: Comma-separated list of severities (CRITICAL,HIGH,MEDIUM,LOW)
     - tool: Comma-separated list of tools (semgrep,bandit,nuclei,etc)
     - target: Filter by target name (partial match)

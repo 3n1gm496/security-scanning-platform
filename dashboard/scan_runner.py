@@ -28,6 +28,16 @@ def _db_path() -> str:
     return os.getenv("DASHBOARD_DB_PATH", DASHBOARD_DB_PATH)
 
 
+def _extract_primary_result(payload: dict) -> dict:
+    """Return the primary orchestrator result item from the aggregate JSON payload."""
+    results = payload.get("results")
+    if isinstance(results, list) and results:
+        first = results[0]
+        if isinstance(first, dict):
+            return first
+    return {}
+
+
 def insert_running_scan(scan_id: str, started_at: str, target_type: str, name: str, target: str) -> None:
     """Pre-insert a RUNNING placeholder row so the scan shows up in the list immediately."""
     try:
@@ -150,9 +160,42 @@ def run_scan(
 
         try:
             output_json = json.loads(result.stdout)
-            LOGGER.info("scan.completed", scan_id=scan_id, returncode=result.returncode)
-            publish_sync("scan_completed", {"scan_id": scan_id, "target_name": name, "returncode": result.returncode})
-            return {"status": "completed", "scan_id": scan_id, "output": output_json, "returncode": result.returncode}
+            primary_result = _extract_primary_result(output_json)
+            if result.returncode == 0:
+                LOGGER.info("scan.completed", scan_id=scan_id, returncode=result.returncode)
+                publish_sync(
+                    "scan_completed", {"scan_id": scan_id, "target_name": name, "returncode": result.returncode}
+                )
+                return {
+                    "status": "completed",
+                    "scan_id": scan_id,
+                    "output": output_json,
+                    "returncode": result.returncode,
+                }
+
+            if primary_result.get("status") == "BLOCK" or result.returncode == 3:
+                msg = primary_result.get("error_message") or "Scan blocked by policy"
+                LOGGER.warning("scan.blocked", scan_id=scan_id, returncode=result.returncode, message=msg)
+                publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
+                return {
+                    "status": "blocked",
+                    "scan_id": scan_id,
+                    "message": msg,
+                    "output": output_json,
+                    "returncode": result.returncode,
+                }
+
+            msg = primary_result.get("error_message") or f"Orchestrator exited with code {result.returncode}"
+            LOGGER.error("scan.failed", scan_id=scan_id, returncode=result.returncode, message=msg)
+            update_scan_failed(scan_id, msg)
+            publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
+            return {
+                "status": "error",
+                "scan_id": scan_id,
+                "message": msg,
+                "output": output_json,
+                "returncode": result.returncode,
+            }
         except json.JSONDecodeError:
             msg = "Failed to parse orchestrator output"
             LOGGER.error("scan.output_parse_error", scan_id=scan_id, returncode=result.returncode)

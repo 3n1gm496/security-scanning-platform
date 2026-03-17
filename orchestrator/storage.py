@@ -12,6 +12,7 @@ if _project_root not in sys.path:
 
 from common.schema import MIGRATIONS as _MIGRATIONS
 from common.schema import SCHEMA_SQL
+from common.schema import split_identifier_and_cwe
 from orchestrator.db_adapter import adapt_schema, get_connection
 from orchestrator.logging_config import get_logger
 from orchestrator.models import ScanResult
@@ -21,6 +22,23 @@ LOGGER = get_logger(__name__)
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _backfill_cwe_column(conn) -> None:
+    """Migrate legacy CWE values out of the overloaded cve field."""
+    try:
+        rows = conn.execute("SELECT id, cve, cwe FROM findings").fetchall()
+    except Exception:
+        return
+
+    updates = []
+    for row in rows:
+        new_cve, new_cwe = split_identifier_and_cwe(row["cve"], row["cwe"])
+        if new_cve != row["cve"] or new_cwe != row["cwe"]:
+            updates.append((new_cve, new_cwe, row["id"]))
+
+    if updates:
+        conn.executemany("UPDATE findings SET cve = ?, cwe = ? WHERE id = ?", updates)
 
 
 def run_migrations(db_path: str) -> None:
@@ -35,7 +53,14 @@ def run_migrations(db_path: str) -> None:
                 for stmt in adapted.split(";"):
                     stmt = stmt.strip()
                     if stmt:
-                        conn.execute(stmt)
+                        try:
+                            conn.execute(stmt)
+                        except Exception as exc:
+                            message = str(exc).lower()
+                            if "duplicate column" not in message and "already exists" not in message:
+                                raise
+            if version >= 7:
+                _backfill_cwe_column(conn)
             conn.execute(
                 "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
                 (version, description, _utc_now()),
@@ -123,9 +148,9 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
             """
             INSERT INTO findings (
                 scan_id, timestamp, target_type, target_name, tool, category, severity,
-                title, description, file, line, package, version, cve, remediation,
+                title, description, file, line, package, version, cve, cwe, remediation,
                 raw_reference, fingerprint
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -143,6 +168,7 @@ def save_scan_result(db_path: str, result: ScanResult) -> None:
                     _to_text(finding.package),
                     _to_text(finding.version),
                     _to_text(finding.cve),
+                    _to_text(finding.cwe),
                     _to_text(finding.remediation),
                     _to_text(finding.raw_reference),
                     _to_text(finding.fingerprint),

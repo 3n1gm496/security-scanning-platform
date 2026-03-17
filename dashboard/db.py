@@ -19,6 +19,7 @@ from runtime_config import DASHBOARD_DB_PATH
 
 from common.schema import MIGRATIONS as _MIGRATIONS
 from common.schema import SCHEMA_SQL
+from common.schema import split_identifier_and_cwe
 
 LOGGER = get_logger(__name__)
 
@@ -111,6 +112,23 @@ def _execute_migration_script(conn, sql: str) -> None:
         conn.execute(statement)
 
 
+def _backfill_cwe_column(conn) -> None:
+    """Migrate legacy CWE values out of the overloaded cve field."""
+    try:
+        rows = conn.execute("SELECT id, cve, cwe FROM findings").fetchall()
+    except Exception:
+        return
+
+    updates = []
+    for row in rows:
+        new_cve, new_cwe = split_identifier_and_cwe(row["cve"], row["cwe"])
+        if new_cve != row["cve"] or new_cwe != row["cwe"]:
+            updates.append((new_cve, new_cwe, row["id"]))
+
+    if updates:
+        conn.executemany("UPDATE findings SET cve = ?, cwe = ? WHERE id = ?", updates)
+
+
 # Re-export get_connection so existing callers (app.py etc.) continue to work
 __all__ = ["get_connection", "init_db"]
 
@@ -198,8 +216,8 @@ def _findings_where_clause(
     params: list[Any] = []
     if search:
         search_param = f"%{search}%"
-        clause += " AND (title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ?)"
-        params.extend([search_param] * 4)
+        clause += " AND (title LIKE ? OR description LIKE ? OR file LIKE ? OR cve LIKE ? OR cwe LIKE ?)"
+        params.extend([search_param] * 5)
     if severity:
         clause += " AND severity = ?"
         params.append(severity)
@@ -488,6 +506,8 @@ def _run_migrations(db_path: str) -> None:
                     )
                     if not ignorable:
                         raise
+            if version >= 7:
+                _backfill_cwe_column(conn)
             conn.execute(
                 "INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)",
                 (version, description, _utc_now()),

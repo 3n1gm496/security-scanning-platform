@@ -43,6 +43,7 @@ def _finding_compare_key(finding: dict) -> tuple:
         finding.get("file"),
         finding.get("line"),
         finding.get("cve"),
+        finding.get("cwe"),
         finding.get("target_name"),
         finding.get("description"),
     )

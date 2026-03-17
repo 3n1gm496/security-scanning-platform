@@ -25,25 +25,26 @@ def test_findings_paginator_basic():
 
     conn.execute("""
         CREATE TABLE findings (
-            id INTEGER PRIMARY KEY,
-            scan_id INTEGER,
-            title TEXT,
-            description TEXT,
-            severity TEXT,
-            file TEXT,
-            line INTEGER,
-            tool TEXT,
-            cve TEXT,
-            fingerprint TEXT,
-            timestamp TEXT,
-            target_name TEXT
-        )
-    """)
+                id INTEGER PRIMARY KEY,
+                scan_id INTEGER,
+                title TEXT,
+                description TEXT,
+                severity TEXT,
+                file TEXT,
+                line INTEGER,
+                tool TEXT,
+                cve TEXT,
+                cwe TEXT,
+                fingerprint TEXT,
+                timestamp TEXT,
+                target_name TEXT
+            )
+        """)
 
     for i in range(25):
         conn.execute(
             """
-            INSERT INTO findings VALUES (?, 1, ?, ?, ?, ?, NULL, 'semgrep', NULL, ?, datetime('now'), NULL)
+            INSERT INTO findings VALUES (?, 1, ?, ?, ?, ?, NULL, 'semgrep', NULL, NULL, ?, datetime('now'), NULL)
         """,
             (i, f"Finding {i}", f"Desc {i}", ["CRITICAL", "HIGH", "MEDIUM", "LOW"][i % 4], f"file{i}.py", f"fp{i}"),
         )
@@ -189,10 +190,10 @@ def test_findings_paginator_with_status_filter():
     conn.execute("""
         CREATE TABLE findings (
             id INTEGER PRIMARY KEY, scan_id INTEGER, title TEXT, description TEXT,
-            severity TEXT, file TEXT, line INTEGER, tool TEXT, cve TEXT,
+            severity TEXT, file TEXT, line INTEGER, tool TEXT, cve TEXT, cwe TEXT,
             fingerprint TEXT, timestamp TEXT, target_name TEXT
         )
-    """)
+        """)
 
     # Create finding_states table
     conn.execute("""

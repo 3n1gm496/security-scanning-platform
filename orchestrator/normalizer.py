@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from common.schema import normalize_cwe_value
 from orchestrator.models import Finding, TargetSpec, utc_now_iso
 
 SEVERITY_MAP = {
@@ -94,7 +95,8 @@ def normalize_semgrep(
             line=start.get("line"),
             package=None,
             version=None,
-            cve=metadata.get("cwe") or metadata.get("owasp"),
+            cve=None,
+            cwe=normalize_cwe_value(metadata.get("cwe")),
             remediation=str(remediation) if remediation else None,
             raw_reference=raw_reference,
             fingerprint=_fingerprint("semgrep", target.name, file_path, start.get("line"), item.get("check_id")),
@@ -158,6 +160,7 @@ def normalize_trivy(
                 package=None,
                 version=None,
                 cve=misconfig.get("ID"),
+                cwe=None,
                 remediation=misconfig.get("Resolution"),
                 raw_reference=raw_reference,
                 fingerprint=_fingerprint("trivy-misconfig", target.name, result_target, misconfig.get("ID")),
@@ -179,6 +182,7 @@ def normalize_trivy(
                 package=None,
                 version=None,
                 cve=secret.get("RuleID"),
+                cwe=None,
                 remediation="Rotate the secret and remove it from source control.",
                 raw_reference=raw_reference,
                 fingerprint=_fingerprint(
@@ -499,7 +503,8 @@ def normalize_zap(
             line=None,
             package=None,
             version=None,
-            cve=cwe_str,
+            cve=None,
+            cwe=cwe_str,
             remediation=item.get("solution"),
             raw_reference=raw_reference,
             fingerprint=_fingerprint("zap", target.name, item.get("alert"), item.get("url"), item.get("pluginId")),

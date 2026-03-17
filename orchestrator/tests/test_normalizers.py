@@ -166,7 +166,7 @@ def test_normalize_zap_example():
 
 
 def test_normalize_zap_cwe():
-    """ZAP alerts with cweid should populate the cve field as CWE-NNN."""
+    """ZAP alerts with cweid should populate the explicit cwe field."""
     raw = [
         {
             "alert": "SQL Injection",
@@ -180,18 +180,19 @@ def test_normalize_zap_cwe():
     ]
     findings = normalize_zap("s", TARGET, raw, "ref")
     assert len(findings) == 1
-    assert findings[0].cve == "CWE-89"
+    assert findings[0].cwe == "CWE-89"
+    assert findings[0].cve is None
 
 
 def test_normalize_zap_no_cwe():
-    """ZAP alerts without cweid or with cweid=0 should have cve=None."""
+    """ZAP alerts without cweid or with cweid=0 should have cwe=None."""
     raw = [
         {"alert": "Info", "risk": "Low", "url": "http://x.com", "cweid": "0"},
         {"alert": "Info2", "risk": "Low", "url": "http://x.com"},
     ]
     findings = normalize_zap("s", TARGET, raw, "ref")
-    assert findings[0].cve is None
-    assert findings[1].cve is None
+    assert findings[0].cwe is None
+    assert findings[1].cwe is None
 
 
 # sanity check existing semgrep still works
@@ -210,6 +211,26 @@ def test_semgrep_roundtrip():
     }
     findings = normalize_semgrep("s", TARGET, raw, "ref", base_path="/tmp")
     assert findings and findings[0].tool == "semgrep"
+
+
+def test_semgrep_cwe_populates_explicit_cwe():
+    raw = {
+        "results": [
+            {
+                "check_id": "semgrep.rule",
+                "path": "file.py",
+                "extra": {
+                    "severity": "MEDIUM",
+                    "message": "msg",
+                    "metadata": {"cwe": ["CWE-79", "CWE-89"], "owasp": "A03:2021 - Injection"},
+                },
+                "start": {"line": 2},
+            }
+        ]
+    }
+    findings = normalize_semgrep("s", TARGET, raw, "ref", base_path="/tmp")
+    assert findings[0].cwe == "CWE-79,CWE-89"
+    assert findings[0].cve is None
 
 
 def test_normalize_zap_informational():

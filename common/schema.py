@@ -5,6 +5,12 @@ Both components import SCHEMA_SQL and MIGRATIONS from this module so that
 table definitions, indexes, and migration history stay in sync.
 """
 
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS scans (
     id TEXT PRIMARY KEY,
@@ -45,6 +51,7 @@ CREATE TABLE IF NOT EXISTS findings (
     package TEXT,
     version TEXT,
     cve TEXT,
+    cwe TEXT,
     remediation TEXT,
     raw_reference TEXT,
     fingerprint TEXT,
@@ -236,4 +243,82 @@ CREATE INDEX IF NOT EXISTS idx_findings_tenant ON findings(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id);
 """,
     ),
+    (
+        7,
+        "add cwe column for explicit weakness tracking",
+        """
+ALTER TABLE findings ADD COLUMN cwe TEXT;
+""",
+    ),
 ]
+
+_CWE_TOKEN_RE = re.compile(r"\bCWE-\d+\b", re.IGNORECASE)
+_CWE_ONLY_REMAINDER_RE = re.compile(r'(?:\bCWE-\d+\b|[\s,\[\]"\'])+', re.IGNORECASE)
+
+
+def extract_cwe_values(value: Any) -> list[str]:
+    """Return normalized CWE identifiers found in a scalar or sequence value."""
+    if value is None:
+        return []
+
+    found: list[str] = []
+
+    def _push(text: Any) -> None:
+        if text is None:
+            return
+        for token in _CWE_TOKEN_RE.findall(str(text).upper()):
+            if token not in found:
+                found.append(token)
+
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            _push(item)
+        return found
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = json.loads(stripped)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, list):
+                for item in parsed:
+                    _push(item)
+                return found
+
+    _push(value)
+    return found
+
+
+def normalize_cwe_value(value: Any) -> str | None:
+    """Return a comma-separated CWE string or None if no CWE is present."""
+    values = extract_cwe_values(value)
+    return ",".join(values) if values else None
+
+
+def is_cwe_only_value(value: Any) -> bool:
+    """Return True if the value contains only one or more CWE identifiers."""
+    if value is None:
+        return False
+    text = str(value).strip()
+    if not text:
+        return False
+    if not extract_cwe_values(value):
+        return False
+    return _CWE_ONLY_REMAINDER_RE.sub("", text) == ""
+
+
+def split_identifier_and_cwe(cve_value: Any, cwe_value: Any) -> tuple[str | None, str | None]:
+    """Separate a legacy identifier field into id/cve and explicit cwe values."""
+    normalized_cve = None if cve_value in (None, "") else str(cve_value)
+    normalized_cwe = normalize_cwe_value(cwe_value)
+
+    if not normalized_cwe:
+        extracted_from_cve = normalize_cwe_value(cve_value)
+        if extracted_from_cve:
+            normalized_cwe = extracted_from_cve
+            if is_cwe_only_value(cve_value):
+                normalized_cve = None
+
+    return normalized_cve, normalized_cwe

@@ -45,3 +45,59 @@ def test_run_scan_respects_dashboard_db_path_env(monkeypatch, tmp_path):
     assert seen["env"]["REPORTS_DIR"] == str(reports_dir)
     assert seen["env"]["WORKSPACE_DIR"] == str(workspaces_dir)
     assert seen["env"]["ORCH_CACHE_DIR"] == str(cache_dir)
+
+
+def test_run_scan_returns_error_on_nonzero_exit_with_json(monkeypatch, tmp_path):
+    monkeypatch.setattr(_scan_runner, "insert_running_scan", lambda *args, **kwargs: None)
+    published = []
+    failed_updates = []
+    monkeypatch.setattr(_scan_runner, "publish_sync", lambda event, payload: published.append((event, payload)))
+    monkeypatch.setattr(
+        _scan_runner, "update_scan_failed", lambda scan_id, message: failed_updates.append((scan_id, message))
+    )
+
+    class FakeCompletedProcess:
+        returncode = 4
+        stdout = (
+            '{"results":[{"scan_id":"scan-123","status":"FAILED","error_message":"Tool execution failed"}],'
+            '"generated_at":"2026-03-17T00:00:00+00:00"}'
+        )
+
+    monkeypatch.setattr(_scan_runner.subprocess, "run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    result = _scan_runner.run_scan("git", "https://example.com/repo.git", "repo", str(tmp_path), scan_id="scan-123")
+
+    assert result["status"] == "error"
+    assert result["returncode"] == 4
+    assert result["message"] == "Tool execution failed"
+    assert failed_updates == [("scan-123", "Tool execution failed")]
+    assert published == [
+        ("scan_started", {"scan_id": "scan-123", "target_name": "repo", "target_type": "git"}),
+        ("scan_failed", {"scan_id": "scan-123", "target_name": "repo", "error": "Tool execution failed"}),
+    ]
+
+
+def test_run_scan_returns_blocked_on_policy_exit(monkeypatch, tmp_path):
+    monkeypatch.setattr(_scan_runner, "insert_running_scan", lambda *args, **kwargs: None)
+    published = []
+    monkeypatch.setattr(_scan_runner, "publish_sync", lambda event, payload: published.append((event, payload)))
+    monkeypatch.setattr(_scan_runner, "update_scan_failed", lambda *args, **kwargs: None)
+
+    class FakeCompletedProcess:
+        returncode = 3
+        stdout = (
+            '{"results":[{"scan_id":"scan-456","status":"BLOCK","error_message":"Blocked by policy"}],'
+            '"generated_at":"2026-03-17T00:00:00+00:00"}'
+        )
+
+    monkeypatch.setattr(_scan_runner.subprocess, "run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    result = _scan_runner.run_scan("git", "https://example.com/repo.git", "repo", str(tmp_path), scan_id="scan-456")
+
+    assert result["status"] == "blocked"
+    assert result["returncode"] == 3
+    assert result["message"] == "Blocked by policy"
+    assert published == [
+        ("scan_started", {"scan_id": "scan-456", "target_name": "repo", "target_type": "git"}),
+        ("scan_failed", {"scan_id": "scan-456", "target_name": "repo", "error": "Blocked by policy"}),
+    ]

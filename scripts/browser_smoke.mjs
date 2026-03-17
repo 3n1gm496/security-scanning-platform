@@ -138,7 +138,7 @@ async function ensureCompareSelection(page) {
   await page.selectOption("#compare-scan-b", pair.b);
   await Promise.all([
     page.waitForResponse((res) => res.url().includes("/api/scans/compare") && res.status() < 400, { timeout: 15000 }),
-    page.getByRole("button", { name: "Compare" }).click(),
+    page.getByRole("button", { name: /run comparison|compare/i }).click(),
   ]);
   await page.waitForTimeout(1200);
 }

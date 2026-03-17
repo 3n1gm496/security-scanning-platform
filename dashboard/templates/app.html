@@ -220,7 +220,7 @@
               <div class="hero-side-actions">
                 <button class="btn-alert" v-if="kpis.critical_findings > 0" @click="viewCriticalFindings()">Open critical queue</button>
                 <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">Launch new scan</button>
-                <button class="btn-secondary btn-sm" @click="navigate('analytics')">Open intelligence board</button>
+                <button class="btn-secondary btn-sm" @click="navigate('analytics')">View analytics</button>
               </div>
             </div>
 
@@ -260,7 +260,7 @@
                 <p class="card-subtitle">Critical-to-info findings across the latest indexed scans with findings.</p>
               </div>
               <div class="card-actions">
-                <button class="btn-secondary btn-sm" @click="navigate('scans')">Open queue</button>
+                <button class="btn-secondary btn-sm" @click="navigate('scans')">Review scans</button>
               </div>
             </div>
             <div class="chart-container chart-container-tall">
@@ -291,7 +291,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="recentScans.length === 0">
-                    <td colspan="4" class="empty-state">No scans with findings</td>
+                    <td colspan="4" class="empty-state">No findings-bearing scans yet.</td>
                   </tr>
                   <tr v-for="scan in recentScans.slice(0, 6)" :key="scan.id" @click="openScanDetail(scan)" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)" class="row-clickable" tabindex="0">
                     <td class="cell-wrap cell-watch-target" :title="scan.target_name">{{ scan.target_name }}</td>
@@ -361,7 +361,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="recentScans.length === 0">
-                    <td colspan="6" class="empty-state">No scans with findings</td>
+                    <td colspan="6" class="empty-state">No findings-bearing scans yet.</td>
                   </tr>
                   <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)" class="row-clickable" tabindex="0">
                     <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
@@ -854,7 +854,7 @@
                 </div>
                 <span class="risk-score-pill" :class="riskBarClass(target.average_risk)">{{ target.average_risk }}/100</span>
               </div>
-              <p v-if="!analyticsData.targetRisk || analyticsData.targetRisk.length === 0" class="text-muted">No data available</p>
+              <p v-if="!analyticsData.targetRisk || analyticsData.targetRisk.length === 0" class="text-muted">Target ranking will appear after enough indexed findings accumulate.</p>
             </div>
           </div>
           <div class="card">
@@ -939,7 +939,7 @@
             </div>
             <button class="btn-primary" @click="runCompare" :disabled="!compareIdA || !compareIdB || compareIdA === compareIdB || compareLoading">
               <span v-if="compareLoading"><span class="spinner-sm u-inline-block u-mr-6"></span>Analyzing...</span>
-              <span v-else>Compare</span>
+              <span v-else>Run comparison</span>
             </button>
           </div>
           <div class="compare-context-inline" v-if="compareContext.scanA || compareContext.scanB">

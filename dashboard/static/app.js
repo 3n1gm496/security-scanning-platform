@@ -2561,6 +2561,13 @@ createApp({
       return text.length > 12 ? text.slice(0, 12) + '…' : text || '—';
     },
 
+    compareOptionLabel(scan) {
+      if (!scan) return '';
+      const target = String(scan.target_name || 'unknown target');
+      const compactTarget = target.length > 28 ? target.slice(0, 26) + '…' : target;
+      return `${compactTarget} · ${formatDate(scan.created_at)} · #${this.formatShortScanId(scan.id)}`;
+    },
+
     // ── Compare ───────────────────────────────────────────────────────────────
 
     async loadCompareScanList() {
@@ -2898,6 +2905,27 @@ createApp({
       return labels[normalized] || normalized.replace(/_/g, ' ');
     },
 
+    categoryLabel(category) {
+      const normalized = String(category || '').trim().toLowerCase();
+      const labels = {
+        cve: 'Vulnerability',
+        vuln: 'Vulnerability',
+        sast: 'Code analysis',
+        iac: 'Infrastructure as code',
+        secret: 'Secret exposure',
+        container: 'Container risk',
+        dependency: 'Dependency risk',
+        compliance: 'Compliance mapping',
+      };
+      if (!normalized) return '—';
+      if (labels[normalized]) return labels[normalized];
+      return normalized
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    },
+
     policyBadgeClass(policy) {
       const normalized = (policy || '').toUpperCase();
       const map = {
@@ -2925,9 +2953,18 @@ createApp({
       return /^CVE-\d{4}-\d{4,}$/i.test(cve);
     },
 
+    isValidCwe(cwe) {
+      return /^CWE-\d+$/i.test(cwe);
+    },
+
     cveUrl(cve) {
       if (this.isValidCve(cve)) return 'https://nvd.nist.gov/vuln/detail/' + cve;
       return null;
+    },
+
+    cweUrl(cwe) {
+      if (!this.isValidCwe(cwe)) return null;
+      return `https://cwe.mitre.org/data/definitions/${String(cwe).replace(/^CWE-/i, '')}.html`;
     },
 
     // Truncate long CWE/OWASP strings for table display.

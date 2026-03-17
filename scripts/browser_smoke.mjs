@@ -96,6 +96,22 @@ function topbarRefreshButton(page) {
 
 async function ensureCompareSelection(page) {
   const pair = await page.evaluate(() => {
+    const appEl = document.querySelector("#app");
+    const proxy = appEl?.__vue_app__?._instance?.proxy;
+    if (proxy && Array.isArray(proxy.compareScanList)) {
+      const grouped = new Map();
+      for (const scan of proxy.compareScanList) {
+        if (!scan?.id || !scan?.target_name) continue;
+        const key = String(scan.target_name);
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(String(scan.id));
+      }
+      for (const values of grouped.values()) {
+        if (values.length >= 2) {
+          return { a: values[0], b: values[1] };
+        }
+      }
+    }
     const selectA = document.querySelector("#compare-scan-a");
     const selectB = document.querySelector("#compare-scan-b");
     if (!(selectA instanceof HTMLSelectElement) || !(selectB instanceof HTMLSelectElement)) return null;
@@ -103,7 +119,7 @@ async function ensureCompareSelection(page) {
     for (const option of Array.from(selectA.options)) {
       if (!option.value) continue;
       const text = option.textContent || "";
-      const target = text.split("—")[1]?.split("(")[0]?.trim() || text.trim();
+      const target = text.split("·")[0]?.replace(/^#/, '').trim() || text.trim();
       if (!optionMap.has(target)) optionMap.set(target, []);
       optionMap.get(target).push(option.value);
     }

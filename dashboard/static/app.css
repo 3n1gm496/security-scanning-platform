@@ -2583,6 +2583,12 @@ body::before {
   border-color: rgba(255, 155, 61, 0.24);
 }
 
+[data-theme="light"] .ops-pill {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 245, 249, 0.88));
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.10);
+}
+
 .refresh-control,
 .btn-icon,
 .btn-secondary,
@@ -2743,6 +2749,19 @@ body::before {
   border-color: rgba(52, 213, 255, 0.28);
 }
 
+[data-theme="light"] .status-beacon,
+[data-theme="light"] .hero-context-pill {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(148, 163, 184, 0.20);
+  color: #51657e;
+}
+
+[data-theme="light"] .status-beacon.active {
+  color: #0f6f88;
+  border-color: rgba(52, 213, 255, 0.36);
+  box-shadow: 0 8px 20px rgba(52, 213, 255, 0.10);
+}
+
 .status-beacon-dot {
   width: 8px;
   height: 8px;
@@ -2754,6 +2773,11 @@ body::before {
 .hero-context-pill.warning {
   color: #ffd4ab;
   border-color: rgba(255, 155, 61, 0.24);
+}
+
+[data-theme="light"] .hero-context-pill.warning {
+  color: #9a4d0d;
+  border-color: rgba(255, 155, 61, 0.28);
 }
 
 .signal-tile-grid,
@@ -2916,6 +2940,14 @@ body::before {
   background:
     radial-gradient(circle at top right, rgba(52, 213, 255, 0.08) 0%, rgba(52, 213, 255, 0) 28%),
     linear-gradient(180deg, rgba(13, 26, 38, 0.94) 0%, rgba(9, 18, 26, 0.92) 100%);
+}
+
+[data-theme="light"] .chart-card.chart-card-hero {
+  background:
+    radial-gradient(circle at top right, rgba(52, 213, 255, 0.10) 0%, rgba(52, 213, 255, 0) 26%),
+    linear-gradient(180deg, rgba(239, 246, 255, 0.96) 0%, rgba(221, 234, 248, 0.92) 100%);
+  border-color: rgba(107, 132, 165, 0.18);
+  box-shadow: 0 12px 34px rgba(148, 163, 184, 0.18);
 }
 
 .chart-grid-dashboard {
@@ -4216,6 +4248,18 @@ textarea {
 .compare-selector-group .filter-select {
   max-width: 100%;
   text-overflow: ellipsis;
+}
+
+.compare-selector-hint {
+  display: block;
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.compare-select {
+  font-variant-numeric: tabular-nums;
 }
 
 .compare-vs {

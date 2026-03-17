@@ -719,8 +719,9 @@
                   <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap" :title="finding.target_name">{{ finding.target_name }}</td>
                   <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title" :title="finding.title">{{ finding.title }}</td>
                   <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-nowrap">
-                    <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop>{{ finding.cve }}</a>
-                    <span v-else-if="finding.cve" class="text-muted">{{ finding.cve }}</span>
+                    <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop :title="finding.cve">{{ truncateCve(finding.cve) }}</a>
+                    <a v-else-if="finding.cwe && isValidCwe(finding.cwe)" :href="cweUrl(finding.cwe)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop :title="finding.cwe">{{ finding.cwe }}</a>
+                    <span v-else-if="finding.cve || finding.cwe" class="text-muted" :title="finding.cve || finding.cwe">{{ truncateCve(finding.cve || finding.cwe) }}</span>
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td v-if="colVisibleF('file')" @click="openFindingDetail(finding)" class="cell-wrap">
@@ -917,22 +918,24 @@
           <div class="compare-selectors">
             <div class="compare-selector-group">
               <label class="filter-label" for="compare-scan-a">Scan A (baseline)</label>
-              <select id="compare-scan-a" name="compare_scan_a" v-model="compareIdA" @change="compareIdB = ''" class="filter-select">
+              <select id="compare-scan-a" name="compare_scan_a" v-model="compareIdA" @change="compareIdB = ''" class="filter-select compare-select">
                 <option value="">Select...</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
-                  #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
+                  {{ compareOptionLabel(s) }}
                 </option>
               </select>
+              <span class="compare-selector-hint">Choose the earlier reference run for this target.</span>
             </div>
             <div class="compare-vs">VS</div>
             <div class="compare-selector-group">
               <label class="filter-label" for="compare-scan-b">Scan B (comparison)</label>
-              <select id="compare-scan-b" name="compare_scan_b" v-model="compareIdB" class="filter-select" :disabled="!compareIdA">
+              <select id="compare-scan-b" name="compare_scan_b" v-model="compareIdB" class="filter-select compare-select" :disabled="!compareIdA">
                 <option value="">{{ compareIdA ? (compareScanListB.length ? 'Select...' : 'No scans with same target') : 'Select scan A first' }}</option>
                 <option v-for="s in compareScanListB" :key="s.id" :value="s.id">
-                  #{{ s.id }} — {{ s.target_name }} ({{ formatDate(s.created_at) }})
+                  {{ compareOptionLabel(s) }}
                 </option>
               </select>
+              <span class="compare-selector-hint">Choose the run whose drift you want to evaluate.</span>
             </div>
             <button class="btn-primary" @click="runCompare" :disabled="!compareIdA || !compareIdB || compareIdA === compareIdB || compareLoading">
               <span v-if="compareLoading"><span class="spinner-sm u-inline-block u-mr-6"></span>Analyzing...</span>
@@ -942,12 +945,12 @@
           <div class="compare-context-inline" v-if="compareContext.scanA || compareContext.scanB">
             <div class="compare-context-inline-card" v-if="compareContext.scanA">
               <span class="panel-kicker">Baseline selected</span>
-              <strong>{{ compareContext.scanA.target_name }}</strong>
+              <strong :title="compareContext.scanA.target_name">{{ compareContext.scanA.target_name }}</strong>
               <span>Run {{ formatShortScanId(compareContext.scanA.id) }} · {{ formatDate(compareContext.scanA.created_at) }}</span>
             </div>
             <div class="compare-context-inline-card" v-if="compareContext.scanB">
               <span class="panel-kicker">Comparison selected</span>
-              <strong>{{ compareContext.scanB.target_name }}</strong>
+              <strong :title="compareContext.scanB.target_name">{{ compareContext.scanB.target_name }}</strong>
               <span>Run {{ formatShortScanId(compareContext.scanB.id) }} · {{ formatDate(compareContext.scanB.created_at) }}</span>
             </div>
           </div>
@@ -958,13 +961,13 @@
           <div class="compare-context-bar">
             <div class="compare-context-card">
               <span class="panel-kicker">Baseline</span>
-              <strong>{{ compareResult.scan_1.target_name }}</strong>
+              <strong :title="compareResult.scan_1.target_name">{{ compareResult.scan_1.target_name }}</strong>
               <span>Run {{ formatShortScanId(compareResult.scan_1.id) }} · {{ formatDate(compareResult.scan_1.created_at) }}</span>
             </div>
             <div class="compare-context-divider">A/B</div>
             <div class="compare-context-card">
               <span class="panel-kicker">Comparison</span>
-              <strong>{{ compareResult.scan_2.target_name }}</strong>
+              <strong :title="compareResult.scan_2.target_name">{{ compareResult.scan_2.target_name }}</strong>
               <span>Run {{ formatShortScanId(compareResult.scan_2.id) }} · {{ formatDate(compareResult.scan_2.created_at) }}</span>
             </div>
           </div>
@@ -1108,7 +1111,7 @@
                 </tr>
                 <tr v-for="key in apiKeys" :key="key.prefix">
                   <td>{{ key.name }}</td>
-                  <td><code class="id-code">{{ key.prefix }}...</code></td>
+                  <td><code class="id-code" :title="`${key.prefix}...`">{{ key.prefix }}...</code></td>
                   <td><span class="badge" :class="key.role === 'admin' ? 'badge-danger' : key.role === 'operator' ? 'badge-warning' : 'badge-neutral'">{{ key.role }}</span></td>
                   <td>{{ key.created_by || '—' }}</td>
                   <td class="cell-nowrap">{{ formatDate(key.created_at) }}</td>
@@ -1267,13 +1270,20 @@
                 <div class="detail-section">
                   <h3>Technical details</h3>
                   <div class="detail-row"><span class="detail-key">Tool</span><span class="detail-val"><span class="badge badge-neutral">{{ selectedFinding.tool }}</span></span></div>
-                  <div class="detail-row"><span class="detail-key">Category</span><span class="detail-val">{{ selectedFinding.category || '—' }}</span></div>
+                  <div class="detail-row"><span class="detail-key">Category</span><span class="detail-val">{{ categoryLabel(selectedFinding.category) }}</span></div>
                   <div class="detail-row"><span class="detail-key">Target</span><span class="detail-val">{{ selectedFinding.target_name }}</span></div>
                   <div class="detail-row" v-if="selectedFinding.cve">
                     <span class="detail-key">CVE</span>
                     <span class="detail-val">
                       <a v-if="isValidCve(selectedFinding.cve)" :href="cveUrl(selectedFinding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link">{{ selectedFinding.cve }}</a>
                       <span v-else>{{ selectedFinding.cve }}</span>
+                    </span>
+                  </div>
+                  <div class="detail-row" v-if="selectedFinding.cwe">
+                    <span class="detail-key">CWE</span>
+                    <span class="detail-val">
+                      <a v-if="isValidCwe(selectedFinding.cwe)" :href="cweUrl(selectedFinding.cwe)" target="_blank" rel="noopener noreferrer" class="cve-link">{{ selectedFinding.cwe }}</a>
+                      <span v-else>{{ selectedFinding.cwe }}</span>
                     </span>
                   </div>
                   <div class="detail-row" v-if="selectedFinding.file">
@@ -1300,7 +1310,7 @@
                   <p class="detail-text">{{ selectedFinding.description }}</p>
                 </div>
                 <div class="detail-section" v-if="selectedFinding.remediation">
-                  <h3>Remediation (raw)</h3>
+                  <h3>Recommended remediation</h3>
                   <p class="detail-text remediation-text" v-html="linkifyText(selectedFinding.remediation)"></p>
                 </div>
               </div>

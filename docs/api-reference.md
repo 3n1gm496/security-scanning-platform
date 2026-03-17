@@ -134,6 +134,12 @@ Webhooks:
 - `DELETE /api/webhooks/{webhook_id}`
 - `POST /api/webhooks/{webhook_id}/rotate-secret`
 
+Webhook runtime events:
+- `scan.completed`
+- `scan.failed`
+- `finding.high`
+- `finding.critical`
+
 Notifications:
 - `POST /api/notifications/send-alert`
 - `POST /api/notifications/preferences`
@@ -142,6 +148,7 @@ Notifications:
 Notes:
 - notification preferences are JSON-body based
 - `send-alert` is a targeted operational action, not a general outbound mail gateway
+- runtime scan completion/failure and high/critical finding alerts are emitted automatically from `scan_runner.py`
 
 Audit:
 - `GET /api/audit`

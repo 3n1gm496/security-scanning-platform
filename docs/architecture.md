@@ -103,6 +103,7 @@ Key modules:
    - stores artifacts and normalized output
    - updates the scan row to final status
 5. The dashboard surfaces the results through scans, findings, analytics, compare, exports, notifications, and webhook flows.
+6. The dashboard runtime dispatches scan summary emails, high/critical finding alerts, and webhook events after final scan results are available.
 
 ### Findings lifecycle
 

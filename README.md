@@ -7,8 +7,12 @@
 [![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
 Centralized security scanning platform with two main runtimes:
-- a **FastAPI dashboard service** for auth, APIs, analytics, exports, settings, notifications, webhooks, and the operator UI
+- a **FastAPI dashboard service** for auth, APIs, analytics, exports, settings, notifications, webhooks, monitoring, and the operator UI
 - a **Python orchestrator** that prepares targets, runs scanners, normalizes output, applies policy, and persists results
+
+Optional supporting services:
+- **PostgreSQL** when you want database lifecycle outside file-backed SQLite
+- **OWASP ZAP** on the internal network for URL-target DAST
 
 The platform is designed to scan code repositories, local paths, live URLs, and container images with a single normalized findings model.
 
@@ -31,9 +35,11 @@ The platform is designed to scan code repositories, local paths, live URLs, and 
 - analytics for risk, compliance, trends, target ranking, and tool effectiveness
 - exports in CSV, JSON, SARIF, HTML, and PDF
 - API key management, webhooks, notifications, audit log, health, readiness, and Prometheus metrics
+- automatic runtime dispatch for `scan.completed`, `scan.failed`, `finding.high`, and `finding.critical` webhook events
+- automatic scan summary emails plus high/critical alert emails driven by notification preferences
 
 ### Current repository baseline
-- `620` Python tests green
+- `633` Python tests green
 - browser smoke covers login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile nav
 - CI builds Docker images and scans them with Trivy
 - reusable `Security Scan` workflow supports either remote platform scan or local Gitleaks fallback
@@ -75,6 +81,7 @@ Routing and preflight checks are defined in `orchestrator/compatibility.py`.
    - evaluates policies
    - stores reports and final scan state
 5. The dashboard surfaces those results through scans, findings, analytics, compare, exports, notifications, webhooks, and metrics.
+6. The dashboard runtime emits webhook events and email notifications from the finalized scan result and normalized finding set.
 
 ### Mermaid overview
 
@@ -255,6 +262,7 @@ DASHBOARD_SESSION_SECRET=replace-with-a-random-secret
 DASHBOARD_HTTPS_ONLY=0
 
 # Storage
+DASHBOARD_DB_PATH=/data/security_scans.db
 ORCH_DB_PATH=/data/security_scans.db
 REPORTS_DIR=/data/reports
 WORKSPACE_DIR=/data/workspaces
@@ -279,6 +287,7 @@ Important configuration files:
 Important caveat:
 - the application warns when insecure runtime auth defaults are still in use
 - Compose still contains some fallback values, so real deployments must provide a proper `.env`
+- in shared SQLite mode, set both `DASHBOARD_DB_PATH` and `ORCH_DB_PATH` to the same file
 
 ---
 

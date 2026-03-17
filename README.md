@@ -6,87 +6,139 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3n1gm496/security-scanning-platform/actions/workflows/ci.yml)
 
-Centralized security scanning platform for heterogeneous environments: multi-tool orchestration, normalized findings, policy blocking, and a dark-first SOC-style command center for triage, analytics, compare, reporting, and operational controls.
+Centralized security scanning platform with two main runtimes:
+- a **FastAPI dashboard service** for auth, APIs, analytics, exports, settings, notifications, webhooks, and the operator UI
+- a **Python orchestrator** that prepares targets, runs scanners, normalizes output, applies policy, and persists results
 
-Current repository baseline:
-- `607` Python tests green
-- browser smoke with screenshots across login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile nav
-- Docker images scanned in CI with Trivy
-- reusable remote or local-fallback security scan workflow
+The platform is designed to scan code repositories, local paths, live URLs, and container images with a single normalized findings model.
 
 **Repository:** [github.com/3n1gm496/security-scanning-platform](https://github.com/3n1gm496/security-scanning-platform)
 
 ---
 
-## Highlights
+## What it does
 
-### Core platform
-- CI-agnostic orchestration for Git, local, URL, and image targets
-- Unified normalization pipeline across Semgrep, Bandit, Checkov, Gitleaks, Trivy, Grype, Syft, Nuclei, and OWASP ZAP
-- Policy-based blocking with persistent scan history
-- SQLite by default, PostgreSQL optional
-- Structured logging, watchdog timeout handling, and bounded queue/thread controls
+### Scan orchestration
+- runs Semgrep, Bandit, Checkov, Gitleaks, Trivy, Grype, Syft, Nuclei, and optionally OWASP ZAP
+- supports `git`, `local`, `url`, and `image` targets
+- uses a compatibility matrix so only valid scanners run for each target type
+- normalizes raw scanner outputs into a shared findings shape
+- evaluates policies after normalization to decide pass/block status
 
-### SOC command center
-- Dark-first dashboard with light mode toggle
-- Dashboard, scans, findings, analytics, compare, and settings in a single SPA
-- Stabilized live refresh with soft-live updates instead of disruptive full-page reloads
-- Findings triage, scan comparison, exports, notifications, API key management, webhooks, and analytics intelligence board
-- Browser smoke flow that captures screenshots into `artifacts/browser-smoke/`
+### Dashboard and operations
+- central scan history and findings triage
+- compare two scans of the same target
+- analytics for risk, compliance, trends, target ranking, and tool effectiveness
+- exports in CSV, JSON, SARIF, HTML, and PDF
+- API key management, webhooks, notifications, audit log, health, readiness, and Prometheus metrics
 
-### Security and operations
-- Form login plus RBAC API keys (`admin`, `operator`, `viewer`)
-- CSRF protection, security headers, session hardening, and rate limiting
-- Webhook SSRF controls and HMAC signing
-- Trivy and Gitleaks built with patched toolchains in Docker builds
-- CI support for remote security scan when secrets are configured and local Gitleaks fallback when they are not
+### Current repository baseline
+- `607` Python tests green
+- browser smoke covers login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile nav
+- CI builds Docker images and scans them with Trivy
+- reusable `Security Scan` workflow supports either remote platform scan or local Gitleaks fallback
 
 ---
 
 ## Supported scanners
 
-| Scanner | Category | Targets | Notes |
-|---|---|---|---|
-| Semgrep | SAST | `git`, `local` | Community or custom rules |
-| Bandit | Python SAST | `git`, `local` | Python-focused |
-| Checkov | IaC | `git`, `local` | Terraform, Kubernetes, cloud IaC |
-| Gitleaks | Secrets | `git`, `local` | Full git history when available |
-| Trivy FS | SCA / vuln / config | `git`, `local` | File-system mode |
-| Trivy Image | Image scanning | `image` | Registry or local image |
-| Grype | SBOM vuln | `git`, `local`, `image` | Pairs well with Syft |
-| Syft | SBOM generation | `git`, `local`, `image` | SPDX/CycloneDX style data |
-| Nuclei | Pattern / CVE | `git`, `local`, `url` | URL targets supported |
-| OWASP ZAP | DAST | `url` | Optional, internal service in Compose |
+| Scanner | Category | Targets |
+|---|---|---|
+| Semgrep | SAST | `git`, `local` |
+| Bandit | Python SAST | `git`, `local` |
+| Checkov | IaC | `git`, `local` |
+| Gitleaks | Secret scanning | `git`, `local` |
+| Trivy FS | Dependency / config / vuln scanning | `git`, `local` |
+| Trivy Image | Container image scanning | `image` |
+| Grype | SBOM vulnerability scanning | `git`, `local`, `image` |
+| Syft | SBOM generation | `git`, `local`, `image` |
+| Nuclei | URL / template scanning | `git`, `local`, `url` |
+| OWASP ZAP | DAST | `url` |
 
-Compatibility is resolved centrally in `orchestrator/compatibility.py`, so incompatible scanners are skipped rather than misrouted.
+Routing and preflight checks are defined in `orchestrator/compatibility.py`.
 
 ---
 
 ## Architecture
 
-![Platform Architecture Diagram](docs/architecture.png)
+### High-level runtime model
 
-At a high level:
-- the **dashboard service** owns the FastAPI API surface, SPA delivery, auth, analytics, exports, notifications, webhooks, monitoring, and scan-trigger flow
-- the **orchestrator** prepares targets, routes compatible scanners, normalizes results, applies policy, and persists reports
-- the **database layer** stores scans, findings, triage state, audit data, keys, notification preferences, and webhook metadata
-- the **frontend** is a command-center SPA on top of those APIs, with restrained live refresh and chart lifecycle controls
+1. A user or CI caller hits the dashboard API.
+2. The dashboard authenticates the request and validates permissions.
+3. For a triggered scan, `dashboard/scan_runner.py` inserts a running scan row and launches the orchestrator.
+4. The orchestrator:
+   - validates scan identity and target
+   - prepares workspace and report directories
+   - selects compatible scanners
+   - runs scanners
+   - normalizes findings
+   - evaluates policies
+   - stores reports and final scan state
+5. The dashboard surfaces those results through scans, findings, analytics, compare, exports, notifications, webhooks, and metrics.
 
-Repository layout, trimmed to the parts that matter most today:
+### Main components
+
+- `dashboard/app.py`
+  The FastAPI entrypoint, middleware, router wiring, SPA pages, KPI endpoints, and metrics endpoint.
+- `dashboard/rbac.py`
+  Role model, API key lifecycle, user credential verification, audit logging.
+- `dashboard/pagination.py`
+  Cursor-style pagination for scans and findings.
+- `dashboard/finding_management.py`
+  Triage state, assignment, comments, false positives, risk acceptance, and bulk updates.
+- `dashboard/analytics.py`
+  Risk distribution, compliance summary, trends, target ranking, and tool effectiveness.
+- `dashboard/webhooks.py`
+  Webhook registration, validation, signing, retries, and delivery logging.
+- `dashboard/notifications.py`
+  Email alerting and notification preferences.
+- `dashboard/runtime_config.py`
+  Resolves `DASHBOARD_DB_PATH` for container and local development execution.
+- `orchestrator/main.py`
+  Main orchestration pipeline, scan preparation, execution, persistence, and policy flow.
+- `orchestrator/scanners.py`
+  Scanner wrappers, subprocess controls, SSRF checks, and scanner-specific execution rules.
+- `orchestrator/normalizer.py`
+  Normalization layer from raw tool output to shared finding objects.
+- `orchestrator/policy_engine.py`
+  Policy matching, exemptions, and blocking evaluation.
+- `common/schema.py`
+  Shared schema and migrations source of truth.
+
+### Data stores and artifacts
+
+- SQLite by default
+- PostgreSQL optionally via `DATABASE_URL`
+- reports directory for raw and normalized scan output
+- workspaces directory for prepared scan inputs
+- Trivy cache directory and scanner cache state
+
+### Architecture docs
+
+The maintained architecture references are:
+- [docs/architecture.md](docs/architecture.md)
+- [docs/architecture.mmd](docs/architecture.mmd)
+
+---
+
+## Repository structure
 
 ```text
 .
 ├── .github/workflows/          # CI, docker build, security-scan workflow
-├── common/schema.py            # DB schema + migrations
-├── config/                     # settings, policies, targets
+├── common/schema.py            # Shared schema + migrations
+├── config/                     # Scanner settings, policies, batch targets
 ├── dashboard/
-│   ├── app.py                  # FastAPI app
-│   ├── runtime_config.py       # DASHBOARD_DB_PATH resolution
-│   ├── pagination.py           # cursor-style scans/findings pagination
-│   ├── notifications.py        # email notifications
-│   ├── webhooks.py             # webhook delivery + signing
-│   ├── static/                 # app.js, app.css, login.css, fonts
-│   ├── templates/              # app.html, login.html
+│   ├── app.py
+│   ├── runtime_config.py
+│   ├── analytics.py
+│   ├── pagination.py
+│   ├── finding_management.py
+│   ├── notifications.py
+│   ├── webhooks.py
+│   ├── scan_runner.py
+│   ├── static/
+│   ├── templates/
 │   └── tests/
 ├── docker/
 │   ├── scanner-tools.Dockerfile
@@ -95,39 +147,35 @@ Repository layout, trimmed to the parts that matter most today:
 │   ├── main.py
 │   ├── scanners.py
 │   ├── normalizer.py
+│   ├── compatibility.py
+│   ├── cache.py
+│   ├── db_adapter.py
 │   └── tests/
 ├── scripts/
 │   ├── browser_smoke.mjs
 │   ├── ops.sh
-│   ├── run_scan.sh
 │   ├── seed_dev_data.py
+│   ├── run_scan.sh
 │   └── schedule_scan.sh
 ├── docs/
-│   ├── architecture.mmd
 │   ├── architecture.md
+│   ├── architecture.mmd
 │   ├── api-reference.md
 │   ├── deployment.md
-│   ├── development-and-verification.md
-│   ├── gitlab-integration.md
 │   ├── operations.md
 │   ├── security-model.md
-│   ├── ui-audit-matrix.md
-│   └── ui-operations-guide.md
+│   ├── gitlab-integration.md
+│   ├── ui-operations-guide.md
+│   ├── development-and-verification.md
+│   └── ui-audit-matrix.md
 └── docker-compose*.yml
 ```
-
-Deep references:
-- [docs/architecture.md](docs/architecture.md)
-- [docs/api-reference.md](docs/api-reference.md)
-- [docs/deployment.md](docs/deployment.md)
-- [docs/operations.md](docs/operations.md)
-- [docs/security-model.md](docs/security-model.md)
 
 ---
 
 ## Quick start
 
-### Docker-first path
+### Docker Compose
 
 ```bash
 git clone https://github.com/3n1gm496/security-scanning-platform.git
@@ -135,48 +183,45 @@ cd security-scanning-platform
 
 cp .env.example .env
 mkdir -p data/{reports,workspaces,cache/trivy,backups}
-```
-
-Edit `.env` before first boot:
-- set a real `DASHBOARD_PASSWORD`
-- set a strong random `DASHBOARD_SESSION_SECRET`
-- enable `DASHBOARD_HTTPS_ONLY=1` when serving behind TLS
-- configure SMTP only if you need email notifications
-- enable PostgreSQL only if you actually want it
-
-Then build and start:
-
-```bash
 docker compose build
 docker compose up -d
 ```
 
-Default URL:
-- dashboard: `http://localhost:8080`
+Default dashboard URL:
+- `http://localhost:8080`
 
-Useful checks:
+Before production-like use, set at least:
+- `DASHBOARD_PASSWORD`
+- `DASHBOARD_SESSION_SECRET`
+- `DASHBOARD_HTTPS_ONLY=1` when behind TLS
+
+Health checks:
 
 ```bash
-docker compose ps
 curl -fsS http://localhost:8080/api/health
 curl -fsS http://localhost:8080/api/ready
+curl -fsS http://localhost:8080/metrics
 ```
 
-### Local dashboard database path behavior
+### Database path behavior
 
-The dashboard now resolves `DASHBOARD_DB_PATH` more intelligently:
-- explicit `DASHBOARD_DB_PATH` wins
-- in containers it uses `/data/security_scans.db`
-- outside containers it prefers a writable repo-local `data/security_scans.db`
-- if needed it falls back to XDG state or a temp directory
+The dashboard does not rely only on a hardcoded path anymore.
 
-This logic lives in `dashboard/runtime_config.py`.
+Resolution order:
+1. explicit `DASHBOARD_DB_PATH`
+2. `/data/security_scans.db` in container or when writable
+3. repo-local `data/security_scans.db` when writable
+4. XDG state path
+5. temp fallback
+
+Implementation:
+- `dashboard/runtime_config.py`
 
 ---
 
-## Configuration overview
+## Configuration
 
-Key environment variables:
+Main environment variables:
 
 ```bash
 # Auth
@@ -185,7 +230,7 @@ DASHBOARD_PASSWORD=change-me-now
 DASHBOARD_SESSION_SECRET=replace-with-a-random-secret
 DASHBOARD_HTTPS_ONLY=0
 
-# Runtime paths
+# Storage
 ORCH_DB_PATH=/data/security_scans.db
 REPORTS_DIR=/data/reports
 WORKSPACE_DIR=/data/workspaces
@@ -202,58 +247,30 @@ DASHBOARD_CSP_ALLOW_UNSAFE_EVAL=0
 # DATABASE_URL=postgresql://security:change-me-postgres@postgres:5432/security_scans
 ```
 
-Notes:
-- the application fails fast if insecure auth defaults are left in place at runtime
-- `DASHBOARD_CSP_ALLOW_UNSAFE_EVAL` is `0` by default in Compose; enable it explicitly only if your deployment mode requires it
-- `docker-compose.yml` still contains fallback values for some envs, so production should always supply a real `.env`
-
-Main config files:
+Important configuration files:
 - `config/settings.yaml`
 - `config/policies.yaml`
 - `config/targets.yaml`
 
+Important caveat:
+- the application now fails fast on insecure runtime auth defaults
+- Compose still contains some fallback values, so real deployments must provide a proper `.env`
+
 ---
 
-## UI and operator workflows
+## API surface
 
-### Dashboard
-- posture overview, critical pressure, severity chart, trend chart, remediation chart, recent scans watchlist
-- stabilized live refresh that updates state without thrashing the whole page
-
-### Scans
-- queue/workspace view with soft-live updates
-- compare entry flow and scan detail modal
-
-### Findings
-- triage workspace with filters, bulk actions, exports, and detail modal
-- status-aware remediation workflow
-
-### Analytics
-- risk distribution, OWASP map, trend intelligence, tool effectiveness, target risk ranking
-- restrained chart motion for user-driven changes and near-silent background refreshes
-
-### Compare
-- baseline vs comparison workflow with new/resolved/unchanged summaries
-
-### Settings
+Main API groups:
+- auth
+- scans
+- findings
+- analytics and charts
+- exports
 - API keys
 - webhooks
-- notification preferences
-
-### Theme and QA
-- dark mode is the primary visual mode
-- light mode remains supported and smoke-tested
-- browser screenshots are written to `artifacts/browser-smoke/`
-
-For a page-by-page guide, see [docs/ui-operations-guide.md](docs/ui-operations-guide.md).
-
----
-
-## Common API flows
-
-Authentication:
-- session login via `POST /login`
-- API key via `Authorization: Bearer ssp_<...>`
+- notifications
+- audit
+- monitoring
 
 Examples:
 
@@ -269,71 +286,87 @@ curl -X POST http://localhost:8080/api/scan/trigger \
 # Paginated findings
 curl "http://localhost:8080/api/findings/paginated?per_page=20&severity=CRITICAL&status=new"
 
-# Scan comparison
-curl "http://localhost:8080/api/scans/<scan_a>/compare?other_scan_id=<scan_b>"
+# Compare two scans
+curl "http://localhost:8080/api/scans/compare?scan_id_1=<scan_a>&scan_id_2=<scan_b>"
 
-# Export findings
-curl "http://localhost:8080/api/export/findings?format=csv&limit=5000" -o findings.csv
-
-# Analytics
-curl "http://localhost:8080/api/analytics/risk-distribution"
-curl "http://localhost:8080/api/analytics/trends?days=30"
+# SSE stream
+curl "http://localhost:8080/api/scans/events"
 ```
 
-Health and monitoring:
-
-```bash
-curl http://localhost:8080/api/health
-curl http://localhost:8080/api/ready
-curl http://localhost:8080/metrics
-```
+Full reference:
+- [docs/api-reference.md](docs/api-reference.md)
 
 ---
 
-## CI, security scan workflow, and Docker builds
+## Operator UI
 
-### GitHub Actions CI
+The UI is only one layer of the product, but it is now verified as part of normal engineering workflow.
 
-The main CI workflow runs:
-- orchestrator tests on Python `3.11` and `3.12`
+Main pages:
+- dashboard
+- scans
+- findings
+- analytics
+- compare
+- settings
+
+Current UI verification:
+- browser smoke screenshots in `artifacts/browser-smoke/`
+- light and dark theme coverage
+- mobile navigation coverage
+
+Reference:
+- [docs/ui-operations-guide.md](docs/ui-operations-guide.md)
+
+---
+
+## CI and Docker build strategy
+
+GitHub Actions currently runs:
 - dashboard tests on Python `3.11` and `3.12`
-- Bandit and `pip-audit`
+- orchestrator tests on Python `3.11` and `3.12`
+- Bandit
+- `pip-audit`
 - Docker image builds
 - Trivy image scans
 - reusable `Security Scan` workflow
 
-### Security Scan workflow
+Current `Security Scan` behavior:
+- remote scan when `SECURITY_SCANNER_URL` and `SECURITY_SCANNER_API_KEY` exist
+- local Gitleaks fallback otherwise
 
-`.github/workflows/security-scan.yml` behaves as follows:
-- if `SECURITY_SCANNER_URL` and `SECURITY_SCANNER_API_KEY` are present, it triggers a remote scan through the platform API
-- if they are absent, it runs a local Gitleaks fallback and still publishes `scan-results.json`
+Docker security/build notes:
+- `trivy` is compiled from source in the image build with the required patched dependency version
+- `gitleaks` is compiled from source with a patched Go toolchain
+- `docker/scanner-tools.Dockerfile` is used to prime and reuse scanner-tool cache in CI
 
-That means a green run can represent either:
-- remote platform scan, or
-- local fallback scan
+---
 
-### Docker scanner toolchain
+## Operations
 
-The project builds patched scanner binaries in Docker:
-- `gitleaks` from source with patched Go
-- `trivy` from source with the fixed `docker/cli` dependency
+Useful commands:
 
-`docker/scanner-tools.Dockerfile` exists to prime and reuse scanner-tool cache in CI. The application images continue to validate the installed toolchain during build.
+```bash
+./scripts/ops.sh up
+./scripts/ops.sh down
+./scripts/ops.sh health
+./scripts/ops.sh scan demo
+./scripts/ops.sh backup
+./scripts/ops.sh retention --days 30
+./scripts/ops.sh api-key list
+```
+
+Runbooks:
+- [docs/operations.md](docs/operations.md)
+- [docs/deployment.md](docs/deployment.md)
+- [docs/security-model.md](docs/security-model.md)
+- [docs/gitlab-integration.md](docs/gitlab-integration.md)
 
 ---
 
 ## Development and verification
 
-### Local Python environment
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r dashboard/requirements-test.txt
-pip install -r orchestrator/requirements-test.txt
-```
-
-### Core checks
+Core checks:
 
 ```bash
 pytest -q
@@ -341,41 +374,14 @@ node --check dashboard/static/app.js
 node scripts/browser_smoke.mjs
 ```
 
-### Browser smoke
+The browser smoke:
+- seeds a runtime DB
+- boots the dashboard
+- exercises login, navigation, compare, settings, modals, theme toggle, and mobile nav
+- writes screenshots to `artifacts/browser-smoke/`
 
-The smoke script:
-- seeds a runtime database
-- boots the dashboard on a temporary port
-- exercises login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile nav
-- stores screenshots in `artifacts/browser-smoke/`
-
-### CLI helpers
-
-```bash
-./scripts/ops.sh up
-./scripts/ops.sh down
-./scripts/ops.sh health
-./scripts/ops.sh scan demo
-./scripts/ops.sh test
-./scripts/ops.sh lint
-./scripts/ops.sh api-key list
-```
-
-For the full engineering checklist, see [docs/development-and-verification.md](docs/development-and-verification.md).
-
----
-
-## Hardening notes
-
-- supply real credentials and secrets through `.env`
-- prefer HTTPS with `DASHBOARD_HTTPS_ONLY=1`
-- expose the dashboard only through trusted interfaces or a reverse proxy
-- use least-privilege API keys
-- keep webhook targets public and expected; SSRF controls are enforced
-- review `config/policies.yaml` before treating the platform as a blocking gate
-
-Accepted but still present by choice:
-- some Compose fallback values remain in `docker-compose.yml`
+Engineering checklist:
+- [docs/development-and-verification.md](docs/development-and-verification.md)
 
 ---
 
@@ -386,12 +392,11 @@ Accepted but still present by choice:
 - [docs/deployment.md](docs/deployment.md)
 - [docs/operations.md](docs/operations.md)
 - [docs/security-model.md](docs/security-model.md)
+- [docs/gitlab-integration.md](docs/gitlab-integration.md)
 - [docs/ui-operations-guide.md](docs/ui-operations-guide.md)
 - [docs/development-and-verification.md](docs/development-and-verification.md)
 - [docs/ui-audit-matrix.md](docs/ui-audit-matrix.md)
-- [docs/gitlab-integration.md](docs/gitlab-integration.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [IMPROVEMENTS.md](IMPROVEMENTS.md)
 
 ## License
 

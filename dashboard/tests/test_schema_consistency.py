@@ -60,6 +60,11 @@ class TestSchemaConsistency:
         assert "DEFAULT '{}'" in SCHEMA_SQL
         assert "DEFAULT '[]'" in SCHEMA_SQL
 
+    def test_notification_preferences_uses_autoincrementing_primary_key(self):
+        migration_sql = "\n".join(sql for _version, _desc, sql in MIGRATIONS if "notification_preferences" in sql)
+        assert "CREATE TABLE IF NOT EXISTS notification_preferences" in migration_sql
+        assert "id INTEGER PRIMARY KEY AUTOINCREMENT" in migration_sql
+
     def test_migrations_list_not_empty(self):
         assert len(MIGRATIONS) >= 1
         assert MIGRATIONS[0][0] == 1  # version

@@ -19,6 +19,7 @@ from html import escape as html_escape
 from typing import Any
 from urllib.parse import quote_plus, urlsplit, urlunsplit
 
+from db_adapter import adapt_schema, is_postgres
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -320,16 +321,11 @@ class NotificationPreferencesManager:
     """Manage user notification preferences."""
 
     @staticmethod
-    def save_preferences(
-        conn: Any,
-        user_email: str,
-        preferences: dict[str, Any],
-    ) -> bool:
-        """Save notification preferences for a user."""
-        try:
-            conn.execute("""
+    def _ensure_preferences_table(conn: Any) -> None:
+        """Create and repair the notification preferences table across backends."""
+        conn.execute(adapt_schema("""
                 CREATE TABLE IF NOT EXISTS notification_preferences (
-                    id INTEGER PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_email TEXT UNIQUE,
                     critical_alerts BOOLEAN DEFAULT 1,
                     high_alerts BOOLEAN DEFAULT 1,
@@ -338,7 +334,47 @@ class NotificationPreferencesManager:
                     preferred_channel TEXT DEFAULT 'email',
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
+            """))
+
+        if not is_postgres():
+            return
+
+        row = conn.execute(
+            """
+            SELECT column_default, is_identity
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = ?
+              AND column_name = ?
+            """,
+            ("notification_preferences", "id"),
+        ).fetchone()
+        if not row:
+            return
+        if row["is_identity"] == "YES" or row["column_default"]:
+            return
+
+        conn.execute("CREATE SEQUENCE IF NOT EXISTS notification_preferences_id_seq")
+        conn.execute(
+            "SELECT setval("
+            "'notification_preferences_id_seq', "
+            "COALESCE((SELECT MAX(id) FROM notification_preferences), 0) + 1, "
+            "false)"
+        )
+        conn.execute("""
+            ALTER TABLE notification_preferences
+            ALTER COLUMN id SET DEFAULT nextval('notification_preferences_id_seq')
             """)
+
+    @staticmethod
+    def save_preferences(
+        conn: Any,
+        user_email: str,
+        preferences: dict[str, Any],
+    ) -> bool:
+        """Save notification preferences for a user."""
+        try:
+            NotificationPreferencesManager._ensure_preferences_table(conn)
 
             conn.execute(
                 """
@@ -373,6 +409,7 @@ class NotificationPreferencesManager:
     def get_preferences(conn: Any, user_email: str) -> dict[str, Any] | None:
         """Get notification preferences for a user."""
         try:
+            NotificationPreferencesManager._ensure_preferences_table(conn)
             row = conn.execute(
                 "SELECT * FROM notification_preferences WHERE user_email = ?",
                 (user_email,),
@@ -395,6 +432,7 @@ class NotificationPreferencesManager:
     ) -> list[str]:
         """Get all email subscribers for a specific alert type."""
         try:
+            NotificationPreferencesManager._ensure_preferences_table(conn)
             allowed_alert_types = {
                 "critical_alerts": "critical_alerts",
                 "high_alerts": "high_alerts",

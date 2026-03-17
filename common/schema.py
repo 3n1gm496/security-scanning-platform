@@ -202,7 +202,7 @@ CREATE INDEX IF NOT EXISTS idx_finding_comments_finding ON finding_comments(find
 
 -- Notification preferences
 CREATE TABLE IF NOT EXISTS notification_preferences (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_email TEXT UNIQUE,
     critical_alerts BOOLEAN DEFAULT 1,
     high_alerts BOOLEAN DEFAULT 1,

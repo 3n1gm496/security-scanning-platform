@@ -274,6 +274,8 @@ def rotate_webhook_secret(webhook_id: int, new_secret: str) -> bool:
     counter (the old secret may have caused signature-mismatch failures
     on the consumer side).
     """
+    if not str(new_secret).strip():
+        raise ValueError("Webhook secret must not be empty")
     with get_connection(DASHBOARD_DB_PATH) as conn:
         cursor = conn.execute(
             "UPDATE webhooks SET secret = ?, consecutive_failures = 0 WHERE id = ?",
@@ -441,10 +443,11 @@ def _update_webhook_stats(webhook_id: int, success: bool):
                 """
                 UPDATE webhooks
                 SET failure_count = failure_count + 1,
-                    consecutive_failures = consecutive_failures + 1
+                    consecutive_failures = consecutive_failures + 1,
+                    last_triggered_at = ?
                 WHERE id = ?
                 """,
-                (webhook_id,),
+                (now, webhook_id),
             )
             # Circuit breaker: auto-disable after N consecutive failures
             row = conn.execute("SELECT consecutive_failures FROM webhooks WHERE id = ?", (webhook_id,)).fetchone()

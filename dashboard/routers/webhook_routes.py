@@ -97,7 +97,10 @@ def rotate_secret_endpoint(
     The new secret takes effect immediately. The consumer must be updated
     to use the new secret before the next delivery.
     """
-    success = rotate_webhook_secret(webhook_id, secret)
+    try:
+        success = rotate_webhook_secret(webhook_id, secret)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")

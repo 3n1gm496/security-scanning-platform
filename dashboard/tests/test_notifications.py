@@ -64,6 +64,16 @@ def test_get_subscribers():
     assert "user2@example.com" not in subscribers
 
 
+def test_notification_preferences_table_uses_autoincrement_primary_key():
+    conn = get_connection(":memory:")
+    NotificationPreferencesManager.save_preferences(conn, "table-test@example.com", {"critical_alerts": True})
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='notification_preferences'"
+    ).fetchone()
+    assert row is not None
+    assert "AUTOINCREMENT" in row["sql"].upper()
+
+
 os.environ.setdefault("DASHBOARD_USERNAME", "testuser")
 os.environ.setdefault("DASHBOARD_PASSWORD", "testpass")
 

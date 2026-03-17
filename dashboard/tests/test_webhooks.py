@@ -26,10 +26,12 @@ from webhooks import (
     WEBHOOK_SECRET_PREFIX,
     WebhookEvent,
     _generate_signature,
+    _update_webhook_stats,
     create_webhook,
     delete_webhook,
     init_webhook_tables,
     list_webhooks,
+    rotate_webhook_secret,
     toggle_webhook,
     trigger_webhook,
     validate_webhook_url,
@@ -181,6 +183,16 @@ def test_toggle_webhook(db_setup):
     webhooks = list_webhooks()
     assert webhooks[0]["is_active"] == 1
 
+
+def test_rotate_webhook_secret_rejects_blank_secret(db_setup):
+    """Secret rotation should reject empty/blank replacement secrets."""
+    webhook_id = create_webhook(
+        name="Rotate Test", url="https://example.com/webhook", events=[WebhookEvent.SCAN_COMPLETED]
+    )
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        rotate_webhook_secret(webhook_id, "   ")
+
     # Disabilita
     success = toggle_webhook(webhook_id, False)
     assert success is True
@@ -258,6 +270,9 @@ async def test_trigger_webhook_failure(db_setup):
             assert success is False
             assert error is not None
             assert "Connection error" in error
+
+    webhook = list_webhooks()[0]
+    assert webhook["last_triggered_at"] is not None
 
 
 @pytest.mark.asyncio
@@ -376,7 +391,7 @@ class TestWebhookCircuitBreaker:
 
     def test_circuit_breaker_trips_after_threshold(self, db_setup):
         """Webhook is auto-disabled after WEBHOOK_CIRCUIT_BREAKER_THRESHOLD failures."""
-        from webhooks import WEBHOOK_CIRCUIT_BREAKER_THRESHOLD, _update_webhook_stats
+        from webhooks import WEBHOOK_CIRCUIT_BREAKER_THRESHOLD
 
         wid = create_webhook(
             name="CB Test",
@@ -394,8 +409,6 @@ class TestWebhookCircuitBreaker:
 
     def test_success_resets_consecutive_failures(self, db_setup):
         """A successful delivery resets the consecutive_failures counter."""
-        from webhooks import _update_webhook_stats
-
         wid = create_webhook(
             name="Reset Test",
             url="https://example.com/hook",
@@ -409,3 +422,16 @@ class TestWebhookCircuitBreaker:
         webhook = list_webhooks()[0]
         assert webhook["consecutive_failures"] == 0
         assert webhook["is_active"] == 1
+
+    def test_failure_updates_last_triggered_at(self, db_setup):
+        """Operational timestamps should record failed delivery attempts too."""
+        wid = create_webhook(
+            name="Timestamp Test",
+            url="https://example.com/hook",
+            events=[WebhookEvent.SCAN_COMPLETED],
+        )
+
+        _update_webhook_stats(wid, success=False)
+
+        webhook = list_webhooks()[0]
+        assert webhook["last_triggered_at"] is not None

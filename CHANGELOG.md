@@ -26,6 +26,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - **Operations runtime parity**: backup/restore now respect custom report paths, preserve compatibility with historical report archives, choose container-side PostgreSQL tooling correctly for Compose-hosted `postgres`, and keep Compose DB path wiring consistent between dashboard and orchestrator.
 - **Backend notification and analytics parity**: scan completion/failure now emits the runtime webhook events already modeled by the product, notification preferences drive automatic scan summary and high/critical finding emails, and analytics/breakdown queries normalize blank target/tool labels instead of leaking empty values into the UI.
 - **Technical debt cleanup**: removed the unused standalone `dashboard/metrics.py` collector and its orphaned tests so Prometheus behavior now has a single runtime path in `dashboard/monitoring.py`.
+- **Legacy SSR cleanup**: removed the unused `dashboard/templates/scans.html` and `dashboard/templates/findings.html` templates now that the dashboard is fully served through `app.html`, and ignored SQLite `*.db-wal` / `*.db-shm` sidecars to keep the repo clean during local runtime verification.
 
 ## [1.5.1] — 2026-03-11
 

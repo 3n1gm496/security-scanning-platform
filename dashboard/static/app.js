@@ -618,6 +618,21 @@ createApp({
       Chart.defaults.color = s.getPropertyValue('--chart-tick').trim() || '#6b7280';
       Chart.defaults.borderColor = s.getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,0.06)';
       Chart.defaults.font.family = s.getPropertyValue('--font-ui').trim() || 'IBM Plex Sans, system-ui, sans-serif';
+      if (!Chart.__sspDetachedCanvasGuardInstalled) {
+        ['clear', 'draw', 'render'].forEach((method) => {
+          const original = Chart.prototype[method];
+          if (typeof original !== 'function' || original.__sspDetachedCanvasGuard) return;
+          const guarded = function sspGuardedChartMethod(...args) {
+            if (!this || !this.canvas || !this.ctx || this.canvas.isConnected === false) {
+              return this;
+            }
+            return original.apply(this, args);
+          };
+          guarded.__sspDetachedCanvasGuard = true;
+          Chart.prototype[method] = guarded;
+        });
+        Chart.__sspDetachedCanvasGuardInstalled = true;
+      }
       if (Chart.defaults.transitions) {
         if (Chart.defaults.transitions.active) {
           Chart.defaults.transitions.active.animation = { duration: 0 };

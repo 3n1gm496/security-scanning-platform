@@ -1,262 +1,288 @@
-# Integrazione GitLab Enterprise CI/CD
+# GitLab Enterprise Integration
 
-Questa guida descrive come integrare la Security Scanning Platform in una pipeline GitLab Enterprise, sia come **piattaforma da deployare** (il progetto stesso) sia come **strumento di scansione** da invocare da altri repository.
+This guide explains how to integrate the platform with GitLab in two modes:
+- deploying the platform itself from GitLab
+- invoking the platform from other GitLab repositories as a reusable security gate
 
----
-
-## Indice
-
-1. [Prerequisiti](#prerequisiti)
-2. [Struttura della pipeline](#struttura-della-pipeline)
-3. [Configurazione variabili CI/CD](#configurazione-variabili-cicd)
-4. [Deploy della piattaforma su GitLab](#deploy-della-piattaforma-su-gitlab)
-5. [Integrare la scansione in altri repository](#integrare-la-scansione-in-altri-repository)
-6. [GitLab Ultimate: template SAST nativi](#gitlab-ultimate-template-sast-nativi)
-7. [Scansioni programmate (nightly)](#scansioni-programmate-nightly)
-8. [Troubleshooting](#troubleshooting)
+The content here is aligned with the current repository state, including the remote-or-fallback security scan behavior.
 
 ---
 
-## Prerequisiti
+## Prerequisites
 
-| Requisito | Versione minima |
-| :--- | :--- |
-| GitLab | 16.0 (Enterprise o Community) |
-| GitLab Runner | 16.0 con executor `docker` o `kubernetes` |
-| Docker | 24.0 |
-| Docker Compose | v2.20 |
-| Python | 3.11 |
+| Requirement | Minimum |
+|---|---|
+| GitLab | 16.x |
+| GitLab Runner | Docker executor recommended |
+| Docker | 24+ |
+| Docker Compose | v2.20+ |
+| Python | 3.11+ |
 
-Il runner deve avere accesso a:
-- **GitLab Container Registry** (per push/pull delle immagini)
-- **Host di deployment** via SSH (per lo stage `deploy`)
-- **URL della piattaforma** (per lo stage `scan-self`)
+The runner should be able to reach:
+- the target GitLab repository
+- the platform URL for remote scans
+- the deployment host if you automate deploys
 
 ---
 
-## Struttura della pipeline
+## What the repository already provides
 
-Il file `.gitlab-ci.yml` nella root del progetto definisce sei stage in sequenza:
+Relevant files:
+- `.gitlab-ci.yml`
+- `templates/gitlab-scan-template.yml`
+- `docs/gitlab-integration.md` (this document)
 
-```
-lint → test → security → build → scan-self → deploy
+Typical GitLab stage flow:
+
+```text
+lint -> test -> security -> build -> scan-self -> deploy
 ```
 
-| Stage | Job | Descrizione |
-| :--- | :--- | :--- |
-| `lint` | `lint:orchestrator`, `lint:dashboard` | flake8 (errori critici + full) e black check |
-| `test` | `test:orchestrator`, `test:dashboard` | pytest con coverage Cobertura e report JUnit |
-| `security` | `sast:bandit` | Bandit SAST su orchestrator e dashboard |
-| `build` | `build:orchestrator`, `build:dashboard` | Docker build + push al GitLab Container Registry |
-| `scan-self` | `scan-self`, `nightly:scan` | Scansione del repository tramite la piattaforma stessa |
-| `deploy` | `deploy:staging`, `deploy:production` | Deploy SSH con `docker compose pull && up` |
-
-I job `deploy:staging` e `deploy:production` richiedono rispettivamente trigger automatico su `develop` e approvazione manuale su `main`.
+Use this as a starting point, not as an immutable contract. The GitHub Actions workflows are the most actively maintained CI source of truth for this repository, so keep your GitLab pipeline aligned with the current API and runtime behavior.
 
 ---
 
-## Configurazione variabili CI/CD
+## Required variables
 
-Vai su **Settings → CI/CD → Variables** nel progetto GitLab e aggiungi:
+Add these under **Settings -> CI/CD -> Variables**.
 
-### Variabili obbligatorie
+### Remote scan mode
 
-| Variabile | Tipo | Descrizione |
-| :--- | :--- | :--- |
-| `SECURITY_SCANNER_URL` | Variable | URL base della dashboard, es. `https://scanner.example.com` |
-| `SECURITY_SCANNER_API_KEY` | Variable (masked) | Bearer token con ruolo `operator` o `admin` |
-| `DEPLOY_SSH_KEY` | Variable (masked, protected) | Chiave privata SSH per il deployment |
-| `DEPLOY_HOST` | Variable | Hostname o IP del server di deployment |
+| Variable | Required | Description |
+|---|---|---|
+| `SECURITY_SCANNER_URL` | yes | Base URL of the deployed dashboard, e.g. `https://scanner.example.com` |
+| `SECURITY_SCANNER_API_KEY` | yes | API key with `operator` or `admin` role |
 
-### Variabili opzionali
+### Deploy mode
 
-| Variabile | Default | Descrizione |
-| :--- | :--- | :--- |
-| `PYTHON_VERSION` | `3.11` | Versione Python per i job di test e lint |
-| `DEPLOY_USER` | `deploy` | Utente SSH sul server di deployment |
-| `DEPLOY_PATH` | `/opt/security-scanning-platform` | Path del progetto sul server |
-| `SECURITY_SCAN_FAIL_ON_BLOCK` | `true` | Se `true`, la pipeline fallisce quando la policy restituisce `BLOCK` |
+| Variable | Required | Description |
+|---|---|---|
+| `DEPLOY_SSH_KEY` | if deploying | SSH private key for the deploy host |
+| `DEPLOY_HOST` | if deploying | Hostname or IP of the target server |
+| `DEPLOY_USER` | optional | SSH user, default `deploy` |
+| `DEPLOY_PATH` | optional | Remote path, default `/opt/security-scanning-platform` |
 
-### Creare una API key per la CI
+### Optional control variables
 
-Usa `ops.sh` per creare una chiave con ruolo `operator`:
+| Variable | Default | Description |
+|---|---|---|
+| `SECURITY_SCAN_FAIL_ON_BLOCK` | `true` | Fails the job when the platform returns `BLOCK` |
+| `PYTHON_VERSION` | `3.11` | Test/lint Python version |
+
+---
+
+## Creating the API key for CI
+
+Use the platform itself:
 
 ```bash
 ./scripts/ops.sh api-key create --name gitlab-ci --role operator --expires-days 365
 ```
 
-Copia il valore della chiave nella variabile `SECURITY_SCANNER_API_KEY` su GitLab (tipo: **masked**).
+Store the resulting `ssp_...` token in `SECURITY_SCANNER_API_KEY`.
 
 ---
 
-## Deploy della piattaforma su GitLab
+## Deploying the platform from GitLab
 
-### 1. Clonare il repository su GitLab
+### 1. Mirror or push the repository
 
 ```bash
-# Mirroring da GitHub (opzionale)
 git clone https://github.com/3n1gm496/security-scanning-platform.git
 cd security-scanning-platform
 git remote add gitlab https://gitlab.example.com/security/security-scanning-platform.git
 git push gitlab main
 ```
 
-### 2. Configurare il GitLab Container Registry
-
-Il `.gitlab-ci.yml` usa automaticamente `$CI_REGISTRY`, `$CI_REGISTRY_USER` e `$CI_REGISTRY_PASSWORD` — variabili predefinite di GitLab. Non è necessaria alcuna configurazione aggiuntiva se il Container Registry è abilitato nel progetto.
-
-### 3. Configurare il server di deployment
-
-Sul server di deployment, prepara l'ambiente:
+### 2. Prepare the target server
 
 ```bash
-# Creare l'utente deploy
-sudo useradd -m -s /bin/bash deploy
+sudo useradd -m -s /bin/bash deploy || true
 sudo usermod -aG docker deploy
 
-# Aggiungere la chiave pubblica SSH
-sudo -u deploy mkdir -p /home/deploy/.ssh
-echo "ssh-ed25519 AAAA... gitlab-ci" | sudo -u deploy tee -a /home/deploy/.ssh/authorized_keys
-sudo chmod 600 /home/deploy/.ssh/authorized_keys
-
-# Clonare il progetto
 sudo mkdir -p /opt/security-scanning-platform
 sudo chown deploy:deploy /opt/security-scanning-platform
+
 sudo -u deploy git clone https://gitlab.example.com/security/security-scanning-platform.git \
   /opt/security-scanning-platform
-
-# Configurare .env
-cd /opt/security-scanning-platform
-sudo -u deploy cp .env.example .env
-sudo -u deploy vim .env  # Imposta DASHBOARD_PASSWORD, SECRET_KEY, ecc.
 ```
 
-### 4. Primo avvio
+### 3. Configure `.env`
+
+At minimum set:
+- `DASHBOARD_PASSWORD`
+- `DASHBOARD_SESSION_SECRET`
+- `DASHBOARD_HTTPS_ONLY=1` if TLS is terminated upstream
+- optional SMTP settings
+- optional `DATABASE_URL` if using PostgreSQL
+
+### 4. Start the stack
 
 ```bash
-sudo -u deploy bash /opt/security-scanning-platform/scripts/ops.sh up
+cd /opt/security-scanning-platform
+sudo -u deploy cp .env.example .env
+sudo -u deploy mkdir -p data/{reports,workspaces,cache/trivy,backups}
+sudo -u deploy docker compose build
+sudo -u deploy docker compose up -d
+```
+
+Health checks:
+
+```bash
+curl -fsS http://localhost:8080/api/health
+curl -fsS http://localhost:8080/api/ready
 ```
 
 ---
 
-## Integrare la scansione in altri repository
+## Calling the platform from another GitLab repository
 
-Per invocare la piattaforma da un qualsiasi altro repository GitLab, aggiungi questo snippet al `.gitlab-ci.yml` del progetto target:
-
-```yaml
-include:
-  - project: 'security/security-scanning-platform'
-    ref: main
-    file: '/templates/gitlab-scan-template.yml'
-```
-
-In alternativa, copia direttamente il job:
+The simplest pattern is a job that triggers `/api/scan/trigger` with `async_mode=false`.
 
 ```yaml
 security:scan:
   stage: security
   image: alpine:3.19
   before_script:
-    - apk add --no-cache curl jq --quiet
+    - apk add --no-cache curl jq
   script:
     - |
       set -euo pipefail
 
-      SCAN_RESPONSE=$(curl \
-        --fail-with-body --silent --show-error --max-time 300 \
+      SCAN_RESPONSE="$(curl \
+        --fail-with-body \
+        --silent \
+        --show-error \
+        --max-time 300 \
         -X POST "${SECURITY_SCANNER_URL}/api/scan/trigger" \
         -H "Authorization: Bearer ${SECURITY_SCANNER_API_KEY}" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "target_type=git" \
         -d "target=${CI_PROJECT_URL}" \
         -d "name=${CI_PROJECT_PATH}" \
-        -d "async_mode=false")
+        -d "async_mode=false")"
 
       echo "${SCAN_RESPONSE}" | jq .
-      POLICY_STATUS=$(echo "${SCAN_RESPONSE}" | jq -r '.output.results[0].policy_status // "UNKNOWN"')
 
-      if [ "${POLICY_STATUS}" = "BLOCK" ]; then
-        echo "Security scan BLOCKED: critical findings detected"
+      SCAN_STATUS="$(echo "${SCAN_RESPONSE}" | jq -r '.status // "unknown"')"
+      POLICY_STATUS="$(echo "${SCAN_RESPONSE}" | jq -r '.output.results[0].policy_status // .policy_status // "UNKNOWN"')"
+
+      if [ "${SCAN_STATUS}" = "error" ] || [ "${SCAN_STATUS}" = "failed" ]; then
+        echo "Scanner returned an error status"
         exit 1
       fi
-  artifacts:
-    when: always
-    paths:
-      - scan-results.json
-    expire_in: 30 days
+
+      if [ "${SECURITY_SCAN_FAIL_ON_BLOCK:-true}" = "true" ] && [ "${POLICY_STATUS}" = "BLOCK" ]; then
+        echo "Security policy blocked the pipeline"
+        exit 1
+      fi
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 ```
 
-Le variabili `SECURITY_SCANNER_URL` e `SECURITY_SCANNER_API_KEY` possono essere definite a livello di **gruppo GitLab** (Settings → CI/CD → Variables) per renderle disponibili a tutti i repository del gruppo senza doverle ripetere.
+This snippet matches the current API shape used by the repository's own remote scan workflow.
 
 ---
 
-## GitLab Ultimate: template SAST nativi
+## Current security scan workflow behavior
 
-Se si dispone di GitLab Ultimate, è possibile abilitare i template SAST nativi decommentando le righe nel `.gitlab-ci.yml`:
+The repository's reusable security scan workflow currently behaves like this:
 
-```yaml
-include:
-  - template: Security/SAST.gitlab-ci.yml
-  - template: Security/Secret-Detection.gitlab-ci.yml
-  - template: Security/Container-Scanning.gitlab-ci.yml
-  - template: Security/Dependency-Scanning.gitlab-ci.yml
+1. If `SECURITY_SCANNER_URL` and `SECURITY_SCANNER_API_KEY` exist, it runs a remote platform scan.
+2. If they do not exist, it runs a local Gitleaks fallback and still uploads `scan-results.json`.
+
+Important consequence:
+- a green pipeline can mean "remote platform scan succeeded"
+- or "local fallback scan succeeded"
+
+If you want GitLab to behave like a hard remote gate, make the remote variables mandatory in your GitLab project/group and fail the pipeline when they are missing.
+
+---
+
+## Runner and registry notes
+
+For Docker-based build jobs:
+- use a Docker executor
+- enable privileged mode if you build images with Docker-in-Docker
+- pre-pull or mirror base images if your instance is air-gapped
+
+Example runner fragment:
+
+```toml
+[[runners]]
+  name = "security-scanner-runner"
+  executor = "docker"
+  [runners.docker]
+    image = "python:3.11-slim"
+    privileged = true
+    volumes = ["/cache", "/certs/client"]
 ```
 
-I risultati saranno visibili nella **Security Dashboard** di GitLab e nelle Merge Request come commenti automatici.
-
-> **Nota**: i template GitLab Ultimate e il job `sast:bandit` personalizzato sono complementari. Il primo copre un insieme più ampio di linguaggi; il secondo offre controllo granulare sulle regole Bandit specifiche per questo progetto.
+If your environment is air-gapped, mirror:
+- `python:3.11-slim`
+- `docker` / `docker:dind`
+- `alpine`
+- any internal registry dependencies you need
 
 ---
 
-## Scansioni programmate (nightly)
+## Scheduled scans
 
-Configura una scansione notturna in **CI/CD → Schedules**:
+Typical nightly schedule:
 
-| Campo | Valore |
-| :--- | :--- |
+| Field | Value |
+|---|---|
 | Description | Nightly Security Scan |
-| Interval Pattern | `0 2 * * *` (ogni giorno alle 02:00 UTC) |
+| Interval Pattern | `0 2 * * *` |
 | Target Branch | `main` |
-| Variables | (nessuna aggiuntiva, usa quelle di progetto) |
 
-Il job `nightly:scan` viene eseguito solo quando `$CI_PIPELINE_SOURCE == "schedule"` e ha `allow_failure: true` per non bloccare la pipeline principale in caso di errori transitori dello scanner.
+For scheduled scans, decide whether you want:
+- remote platform scan only
+- or fallback-acceptable behavior
+
+That is an operational policy choice, not a repository limitation.
 
 ---
 
 ## Troubleshooting
 
-### La pipeline fallisce con "Scanner response is not valid JSON"
+### Invalid JSON from the platform
 
-Verifica che `SECURITY_SCANNER_URL` punti all'URL corretto e che la piattaforma sia raggiungibile dal runner. Testa manualmente:
+Check the platform URL directly:
 
 ```bash
-curl -v "${SECURITY_SCANNER_URL}/health"
+curl -v "${SECURITY_SCANNER_URL}/api/health"
 ```
 
-### Il job `build:*` fallisce con "unauthorized"
+### Pipeline passes but did not run the remote scan
 
-Assicurati che il runner abbia accesso al Container Registry. Se usi un runner self-hosted, verifica che `CI_REGISTRY_USER` e `CI_REGISTRY_PASSWORD` siano iniettati correttamente (sono variabili predefinite di GitLab, non richiedono configurazione manuale).
+Verify:
+- `SECURITY_SCANNER_URL`
+- `SECURITY_SCANNER_API_KEY`
+- the workflow/job summary text
 
-### Il deploy SSH fallisce con "Host key verification failed"
+Remember that the current workflow falls back locally when the remote secrets are missing.
 
-Il `before_script` del template deploy esegue `ssh-keyscan` per aggiungere l'host a `known_hosts`. Se il server usa una porta SSH non standard, aggiungi:
+### Remote scan returns `BLOCK`
 
-```yaml
-variables:
-  DEPLOY_SSH_PORT: "2222"
-before_script:
-  - ssh-keyscan -p "${DEPLOY_SSH_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
-```
+Review:
+- `config/policies.yaml`
+- the scan response payload
+- whether `SECURITY_SCAN_FAIL_ON_BLOCK` should stay enabled for that project
 
-### La scansione restituisce BLOCK inaspettatamente
+### Deploy fails over SSH
 
-Controlla le policy in `config/policies.yaml`. Per disabilitare temporaneamente il blocco senza modificare le policy, imposta la variabile CI/CD:
+Check:
+- host key trust
+- `DEPLOY_HOST`
+- `DEPLOY_USER`
+- `DEPLOY_PATH`
+- that the `deploy` user has Docker access
 
-```
-SECURITY_SCAN_FAIL_ON_BLOCK = false
-```
+### Dashboard starts but sessions are insecure
 
-Questo permette alla pipeline di continuare ma registra comunque il risultato `BLOCK` negli artefatti.
+Ensure production `.env` sets:
+- a real `DASHBOARD_PASSWORD`
+- a strong `DASHBOARD_SESSION_SECRET`
+- `DASHBOARD_HTTPS_ONLY=1` behind TLS

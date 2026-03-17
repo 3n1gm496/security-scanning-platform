@@ -9,6 +9,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- **SOC command center UI**: the dashboard frontend was redesigned into a dark-first, command-center-oriented interface with refined shell, dashboard, scans, findings, analytics, compare, settings, modals, login, light theme, and mobile navigation.
+- **Live refresh and chart lifecycle**: scan polling, analytics refresh, and chart motion were stabilized so the UI updates more quietly and reliably during active scan activity.
+- **Browser smoke coverage**: the end-to-end smoke flow now covers login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile navigation, with screenshots written to `artifacts/browser-smoke/`.
+- **Documentation refresh**: the README and operational docs were realigned with the current UI, CI behavior, runtime configuration, and verification workflow.
+
+### Fixed
+
+- **Dashboard chart lifecycle edge case**: theme/resizing flows no longer trigger the Chart.js recursion/runtime errors discovered by the expanded browser smoke path.
+- **Audit follow-up fixes across UI workflows**: findings export parity, scan comparison fallback matching, notifications field/link alignment, legacy scans/findings parity, and command-center UI consistency fixes were rolled into the current baseline.
+
 ## [1.5.1] — 2026-03-11
 
 Release with targeted fixes: WSL2/Docker Desktop compatibility, dashboard UI/UX bugs.

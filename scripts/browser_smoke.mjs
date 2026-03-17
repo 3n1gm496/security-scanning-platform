@@ -3,7 +3,7 @@
 import net from "node:net";
 import process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +24,12 @@ const artifactsDir = resolve(repoRoot, "artifacts", "browser-smoke");
 const localLibDir = resolve(repoRoot, ".local-playwright-libs", "extracted", "usr", "lib", "x86_64-linux-gnu");
 
 mkdirSync(artifactsDir, { recursive: true });
+
+for (const entry of readdirSync(artifactsDir, { withFileTypes: true })) {
+  if (entry.isFile() && entry.name.endsWith(".png")) {
+    rmSync(resolve(artifactsDir, entry.name), { force: true });
+  }
+}
 
 function runOrThrow(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, { encoding: "utf-8", ...opts });

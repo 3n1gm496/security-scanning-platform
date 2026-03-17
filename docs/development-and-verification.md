@@ -46,7 +46,7 @@ The smoke flow:
 - seeds a runtime database
 - starts the dashboard on a temporary port
 - exercises login, navigation, compare, settings, theme toggle, modals, mobile nav, keyboard row activation, and `Escape`-driven modal close
-- writes screenshots to `artifacts/browser-smoke/`
+- rewrites screenshots in `artifacts/browser-smoke/` so the directory reflects the latest run only
 
 ---
 

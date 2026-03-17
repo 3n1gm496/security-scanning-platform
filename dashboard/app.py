@@ -400,13 +400,13 @@ async def index(request: Request, user: str = Depends(get_current_user)) -> HTML
 
 @app.get("/scans")
 async def scans_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
-    """Deprecated SSR route — redirect to SPA."""
+    """Legacy convenience route that redirects to the SPA scans view."""
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#scans"})
 
 
 @app.get("/findings")
 async def findings_page(request: Request, user: str = Depends(get_current_user)) -> HTMLResponse:
-    """Deprecated SSR route — redirect to SPA."""
+    """Legacy convenience route that redirects to the SPA findings view."""
     return HTMLResponse(status_code=status.HTTP_302_FOUND, headers={"Location": "/#findings"})
 
 

@@ -1,8 +1,8 @@
 """
 Stabilization pass tests:
 - db.py: count_findings, list_findings with offset
-- app.py: /findings route pagination context
-- Dead template removal: index.html and index-vue.html are not served
+- app.py: legacy `/scans` and `/findings` aliases redirect to the SPA
+- dead standalone HTML pages are not served directly
 """
 
 from __future__ import annotations

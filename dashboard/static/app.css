@@ -1979,6 +1979,15 @@ code {
     z-index: 60;
     box-shadow: var(--shadow-lg);
   }
+  .sidebar.mobile-open .sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sidebar.mobile-open .logout-btn {
+    width: 100%;
+    justify-content: center;
+  }
   .mobile-nav-backdrop {
     display: block;
     position: fixed;
@@ -1998,6 +2007,12 @@ code {
   .modal-xl { width: 100%; }
   .modal-body { padding: var(--space-4); }
   .filters-row { gap: var(--space-2); }
+  .settings-empty-state-card {
+    margin: 0 14px 14px;
+    padding: 16px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 480px) {
@@ -4233,6 +4248,44 @@ textarea {
   overflow: hidden;
 }
 
+.settings-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-empty-state-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  margin: 0 20px 20px;
+  border-radius: 20px;
+  border: 1px dashed var(--color-border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+}
+
+.settings-empty-state-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 58ch;
+}
+
+.settings-empty-state-copy h3 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.settings-empty-state-copy p {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
 .section-hint {
   padding: 0 20px 14px;
   color: var(--color-text-secondary);
@@ -4294,6 +4347,28 @@ textarea {
 .modal-body-form {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+
+.modal-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -2px;
+}
+
+.modal-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.03);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .detail-grid {

@@ -1068,6 +1068,16 @@
               <h2>Access, automation, and notification controls</h2>
               <p>Keep operator controls aligned with the command-center interface without changing the underlying workflows.</p>
             </div>
+            <div class="workspace-intro-side workspace-intro-side-stack">
+              <div class="workspace-metric-stack">
+                <span class="workspace-metric-label">Current role</span>
+                <strong class="workspace-metric-value">{{ currentUserRoleLabel }}</strong>
+              </div>
+              <div class="workspace-metric-stack">
+                <span class="workspace-metric-label">Theme</span>
+                <strong class="workspace-metric-value">{{ darkMode ? 'Dark' : 'Light' }}</strong>
+              </div>
+            </div>
           </div>
         </div>
         <div class="settings-tabs" role="tablist" aria-label="Settings sections">
@@ -1079,7 +1089,10 @@
         <!-- API Keys tab -->
         <div v-if="settingsTab === 'apikeys'" class="card settings-panel">
           <div class="card-header">
-            <h2>API Keys</h2>
+            <div>
+              <h2>API Keys</h2>
+              <p class="card-subtitle">Role-scoped credentials for CI pipelines, service integrations, and operator tooling.</p>
+            </div>
             <button class="btn-primary btn-sm" type="button" @click="openCreateKeyModal">+ New Key</button>
           </div>
           <p class="section-hint">Manage API keys for programmatic platform access. Each key has a role and specific permissions.</p>
@@ -1087,7 +1100,12 @@
             <table class="soc-table">
               <thead><tr><th scope="col">Name</th><th scope="col">Prefix</th><th scope="col">Role</th><th scope="col">Created by</th><th scope="col">Created at</th><th scope="col">Expires</th><th scope="col" class="th-actions">Actions</th></tr></thead>
               <tbody>
-                <tr v-if="apiKeys.length === 0"><td colspan="7" class="empty-state">No API keys</td></tr>
+                <tr v-if="apiKeys.length === 0">
+                  <td colspan="7" class="empty-state settings-empty-state">
+                    <strong>No API keys issued yet.</strong>
+                    <span>Create a role-scoped key for automation, CI, or external platform access.</span>
+                  </td>
+                </tr>
                 <tr v-for="key in apiKeys" :key="key.prefix">
                   <td>{{ key.name }}</td>
                   <td><code class="id-code">{{ key.prefix }}...</code></td>
@@ -1107,15 +1125,17 @@
         <!-- Webhooks tab -->
         <div v-if="settingsTab === 'webhooks'" class="card settings-panel">
           <div class="card-header">
-            <h2>Webhooks</h2>
+            <div>
+              <h2>Webhooks</h2>
+              <p class="card-subtitle">Outbound event delivery for scan completion, critical findings, and downstream automation.</p>
+            </div>
             <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">+ New Webhook</button>
           </div>
           <p class="section-hint">Receive real-time notifications for events such as scan completion or critical findings.</p>
-          <div class="table-wrap">
+          <div class="table-wrap" v-if="webhooks.length > 0">
             <table class="soc-table">
               <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Active</th><th scope="col" class="th-actions">Actions</th></tr></thead>
               <tbody>
-                <tr v-if="webhooks.length === 0"><td colspan="5" class="empty-state">No webhooks configured</td></tr>
                 <tr v-for="wh in webhooks" :key="wh.id">
                   <td>{{ wh.name }}</td>
                   <td class="cell-wrap"><code class="file-code">{{ wh.url }}</code></td>
@@ -1133,12 +1153,23 @@
               </tbody>
             </table>
           </div>
+          <div v-else class="settings-empty-state-card">
+            <div class="settings-empty-state-copy">
+              <span class="panel-kicker">No outbound hooks</span>
+              <h3>Automate downstream response</h3>
+              <p>Create a webhook to forward scan and finding events into chatops, ticketing, or orchestration systems.</p>
+            </div>
+            <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">Create first webhook</button>
+          </div>
         </div>
 
         <!-- Notifications tab -->
         <div v-if="settingsTab === 'notifications'" class="card settings-panel">
           <div class="card-header">
-            <h2>Notification Preferences</h2>
+            <div>
+              <h2>Notification Preferences</h2>
+              <p class="card-subtitle">Tune alert delivery, escalation noise, and operator summary cadence.</p>
+            </div>
           </div>
           <form class="settings-form" @submit.prevent="saveNotificationPrefs">
             <!-- Delivery -->
@@ -1476,6 +1507,11 @@
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="triggerScan">
           <p class="modal-subtitle">Configure and start a new security scan.</p>
+          <div class="modal-meta-strip">
+            <span class="modal-meta-chip">Mode: async</span>
+            <span class="modal-meta-chip">Role: {{ currentUserRoleLabel }}</span>
+            <span class="modal-meta-chip">Target: {{ newScanForm.target_type }}</span>
+          </div>
           <div class="form-group">
             <label class="form-label" for="new-scan-name">Scan name</label>
             <input id="new-scan-name" name="scan_name" type="text" v-model="newScanForm.name" class="filter-input" placeholder="e.g. my-app-v2.0" autocomplete="off">
@@ -1522,6 +1558,10 @@
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="createApiKey">
           <p class="modal-subtitle">Issue a role-scoped credential for CI, automation, or external integrations.</p>
+          <div class="modal-meta-strip">
+            <span class="modal-meta-chip">Visibility: one-time</span>
+            <span class="modal-meta-chip">Scope: role-based</span>
+          </div>
           <div class="form-group">
             <label class="form-label" for="api-key-name">Name</label>
             <input id="api-key-name" name="api_key_name" type="text" v-model="newKeyForm.name" class="filter-input" placeholder="e.g. ci-runner" required>
@@ -1568,6 +1608,10 @@
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="createWebhook">
           <p class="modal-subtitle">Register an event endpoint for scan and finding notifications.</p>
+          <div class="modal-meta-strip">
+            <span class="modal-meta-chip">Delivery: signed</span>
+            <span class="modal-meta-chip">Events: configurable</span>
+          </div>
           <div class="form-group">
             <label class="form-label" for="webhook-name">Name</label>
             <input id="webhook-name" name="webhook_name" type="text" v-model="newWebhookForm.name" class="filter-input" placeholder="e.g. slack-alerts" required>

@@ -838,6 +838,17 @@ tr:last-child td { border-bottom: none; }
   color: var(--color-text-muted);
   padding: var(--space-10) var(--space-4);
   font-size: var(--font-md);
+  max-width: 56ch;
+  margin: 0 auto;
+}
+
+.empty-state strong,
+.empty-state span {
+  display: block;
+}
+
+.empty-state strong + span {
+  margin-top: 6px;
 }
 
 .empty-state-icon {
@@ -1228,6 +1239,8 @@ tr:last-child td { border-bottom: none; }
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-surface) 72%, var(--color-bg));
+  max-width: 52ch;
+  margin: 0 auto;
 }
 
 .modal-body { padding: var(--space-6); }
@@ -4338,6 +4351,11 @@ textarea {
 .modal-tabs .tab-btn,
 .settings-tabs .tab-btn {
   padding: 8px 12px;
+}
+
+[role="tabpanel"]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .modal-body {

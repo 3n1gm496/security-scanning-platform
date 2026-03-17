@@ -1081,13 +1081,13 @@
           </div>
         </div>
         <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-          <button class="tab-btn" type="button" role="tab" :aria-selected="settingsTab === 'apikeys' ? 'true' : 'false'" :class="{ active: settingsTab === 'apikeys' }" @click="settingsTab = 'apikeys'; loadApiKeys()">API Keys</button>
-          <button class="tab-btn" type="button" role="tab" :aria-selected="settingsTab === 'webhooks' ? 'true' : 'false'" :class="{ active: settingsTab === 'webhooks' }" @click="settingsTab = 'webhooks'; loadWebhooks()">Webhooks</button>
-          <button class="tab-btn" type="button" role="tab" :aria-selected="settingsTab === 'notifications' ? 'true' : 'false'" :class="{ active: settingsTab === 'notifications' }" @click="settingsTab = 'notifications'; loadNotificationPrefs()">Notifications</button>
+          <button id="settings-tab-apikeys" class="tab-btn" type="button" role="tab" :tabindex="settingsTab === 'apikeys' ? '0' : '-1'" aria-controls="settings-panel-apikeys" :aria-selected="settingsTab === 'apikeys' ? 'true' : 'false'" :class="{ active: settingsTab === 'apikeys' }" @click="settingsTab = 'apikeys'; loadApiKeys()">API Keys</button>
+          <button id="settings-tab-webhooks" class="tab-btn" type="button" role="tab" :tabindex="settingsTab === 'webhooks' ? '0' : '-1'" aria-controls="settings-panel-webhooks" :aria-selected="settingsTab === 'webhooks' ? 'true' : 'false'" :class="{ active: settingsTab === 'webhooks' }" @click="settingsTab = 'webhooks'; loadWebhooks()">Webhooks</button>
+          <button id="settings-tab-notifications" class="tab-btn" type="button" role="tab" :tabindex="settingsTab === 'notifications' ? '0' : '-1'" aria-controls="settings-panel-notifications" :aria-selected="settingsTab === 'notifications' ? 'true' : 'false'" :class="{ active: settingsTab === 'notifications' }" @click="settingsTab = 'notifications'; loadNotificationPrefs()">Notifications</button>
         </div>
 
         <!-- API Keys tab -->
-        <div v-if="settingsTab === 'apikeys'" class="card settings-panel">
+        <div v-if="settingsTab === 'apikeys'" id="settings-panel-apikeys" class="card settings-panel" role="tabpanel" tabindex="0" aria-labelledby="settings-tab-apikeys">
           <div class="card-header">
             <div>
               <h2>API Keys</h2>
@@ -1123,7 +1123,7 @@
         </div>
 
         <!-- Webhooks tab -->
-        <div v-if="settingsTab === 'webhooks'" class="card settings-panel">
+        <div v-if="settingsTab === 'webhooks'" id="settings-panel-webhooks" class="card settings-panel" role="tabpanel" tabindex="0" aria-labelledby="settings-tab-webhooks">
           <div class="card-header">
             <div>
               <h2>Webhooks</h2>
@@ -1164,7 +1164,7 @@
         </div>
 
         <!-- Notifications tab -->
-        <div v-if="settingsTab === 'notifications'" class="card settings-panel">
+        <div v-if="settingsTab === 'notifications'" id="settings-panel-notifications" class="card settings-panel" role="tabpanel" tabindex="0" aria-labelledby="settings-tab-notifications">
           <div class="card-header">
             <div>
               <h2>Notification Preferences</h2>
@@ -1253,15 +1253,15 @@
 
         <!-- Modal tabs -->
         <div class="modal-tabs" role="tablist" aria-label="Finding detail tabs">
-          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'info' ? 'true' : 'false'" :class="{ active: findingModalTab === 'info' }" @click="findingModalTab = 'info'">Information</button>
-          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'remediation' ? 'true' : 'false'" :class="{ active: findingModalTab === 'remediation' }" @click="findingModalTab = 'remediation'">Remediation</button>
-          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'manage' ? 'true' : 'false'" :class="{ active: findingModalTab === 'manage' }" @click="findingModalTab = 'manage'">Management</button>
-          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'comments' ? 'true' : 'false'" :class="{ active: findingModalTab === 'comments' }" @click="findingModalTab = 'comments'">Comments <span class="count-badge" v-if="findingComments.length > 0">{{ findingComments.length }}</span></button>
+          <button id="finding-tab-info" class="tab-btn" type="button" role="tab" :tabindex="findingModalTab === 'info' ? '0' : '-1'" aria-controls="finding-panel-info" :aria-selected="findingModalTab === 'info' ? 'true' : 'false'" :class="{ active: findingModalTab === 'info' }" @click="findingModalTab = 'info'">Information</button>
+          <button id="finding-tab-remediation" class="tab-btn" type="button" role="tab" :tabindex="findingModalTab === 'remediation' ? '0' : '-1'" aria-controls="finding-panel-remediation" :aria-selected="findingModalTab === 'remediation' ? 'true' : 'false'" :class="{ active: findingModalTab === 'remediation' }" @click="findingModalTab = 'remediation'">Remediation</button>
+          <button id="finding-tab-manage" class="tab-btn" type="button" role="tab" :tabindex="findingModalTab === 'manage' ? '0' : '-1'" aria-controls="finding-panel-manage" :aria-selected="findingModalTab === 'manage' ? 'true' : 'false'" :class="{ active: findingModalTab === 'manage' }" @click="findingModalTab = 'manage'">Management</button>
+          <button id="finding-tab-comments" class="tab-btn" type="button" role="tab" :tabindex="findingModalTab === 'comments' ? '0' : '-1'" aria-controls="finding-panel-comments" :aria-selected="findingModalTab === 'comments' ? 'true' : 'false'" :class="{ active: findingModalTab === 'comments' }" @click="findingModalTab = 'comments'">Comments <span class="count-badge" v-if="findingComments.length > 0">{{ findingComments.length }}</span></button>
         </div>
 
         <div class="modal-body">
           <!-- Tab: Info -->
-          <div v-if="findingModalTab === 'info'">
+          <div v-if="findingModalTab === 'info'" id="finding-panel-info" role="tabpanel" tabindex="0" aria-labelledby="finding-tab-info">
             <div class="detail-grid">
               <div class="detail-col">
                 <div class="detail-section">
@@ -1308,7 +1308,7 @@
           </div>
 
           <!-- Tab: Remediation -->
-          <div v-if="findingModalTab === 'remediation'">
+          <div v-if="findingModalTab === 'remediation'" id="finding-panel-remediation" role="tabpanel" tabindex="0" aria-labelledby="finding-tab-remediation">
             <div v-if="selectedFinding.remediation_guide && Object.keys(selectedFinding.remediation_guide).length > 0">
               <div class="remediation-header">
                 <div class="remediation-meta">
@@ -1341,7 +1341,7 @@
           </div>
 
           <!-- Tab: Management -->
-          <div v-if="findingModalTab === 'manage'">
+          <div v-if="findingModalTab === 'manage'" id="finding-panel-manage" role="tabpanel" tabindex="0" aria-labelledby="finding-tab-manage">
             <div class="detail-section">
               <h3>Current status</h3>
               <div class="mgmt-status-row">
@@ -1387,7 +1387,7 @@
           </div>
 
           <!-- Tab: Comments -->
-          <div v-if="findingModalTab === 'comments'">
+          <div v-if="findingModalTab === 'comments'" id="finding-panel-comments" role="tabpanel" tabindex="0" aria-labelledby="finding-tab-comments">
             <div class="comments-list" v-if="findingComments.length > 0">
               <div v-for="comment in findingComments" :key="comment.id" class="comment-item">
                 <div class="comment-header">

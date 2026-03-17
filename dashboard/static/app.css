@@ -3671,24 +3671,24 @@ table.col-resizing * {
 }
 
 .hero-panel-primary {
-  padding: 18px 22px 16px;
-  min-height: 228px;
-  gap: 12px;
+  padding: 16px 20px 14px;
+  min-height: 206px;
+  gap: 10px;
 }
 
 .hero-copy {
-  max-width: 720px;
+  max-width: 680px;
 }
 
 .hero-title {
-  font-size: clamp(26px, 3vw, 38px);
+  font-size: clamp(24px, 2.6vw, 34px);
   max-width: 14ch;
 }
 
 .hero-text {
-  margin-top: 6px;
-  font-size: 13px;
-  max-width: 62ch;
+  margin-top: 4px;
+  font-size: 12px;
+  max-width: 58ch;
 }
 
 .hero-live-row {
@@ -3703,13 +3703,13 @@ table.col-resizing * {
 
 .signal-tile-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .signal-tile {
-  min-height: 92px;
-  padding: 12px 14px;
-  gap: 6px;
+  min-height: 82px;
+  padding: 10px 12px;
+  gap: 4px;
 }
 
 .signal-tile-analytics {
@@ -3757,30 +3757,30 @@ table.col-resizing * {
 }
 
 .hero-panel-side {
-  gap: 14px;
+  gap: 12px;
 }
 
 .threat-rail-card,
 .hero-panel-compact {
-  padding: 18px 20px;
+  padding: 16px 18px;
 }
 
 .threat-rail-card h3 {
-  margin-top: 8px;
-  font-size: 18px;
+  margin-top: 6px;
+  font-size: 17px;
 }
 
 .threat-rail-card p {
-  margin-top: 8px;
-  font-size: 13px;
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .hero-side-actions {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .hero-compact-row {
-  padding-bottom: 10px;
+  padding-bottom: 8px;
 }
 
 .hero-compact-row strong,
@@ -3804,6 +3804,14 @@ table.col-resizing * {
   font-size: 18px;
 }
 
+.card-subtitle {
+  margin-top: 4px;
+  max-width: 58ch;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .panel-kicker {
   font-size: 9px;
 }
@@ -3815,15 +3823,60 @@ table.col-resizing * {
 }
 
 .chart-container-tall {
-  min-height: 262px;
+  min-height: 242px;
 }
 
 .chart-container-roomy {
   min-height: 236px;
 }
 
+.dashboard-primary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.92fr);
+  gap: 12px;
+}
+
+.card-watchlist-compact {
+  min-height: 100%;
+}
+
+.table-wrap-watchlist-compact {
+  max-height: 100%;
+}
+
+.cell-watch-target {
+  max-width: 220px;
+}
+
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.metric-pill-danger {
+  border-color: rgba(244, 63, 94, 0.26);
+  background: rgba(244, 63, 94, 0.12);
+  color: #ff9baa;
+}
+
+.metric-pill-amber {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(245, 158, 11, 0.12);
+  color: #ffd089;
+}
+
 .workspace-intro-card-compact .workspace-intro {
-  padding: 16px 20px;
+  padding: 14px 18px;
 }
 
 .workspace-intro-card-compact .workspace-intro h2 {
@@ -3831,21 +3884,38 @@ table.col-resizing * {
 }
 
 .workspace-intro-card-compact .workspace-intro p {
-  margin-top: 6px;
-  font-size: 13px;
-  max-width: 60ch;
+  margin-top: 4px;
+  font-size: 12px;
+  max-width: 64ch;
 }
 
 .workspace-intro-card-compact .workspace-intro-side {
   min-width: 110px;
 }
 
+.workspace-intro-side-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 240px;
+}
+
+.workspace-metric-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.02);
+}
+
 .filters-card {
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .filters-row {
-  gap: 10px;
+  gap: 8px;
   align-items: end;
 }
 
@@ -3857,14 +3927,20 @@ table.col-resizing * {
   min-width: 180px;
 }
 
+.filter-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .filter-input,
 .filter-select,
 .comment-input,
 input,
 select,
 textarea {
-  min-height: 40px;
-  padding: 10px 12px;
+  min-height: 38px;
+  padding: 9px 11px;
   font-size: 13px;
 }
 
@@ -3885,6 +3961,12 @@ textarea {
   font-size: 12px;
 }
 
+.export-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .col-toggle-bar {
   gap: 8px;
 }
@@ -3895,6 +3977,7 @@ textarea {
 
 .bulk-actions {
   gap: 8px;
+  align-items: center;
 }
 
 .bulk-count,
@@ -3912,6 +3995,30 @@ textarea {
 .soc-table td {
   padding: 11px 12px;
   font-size: 13px;
+}
+
+.table-primary-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.table-primary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
 .data-table-card-long .finding-title,
@@ -3955,6 +4062,21 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.risk-name-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.risk-meta {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .analytics-command-bar {
@@ -4179,6 +4301,10 @@ textarea {
 }
 
 @media (max-width: 1360px) {
+  .dashboard-primary-grid {
+    grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
+  }
+
   .signal-tile-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4191,6 +4317,10 @@ textarea {
 @media (max-width: 1180px) {
   .page-content {
     padding: 16px 18px 26px;
+  }
+
+  .dashboard-primary-grid {
+    grid-template-columns: 1fr;
   }
 
   .signal-tile-grid,
@@ -4209,6 +4339,10 @@ textarea {
   .compare-vs {
     justify-self: start;
   }
+
+  .workspace-intro-side-stack {
+    min-width: 0;
+  }
 }
 
 @media (max-width: 860px) {
@@ -4218,6 +4352,10 @@ textarea {
 
   .page-content {
     padding: 14px 14px 24px;
+  }
+
+  .card-subtitle {
+    max-width: none;
   }
 
   .signal-tile-grid,
@@ -4235,6 +4373,10 @@ textarea {
 
   .risk-row {
     grid-template-columns: 24px minmax(0, 1fr) 70px;
+  }
+
+  .workspace-intro-side-stack {
+    grid-template-columns: 1fr;
   }
 }
 

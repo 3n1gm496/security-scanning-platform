@@ -408,7 +408,7 @@ createApp({
       if (this.findingsFilter.severity) chips.push({ key: 'severity', label: 'Severity', value: this.findingsFilter.severity });
       if (this.findingsFilter.tool) chips.push({ key: 'tool', label: 'Tool', value: this.findingsFilter.tool });
       if (this.findingsFilter.target) chips.push({ key: 'target', label: 'Target', value: this.findingsFilter.target });
-      if (this.findingsFilter.status) chips.push({ key: 'status', label: 'Status', value: this.findingsFilter.status.replace(/_/g, ' ') });
+      if (this.findingsFilter.status) chips.push({ key: 'status', label: 'Status', value: this.findingStatusLabel(this.findingsFilter.status) });
       if (this.findingsFilter.scan_id) chips.push({ key: 'scan_id', label: 'Scan', value: String(this.findingsFilter.scan_id).slice(0, 12) });
       return chips;
     },
@@ -1504,25 +1504,27 @@ createApp({
             legend: {
               display: true,
               position: 'bottom',
-              labels: { boxWidth: 12, font: { size: 11 }, padding: 20, usePointStyle: false },
+              labels: { boxWidth: 10, font: { size: 11 }, padding: 16, usePointStyle: true, pointStyle: 'circle' },
             },
             tooltip: {
               callbacks: {
+                title: (items) => items[0]?.label || 'Scan',
+                label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw || 0} findings`,
                 footer: (items) => {
                   const total = items.reduce((sum, i) => sum + (i.raw || 0), 0);
-                  return 'Total: ' + total;
+                  return 'Total findings in scan: ' + total;
                 },
               },
             },
           },
           scales: {
             x: {
-              stacked: false,
+              stacked: true,
               grid: { display: false },
               ticks: { font: { size: 11 }, maxRotation: 45, color: this.cssVar('--chart-tick') },
             },
             y: {
-              stacked: false,
+              stacked: true,
               type: 'linear',
               grid: { color: this.cssVar('--chart-grid') },
               ticks: {
@@ -2824,6 +2826,19 @@ createApp({
         RUNNING: 'Running',
       };
       return labels[status] || status;
+    },
+
+    findingStatusLabel(status) {
+      const normalized = String(status || 'new').toLowerCase();
+      const labels = {
+        new: 'New',
+        acknowledged: 'Acknowledged',
+        in_progress: 'In Progress',
+        resolved: 'Resolved',
+        false_positive: 'False Positive',
+        risk_accepted: 'Risk Accepted',
+      };
+      return labels[normalized] || normalized.replace(/_/g, ' ');
     },
 
     policyBadgeClass(policy) {

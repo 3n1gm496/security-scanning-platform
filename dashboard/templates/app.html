@@ -183,7 +183,7 @@
               <span class="panel-kicker">Hybrid SOC posture</span>
               <h2 class="hero-title">Attack surface in focus</h2>
               <p class="hero-text">
-                Continuous telemetry for active scans, exposure concentration, and remediation momentum across the monitored fleet.
+                Live posture across active scans, exposed targets, and remediation pressure, condensed for rapid operator triage.
               </p>
             </div>
             <div class="hero-live-row">
@@ -214,7 +214,7 @@
               <p>
                 {{ kpis.critical_findings > 0
                   ? 'Prioritize the active critical queue before new work enters the remediation stream.'
-                  : 'Focus can remain on high-severity remediation and scan throughput.'
+                  : 'Focus can remain on high-severity remediation, scan cadence, and closing aged findings.'
                 }}
               </p>
               <div class="hero-side-actions">
@@ -251,20 +251,59 @@
           <span>Charts unavailable — Chart.js could not be loaded from CDN. Check your network connection or CSP policy. Data tables remain accessible on this page.</span>
         </div>
 
-        <!-- Severity breakdown chart (full width — most useful for vulnerability tracking) -->
-        <div class="card chart-card chart-card-hero" v-if="chartsAvailable">
-          <div class="card-header">
-            <div>
-              <span class="panel-kicker">Primary visualization</span>
-              <h2>Severity pressure by recent scan</h2>
+        <div class="dashboard-primary-grid" v-if="chartsAvailable">
+          <div class="card chart-card chart-card-hero">
+            <div class="card-header">
+              <div>
+                <span class="panel-kicker">Primary visualization</span>
+                <h2>Recent scan severity mix</h2>
+                <p class="card-subtitle">Critical-to-info findings across the latest indexed scans with findings.</p>
+              </div>
+              <div class="card-actions">
+                <button class="btn-secondary btn-sm" @click="navigate('scans')">Open queue</button>
+              </div>
             </div>
-            <div class="card-actions">
-              <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">+ New Scan</button>
-              <button class="btn-secondary btn-sm" @click="navigate('scans')">Open queue</button>
+            <div class="chart-container chart-container-tall">
+              <canvas ref="trendChart"></canvas>
             </div>
           </div>
-          <div class="chart-container chart-container-tall">
-            <canvas ref="trendChart"></canvas>
+
+          <div class="card card-watchlist card-watchlist-compact">
+            <div class="card-header">
+              <div>
+                <span class="panel-kicker">Watchlist</span>
+                <h2>Recent hot targets</h2>
+                <p class="card-subtitle">Newest runs with findings, critical load, and execution state.</p>
+              </div>
+              <div class="card-actions">
+                <button class="btn-secondary btn-sm" @click="navigate('findings')">Open finding queue</button>
+              </div>
+            </div>
+            <div class="table-wrap table-wrap-watchlist table-wrap-watchlist-compact">
+              <table class="soc-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Target</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Critical</th>
+                    <th scope="col">Findings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="recentScans.length === 0">
+                    <td colspan="4" class="empty-state">No scans with findings</td>
+                  </tr>
+                  <tr v-for="scan in recentScans.slice(0, 6)" :key="scan.id" @click="openScanDetail(scan)" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)" class="row-clickable" tabindex="0">
+                    <td class="cell-wrap cell-watch-target" :title="scan.target_name">{{ scan.target_name }}</td>
+                    <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
+                    <td>
+                      <span class="metric-pill metric-pill-danger">{{ scan.critical_count || 0 }}</span>
+                    </td>
+                    <td><strong>{{ scan.findings_count }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -275,6 +314,7 @@
               <div>
                 <span class="panel-kicker">Secondary intelligence</span>
                 <h2>Severity distribution</h2>
+                <p class="card-subtitle">Current severity composition across indexed findings.</p>
               </div>
             </div>
             <div class="chart-container">
@@ -286,6 +326,7 @@
               <div>
                 <span class="panel-kicker">Secondary intelligence</span>
                 <h2>Remediation progress</h2>
+                <p class="card-subtitle">Status progression from new findings to accepted or resolved outcomes.</p>
               </div>
             </div>
             <div class="chart-container">
@@ -298,11 +339,11 @@
         <div class="card card-watchlist">
           <div class="card-header">
             <div>
-              <span class="panel-kicker">Watchlist</span>
+              <span class="panel-kicker">Timeline</span>
               <h2>Recent scans with findings</h2>
+              <p class="card-subtitle">Execution history for findings-bearing runs, with date context for queue review.</p>
             </div>
             <div class="card-actions">
-              <button class="btn-secondary btn-sm" @click="navigate('findings')">Open finding queue</button>
               <button class="btn-secondary btn-sm" @click="navigate('scans')">View all</button>
             </div>
           </div>
@@ -312,17 +353,21 @@
                   <tr>
                     <th scope="col">Target</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Critical</th>
+                    <th scope="col">High</th>
                     <th scope="col">Findings</th>
                     <th scope="col">Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="recentScans.length === 0">
-                    <td colspan="4" class="empty-state">No scans with findings</td>
+                    <td colspan="6" class="empty-state">No scans with findings</td>
                   </tr>
                   <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)" class="row-clickable" tabindex="0">
                     <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
                     <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
+                    <td><span class="metric-pill metric-pill-danger">{{ scan.critical_count || 0 }}</span></td>
+                    <td><span class="metric-pill metric-pill-amber">{{ scan.high_count || 0 }}</span></td>
                     <td><strong>{{ scan.findings_count }}</strong></td>
                     <td class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
                   </tr>
@@ -341,11 +386,17 @@
             <div>
               <span class="panel-kicker">Operations workspace</span>
               <h2>Scan queue and execution flow</h2>
-              <p>Monitor active runs, compare scan jobs, and move through the queue without losing context.</p>
+              <p>Track live queue state, filter historical runs, and move into compare or detail workflows without losing operator context.</p>
             </div>
-            <div class="workspace-intro-side">
-              <span class="workspace-metric-label">Visible runs</span>
-              <strong class="workspace-metric-value">{{ scansTotal }}</strong>
+            <div class="workspace-intro-side workspace-intro-side-stack">
+              <div class="workspace-metric-stack">
+                <span class="workspace-metric-label">Visible runs</span>
+                <strong class="workspace-metric-value">{{ scansTotal }}</strong>
+              </div>
+              <div class="workspace-metric-stack">
+                <span class="workspace-metric-label">Running now</span>
+                <strong class="workspace-metric-value">{{ hasRunningScans ? 'Yes' : 'No' }}</strong>
+              </div>
             </div>
           </div>
         </div>
@@ -382,8 +433,10 @@
                 <option value="UNKNOWN">UNKNOWN</option>
               </select>
             </div>
-            <button class="btn-secondary btn-sm" @click="resetScansFilter">Reset</button>
-            <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">+ New Scan</button>
+            <div class="filter-actions">
+              <button class="btn-secondary btn-sm" @click="resetScansFilter">Reset</button>
+              <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">+ New Scan</button>
+            </div>
           </div>
           <div class="active-filter-row" v-if="scansActiveFilters.length > 0">
             <span class="active-filter-label">Active filters</span>
@@ -397,7 +450,7 @@
             <span class="compare-info">{{ selectedScans.length }} scan{{ selectedScans.length === 1 ? '' : 's' }} selected</span>
             <button class="btn-primary btn-sm" @click="goToCompare" :disabled="selectedScans.length !== 2">
               <svg viewBox="0 0 24 24" fill="none" width="14" height="14" class="u-mr-4"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Compare (select 2)
+              {{ selectedScans.length === 2 ? 'Compare selected scans' : 'Select 2 scans to compare' }}
             </button>
             <button class="btn-secondary btn-sm" @click="selectedScans = []">Deselect all</button>
           </div>
@@ -406,7 +459,10 @@
         <!-- Scans table -->
         <div class="card data-table-card">
           <div class="card-header">
-            <h2>Scans <span class="count-badge">{{ scansTotal }}</span></h2>
+            <div>
+              <h2>Scans <span class="count-badge">{{ scansTotal }}</span></h2>
+              <p class="card-subtitle">Execution queue with sortable status, policy outcome, and severity load per run.</p>
+            </div>
           </div>
           <div v-if="hasPendingScanUpdates" class="live-banner live-banner-info" role="status">
             <span>{{ scanLiveMessage || 'New scan data available.' }}</span>
@@ -453,7 +509,12 @@
                     <input type="checkbox" :value="scan.id" v-model="selectedScans" :disabled="selectedScans.length >= 2 && !selectedScans.includes(scan.id)" :aria-label="`Select scan ${scan.id} for comparison`">
                   </td>
                   <td v-if="colVisible('id')" @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
-                  <td v-if="colVisible('target_name')" @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
+                  <td v-if="colVisible('target_name')" @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">
+                    <div class="table-primary-stack">
+                      <strong class="table-primary">{{ scan.target_name }}</strong>
+                      <span class="table-meta">Run {{ String(scan.id).slice(0, 12) }}</span>
+                    </div>
+                  </td>
                   <td v-if="colVisible('target_type')" @click="openScanDetail(scan)"><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
                   <td v-if="colVisible('status')" @click="openScanDetail(scan)"><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
                   <td v-if="colVisible('policy_status')" @click="openScanDetail(scan)"><span class="badge" :class="policyBadgeClass(scan.policy_status)">{{ scan.policy_status ?? '—' }}</span></td>
@@ -497,11 +558,17 @@
             <div>
               <span class="panel-kicker">Operations workspace</span>
               <h2>Finding triage and remediation queue</h2>
-              <p>Prioritize critical exposure, preserve analyst context, and export only what the current investigation requires.</p>
+              <p>Prioritize critical exposure, preserve analyst context, and export only the subset the current investigation actually needs.</p>
             </div>
-            <div class="workspace-intro-side">
-              <span class="workspace-metric-label">Visible findings</span>
-              <strong class="workspace-metric-value">{{ findingsTotal }}</strong>
+            <div class="workspace-intro-side workspace-intro-side-stack">
+              <div class="workspace-metric-stack">
+                <span class="workspace-metric-label">Visible findings</span>
+                <strong class="workspace-metric-value">{{ findingsTotal }}</strong>
+              </div>
+              <div class="workspace-metric-stack">
+                <span class="workspace-metric-label">Active filters</span>
+                <strong class="workspace-metric-value">{{ findingsActiveFilters.length }}</strong>
+              </div>
             </div>
           </div>
         </div>
@@ -556,7 +623,9 @@
                 <button class="btn-icon-sm" @click="findingsFilter.scan_id = ''; loadFindings(true)" title="Remove scan filter">✕</button>
               </div>
             </div>
-            <button class="btn-secondary btn-sm" @click="resetFindingsFilter">Reset</button>
+            <div class="filter-actions">
+              <button class="btn-secondary btn-sm" @click="resetFindingsFilter">Reset</button>
+            </div>
           </div>
           <div class="active-filter-row" v-if="findingsActiveFilters.length > 0">
             <span class="active-filter-label">Active filters</span>
@@ -568,18 +637,23 @@
           <!-- Export bar -->
           <div class="export-bar">
             <span class="export-label">Export:</span>
-            <button class="btn-export" @click="exportFindings('json')">JSON</button>
-            <button class="btn-export" @click="exportFindings('csv')">CSV</button>
-            <button class="btn-export" @click="exportFindings('sarif')">SARIF</button>
-            <button class="btn-export" @click="exportFindings('html')">HTML</button>
-            <button class="btn-export" @click="exportFindings('pdf', true)">PDF + Analytics</button>
+            <div class="export-actions">
+              <button class="btn-export" @click="exportFindings('json')">JSON</button>
+              <button class="btn-export" @click="exportFindings('csv')">CSV</button>
+              <button class="btn-export" @click="exportFindings('sarif')">SARIF</button>
+              <button class="btn-export" @click="exportFindings('html')">HTML</button>
+              <button class="btn-export" @click="exportFindings('pdf', true)">PDF + Analytics</button>
+            </div>
           </div>
         </div>
 
         <!-- Findings table -->
         <div class="card data-table-card" :class="{ 'data-table-card-long': findingsTableHasLongValues }">
           <div class="card-header">
-            <h2>Findings <span class="count-badge">{{ findingsTotal }}</span></h2>
+            <div>
+              <h2>Findings <span class="count-badge">{{ findingsTotal }}</span></h2>
+              <p class="card-subtitle">Severity-first queue with tool, target, identifier and file evidence in a single triage surface.</p>
+            </div>
             <div class="bulk-actions" v-if="selectedFindings.length > 0">
               <span class="bulk-count">{{ selectedFindings.length }} selected</span>
               <select id="bulk-status" name="bulk_status" v-model="bulkStatus" class="filter-select filter-select-sm">
@@ -641,7 +715,7 @@
                   <td v-if="colVisibleF('severity')" @click="openFindingDetail(finding)">
                     <span class="severity-badge" :class="'sev-' + (finding.severity || 'unknown').toLowerCase()">{{ finding.severity }}</span>
                   </td>
-                  <td v-if="colVisibleF('tool')" @click="openFindingDetail(finding)" class="cell-nowrap">{{ finding.tool }}</td>
+                  <td v-if="colVisibleF('tool')" @click="openFindingDetail(finding)" class="cell-nowrap"><span class="badge badge-neutral">{{ finding.tool }}</span></td>
                   <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap" :title="finding.target_name">{{ finding.target_name }}</td>
                   <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title" :title="finding.title">{{ finding.title }}</td>
                   <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-nowrap">
@@ -654,7 +728,7 @@
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td v-if="colVisibleF('status')" @click="openFindingDetail(finding)">
-                    <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ finding.mgmt_status || 'new' }}</span>
+                    <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ findingStatusLabel(finding.mgmt_status) }}</span>
                   </td>
                   <td @click.stop>
                     <button class="btn-icon-sm" type="button" @click="openFindingDetail(finding)" title="Details" :aria-label="`View details for finding ${finding.id}`">
@@ -705,6 +779,7 @@
           <div>
             <span class="panel-kicker">Intelligence board</span>
             <h2 class="analytics-board-title">Exposure analytics and compliance intelligence</h2>
+            <p class="card-subtitle">Risk distribution, mapped compliance categories, and target-level pressure for the selected observation window.</p>
           </div>
           <div class="card-actions">
             <button class="btn-secondary btn-sm" type="button" @click="refreshAnalyticsNow" :disabled="analyticsRefreshing" :aria-busy="analyticsRefreshing ? 'true' : 'false'">Refresh</button>
@@ -718,7 +793,7 @@
 
         <div class="chart-grid analytics-grid" v-if="chartsAvailable">
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>Risk score distribution</h2></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>Risk score distribution</h2><p class="card-subtitle">Finding volume grouped by blended risk score bands.</p></div></div>
             <div class="chart-container">
               <div v-if="!analyticsHasRiskData" class="chart-empty-state">Risk distribution will appear after findings are indexed.</div>
               <canvas v-else ref="riskChart"></canvas>
@@ -730,7 +805,7 @@
             <p class="chart-hint">Risk scores are computed per-finding (0-100) based on severity, exploitability, and context.</p>
           </div>
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>OWASP exposure map</h2></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>OWASP exposure map</h2><p class="card-subtitle">Top mapped OWASP 2021 categories by indexed finding count.</p></div></div>
             <div class="chart-container chart-container-roomy">
               <div v-if="!analyticsHasComplianceData" class="chart-empty-state">OWASP mapping appears when compliance-tagged findings are available.</div>
               <canvas v-else ref="owaspChart"></canvas>
@@ -738,14 +813,14 @@
             <p class="chart-hint">Top mapped OWASP 2021 categories by finding volume, with full category names shown in the tooltip.</p>
           </div>
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Coverage</span><h2>Tool effectiveness</h2></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Coverage</span><h2>Tool effectiveness</h2><p class="card-subtitle">Average severity and volume contribution by scanner.</p></div></div>
             <div class="chart-container chart-container-roomy">
               <div v-if="!analyticsHasToolData" class="chart-empty-state">Tool coverage appears after multiple scanners contribute findings.</div>
               <canvas v-else ref="toolEffChart"></canvas>
             </div>
           </div>
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Composition</span><h2>Findings by severity</h2></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Composition</span><h2>Findings by severity</h2><p class="card-subtitle">Current severity mix across the indexed findings corpus.</p></div></div>
             <div class="chart-container chart-container-roomy">
               <div v-if="!analyticsHasSeverityData" class="chart-empty-state">Severity composition becomes available once findings are present.</div>
               <canvas v-else ref="severityDistChart"></canvas>
@@ -753,7 +828,7 @@
           </div>
           <div class="card chart-card chart-card-full">
             <div class="card-header">
-              <div><span class="panel-kicker">Trend intelligence</span><h2>Trend risk score</h2></div>
+              <div><span class="panel-kicker">Trend intelligence</span><h2>Risk trajectory over time</h2><p class="card-subtitle">Average and peak risk evolution across the selected time window.</p></div>
             </div>
             <div class="chart-container chart-container-tall">
               <div v-if="!analyticsHasTrendData" class="chart-empty-state">Trend analysis appears after enough historical scans accumulate.</div>
@@ -764,12 +839,15 @@
 
         <div class="two-cols-grid">
           <div class="card">
-            <div class="card-header"><div><span class="panel-kicker">Exposure ranking</span><h2>Target risk ranking</h2></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Exposure ranking</span><h2>Target risk ranking</h2><p class="card-subtitle">Highest-pressure assets ranked by average risk score and finding volume.</p></div></div>
             <div class="risk-ranking" v-if="analyticsData.targetRisk">
               <!-- Sort by average_risk descending so highest-risk target is always #1 -->
               <div v-for="(target, idx) in analyticsData.targetRisk.slice().sort((a,b) => b.average_risk - a.average_risk).slice(0, 10)" :key="target.target" class="risk-row">
                 <span class="risk-rank">#{{ idx + 1 }}</span>
-                <span class="risk-name" :title="target.target">{{ target.target }}</span>
+                <div class="risk-name-wrap">
+                  <span class="risk-name" :title="target.target">{{ target.target }}</span>
+                  <span class="risk-meta">{{ target.findings_count }} findings</span>
+                </div>
                 <div class="risk-bar-wrap">
                   <div class="risk-bar" :style="{ width: (target.average_risk) + '%' }" :class="riskBarClass(target.average_risk)"></div>
                 </div>
@@ -779,7 +857,7 @@
             </div>
           </div>
           <div class="card">
-            <div class="card-header"><div><span class="panel-kicker">Compliance intelligence</span><h2>OWASP Top 10 2021 mapping</h2></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Compliance intelligence</span><h2>OWASP Top 10 2021 mapping</h2><p class="card-subtitle">Tabular distribution of the currently mapped OWASP categories.</p></div></div>
             <div class="table-wrap" v-if="analyticsData.compliance">
               <table class="soc-table owasp-table">
                 <thead><tr><th scope="col" class="owasp-category-col">Category</th><th scope="col">Findings</th><th scope="col">Distribution</th></tr></thead>

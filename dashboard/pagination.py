@@ -13,6 +13,8 @@ from __future__ import annotations
 from base64 import b64decode, b64encode
 from typing import Any
 
+from db import _normalize_finding_status
+
 
 def _join_sql_clauses(*parts: str) -> str:
     """Join pre-validated SQL clauses while preserving readable spacing."""
@@ -226,7 +228,7 @@ class FindingsPaginator:
                     "SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,"
                     f" f.line, f.tool, f.cve, {'f.cwe' if has_cwe_column else 'NULL AS cwe'},"
                     " f.fingerprint, f.timestamp,"
-                    " f.target_name, COALESCE(fs.status, 'open') AS triage_status"
+                    " f.target_name, COALESCE(fs.status, 'new') AS triage_status"
                 ),
                 "FROM findings f",
                 "LEFT JOIN finding_states fs ON fs.finding_id = f.id",
@@ -343,9 +345,10 @@ class FindingsPaginator:
             where_clauses.append("target_name LIKE ?")
             params.append(f"%{target_filter}%")
 
-        if status_filter is not None:
-            where_clauses.append("COALESCE(fs.status, 'open') = ?")
-            params.append(status_filter)
+        normalized_status = _normalize_finding_status(status_filter)
+        if normalized_status is not None:
+            where_clauses.append("COALESCE(fs.status, 'new') = ?")
+            params.append(normalized_status)
 
         return where_clauses, params
 

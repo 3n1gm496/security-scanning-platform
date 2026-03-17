@@ -32,6 +32,16 @@ def _date_days_ago(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
 
 
+def _normalize_finding_status(status: str | None) -> str | None:
+    """Normalize legacy aliases to canonical finding triage statuses."""
+    if status is None:
+        return None
+    normalized = str(status).strip().lower()
+    if not normalized:
+        return None
+    return "new" if normalized == "open" else normalized
+
+
 def _severity_order_sql(column: str = "severity") -> str:
     return (
         f"CASE UPPER({column}) "
@@ -237,9 +247,10 @@ def _findings_where_clause(
     if category:
         clause += " AND category = ?"
         params.append(category)
-    if status is not None:
-        clause += " AND COALESCE((SELECT status FROM finding_states WHERE finding_id = findings.id), 'open') = ?"
-        params.append(status)
+    normalized_status = _normalize_finding_status(status)
+    if normalized_status is not None:
+        clause += " AND COALESCE((SELECT status FROM finding_states WHERE finding_id = findings.id), 'new') = ?"
+        params.append(normalized_status)
     return clause, params
 
 

@@ -218,10 +218,15 @@ def test_findings_paginator_with_status_filter():
 
     paginator = FindingsPaginator(per_page=10)
 
-    # Test filter for 'open' status (default)
+    # Test filter for 'new' status (default/untriaged)
+    new_result = paginator.paginate(conn, status_filter="new")
+    assert len(new_result["items"]) == 7
+    assert all(f["triage_status"] == "new" for f in new_result["items"])
+
+    # Legacy alias should still work
     open_result = paginator.paginate(conn, status_filter="open")
     assert len(open_result["items"]) == 7
-    assert all(f["triage_status"] == "open" for f in open_result["items"])
+    assert all(f["triage_status"] == "new" for f in open_result["items"])
 
     # Test filter for 'resolved' status
     resolved_result = paginator.paginate(conn, status_filter="resolved")

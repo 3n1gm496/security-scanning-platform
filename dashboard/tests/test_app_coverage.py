@@ -510,6 +510,28 @@ class TestPaginationEndpoints:
         resp = client.get("/api/findings/paginated", headers=admin_headers)
         assert resp.status_code == 200
 
+    def test_paginate_findings_status_new_matches_untriaged(self, client, isolated_db, admin_headers):
+        import sqlite3
+
+        db_path = isolated_db
+        scan_id = _insert_scan(db_path)
+        first_id = _insert_finding(db_path, scan_id, title="Fresh finding")
+        second_id = _insert_finding(db_path, scan_id, title="Resolved finding")
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO finding_states (finding_id, status, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (second_id, "resolved", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        )
+        conn.commit()
+        conn.close()
+        _db_adapter.reset_pool()
+
+        resp = client.get("/api/findings/paginated?status=new", headers=admin_headers)
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert [item["id"] for item in items] == [first_id]
+        assert items[0]["triage_status"] == "new"
+
     def test_paginate_scans_empty(self, client, isolated_db, admin_headers):
         _init_tables(isolated_db)
         resp = client.get("/api/scans/paginated", headers=admin_headers)

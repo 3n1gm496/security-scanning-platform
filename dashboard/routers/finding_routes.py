@@ -96,7 +96,8 @@ async def paginate_findings(
     - tool: Comma-separated list of tools (semgrep,bandit,nuclei,etc)
     - target: Filter by target name (partial match)
     - scan_id: Filter by specific scan ID
-    - status: Filter by triage status (open, in_progress, resolved, false_positive, accepted_risk)
+    - status: Filter by triage status (new, in_progress, resolved, false_positive, risk_accepted).
+      Legacy alias: open -> new
     - cursor: Pagination cursor from previous response
     - per_page: Items per page (1-1000, default 50)
     - sort_by: Column to sort by (default: id)

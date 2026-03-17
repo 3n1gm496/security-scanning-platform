@@ -96,6 +96,7 @@ if [ -f "${RESTORE_DIR}/database.pgdump" ] && [ -n "${PG_URL}" ]; then
 elif [ -f "${RESTORE_DIR}/security_scans.db" ]; then
     echo "[db] Restoring SQLite database..."
     mkdir -p "$(dirname "${DB_FILE}")"
+    rm -f "${DB_FILE}" "${DB_FILE}-wal" "${DB_FILE}-shm"
     cp "${RESTORE_DIR}/security_scans.db" "${DB_FILE}"
     echo "[db] SQLite restored: $(du -h "${DB_FILE}" | cut -f1)"
 else
@@ -118,6 +119,7 @@ fi
 
 if [ -d "${RESTORE_DIR}/config" ]; then
     echo "[config] Restoring configuration..."
+    rm -rf "${PROJECT_ROOT}/config"
     mkdir -p "${PROJECT_ROOT}/config"
     cp -a "${RESTORE_DIR}/config/." "${PROJECT_ROOT}/config/"
     echo "[config] Configuration restored"

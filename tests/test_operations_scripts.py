@@ -73,6 +73,13 @@ def test_restore_script_restores_custom_db_path_reports_and_config_without_nesti
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "existing.yaml").write_text("old: true\n", encoding="utf-8")
+    (config_dir / "stale.yaml").write_text("stale: true\n", encoding="utf-8")
+
+    custom_db_dir = tmp_path / "custom"
+    custom_db_dir.mkdir()
+    custom_db_path = custom_db_dir / "restored.sqlite3"
+    (custom_db_dir / "restored.sqlite3-wal").write_text("stale wal", encoding="utf-8")
+    (custom_db_dir / "restored.sqlite3-shm").write_text("stale shm", encoding="utf-8")
 
     backup_root = tmp_path / "backup-src" / "ssp-backup-20260317T000000Z"
     backup_root.mkdir(parents=True)
@@ -105,7 +112,6 @@ def test_restore_script_restores_custom_db_path_reports_and_config_without_nesti
         "#!/usr/bin/env bash\n" 'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n' "exit 0\n",
     )
 
-    custom_db_path = tmp_path / "custom" / "restored.sqlite3"
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
     env["DOCKER_LOG"] = str(docker_log)
@@ -132,6 +138,9 @@ def test_restore_script_restores_custom_db_path_reports_and_config_without_nesti
 
     assert (tmp_path / "config" / "app.yaml").exists()
     assert not (tmp_path / "config" / "config" / "app.yaml").exists()
+    assert not (tmp_path / "config" / "stale.yaml").exists()
+    assert not (custom_db_dir / "restored.sqlite3-wal").exists()
+    assert not (custom_db_dir / "restored.sqlite3-shm").exists()
 
 
 def test_ops_health_uses_api_health_and_ready_endpoints(tmp_path):

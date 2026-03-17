@@ -76,6 +76,26 @@ Routing and preflight checks are defined in `orchestrator/compatibility.py`.
    - stores reports and final scan state
 5. The dashboard surfaces those results through scans, findings, analytics, compare, exports, notifications, webhooks, and metrics.
 
+### Mermaid overview
+
+```mermaid
+graph TD
+    User[Operator or CI] --> API[FastAPI Dashboard]
+    API --> Auth[Auth / RBAC / CSRF]
+    API --> DB[(SQLite or PostgreSQL)]
+    API --> Runner[scan_runner.py]
+    API --> Ops[Analytics / Export / Notifications / Webhooks / Metrics]
+    Runner --> Orch[Python Orchestrator]
+    Orch --> Compat[Compatibility Matrix]
+    Orch --> Cache[Scanner Cache]
+    Orch --> Normalizer[Normalizer]
+    Orch --> Policy[Policy Engine]
+    Orch --> Reports[Reports / Artifacts]
+    Orch --> Scanners[Semgrep / Bandit / Checkov / Gitleaks / Trivy / Grype / Syft / Nuclei / ZAP]
+    Orch --> Targets[Git / Local / URL / Image Targets]
+    Orch --> DB
+```
+
 ### Main components
 
 - `dashboard/app.py`

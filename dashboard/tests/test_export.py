@@ -150,6 +150,22 @@ def test_export_to_sarif_uses_title_and_existing_cve_fields():
     assert result["properties"]["cwe"] == "CWE-327"
 
 
+def test_export_to_sarif_uses_target_name_when_no_file_or_target():
+    """SARIF export should retain a useful artifact URI for DB-shaped findings."""
+    findings = [
+        {
+            "tool": "semgrep",
+            "severity": "medium",
+            "title": "Unsafe pattern",
+            "target_name": "demo-service",
+        }
+    ]
+
+    sarif = json.loads(export_to_sarif(findings))
+    location = sarif["runs"][0]["results"][0]["locations"][0]
+    assert location["physicalLocation"]["artifactLocation"]["uri"] == "demo-service"
+
+
 def test_export_to_sarif_severity_mapping():
     """Test that SARIF severity mapping is correct."""
     findings = [
@@ -200,6 +216,16 @@ def test_export_to_html_with_scan_info():
 
     assert "Scan ID: 123" in result
     assert "Target: myapp:latest" in result
+
+
+def test_export_to_html_with_target_name_scan_info():
+    """HTML export should render target_name when target is absent."""
+    scan_info = {"scan_id": 123, "target_name": "demo-service", "initiated_at": "2024-01-01T00:00:00"}
+
+    result = export_to_html(SAMPLE_FINDINGS, scan_info)
+
+    assert "Scan ID: 123" in result
+    assert "Target: demo-service" in result
 
 
 def test_export_to_html_empty():

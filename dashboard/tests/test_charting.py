@@ -123,6 +123,39 @@ def test_scan_status_trend():
     conn.close()
 
 
+def test_scan_status_trend_counts_legacy_completed_and_failure_statuses():
+    """Trend data should count legacy completed and failure-like terminal states."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE scans (
+            id INTEGER PRIMARY KEY,
+            target_name TEXT,
+            target_type TEXT,
+            status TEXT,
+            created_at TEXT
+        )
+        """)
+    created_at = "2099-01-01T00:00:00+00:00"
+    statuses = ["COMPLETED", "COMPLETED_CLEAN", "COMPLETED_WITH_FINDINGS", "FAILED", "PARTIAL_FAILED", "ERROR"]
+    for idx, status in enumerate(statuses, start=1):
+        conn.execute(
+            "INSERT INTO scans (id, target_name, target_type, status, created_at) VALUES (?, ?, ?, ?, ?)",
+            (idx, f"target-{idx}", "repository", status, created_at),
+        )
+    conn.commit()
+
+    data = ChartingEngine.scan_status_trend(conn, days=36500)
+
+    assert data["labels"] == ["2099-01-01"]
+    completed = next(ds for ds in data["datasets"] if ds["label"] == "Completed")
+    failed = next(ds for ds in data["datasets"] if ds["label"] == "Failed")
+    assert completed["data"] == [3]
+    assert failed["data"] == [3]
+
+    conn.close()
+
+
 def test_remediation_progress():
     """Test remediation progress chart data."""
     conn = _setup_test_db()

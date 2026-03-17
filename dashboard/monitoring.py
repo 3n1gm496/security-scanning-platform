@@ -98,6 +98,33 @@ SSP_CACHE_OPERATIONS_TOTAL: Counter = _get_or_create_counter(
 )
 
 
+def record_scan_metric(status: str, policy_status: str, duration_seconds: float | None = None) -> None:
+    """Record scan outcome metrics from dashboard-triggered orchestrator runs."""
+    SSP_SCANS_TOTAL.labels(status=(status or "UNKNOWN"), policy_status=(policy_status or "UNKNOWN")).inc()
+    if duration_seconds is not None and duration_seconds >= 0:
+        SSP_SCAN_DURATION_SECONDS.observe(duration_seconds)
+
+
+def record_api_request_metric(method: str, path: str, status_code: int | str) -> None:
+    """Record an API/page HTTP request outcome."""
+    SSP_API_REQUESTS_TOTAL.labels(
+        method=(method or "UNKNOWN").upper(),
+        path=path or "unknown",
+        status_code=str(status_code),
+    ).inc()
+
+
+def set_active_scan_workers(value: int) -> None:
+    """Update the active background scan worker gauge."""
+    SSP_ACTIVE_SCAN_WORKERS.set(max(0, int(value)))
+
+
+def record_cache_operation(result: str) -> None:
+    """Increment orchestrator cache metrics for hit/miss results."""
+    normalized = "hit" if str(result).lower() == "hit" else "miss"
+    SSP_CACHE_OPERATIONS_TOTAL.labels(result=normalized).inc()
+
+
 # ---------------------------------------------------------------------------
 # Pydantic response models
 # ---------------------------------------------------------------------------

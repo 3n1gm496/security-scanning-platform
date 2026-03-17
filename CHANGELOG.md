@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 - **Dashboard chart lifecycle edge case**: theme/resizing flows no longer trigger the Chart.js recursion/runtime errors discovered by the expanded browser smoke path.
 - **Audit follow-up fixes across UI workflows**: findings export parity, scan comparison fallback matching, notifications field/link alignment, legacy scans/findings parity, and command-center UI consistency fixes were rolled into the current baseline.
+- **Metrics, reporting, and backend parity**: Prometheus counters/gauges are now wired to real dashboard activity, scan trend charts count legacy terminal statuses correctly, SARIF/HTML exports preserve `target_name` metadata, and notification URL fallbacks now point to the actual dashboard port.
 
 ## [1.5.1] — 2026-03-11
 

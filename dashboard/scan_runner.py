@@ -12,11 +12,13 @@ import subprocess  # nosec B404
 import sys
 import uuid
 from datetime import datetime, timezone
+from time import monotonic
 from pathlib import Path
 
 from db import get_connection
 from db_adapter import is_postgres
 from logging_config import get_logger
+from monitoring import record_cache_operation, record_scan_metric
 from runtime_config import DASHBOARD_DB_PATH
 from scan_events import publish_sync
 
@@ -36,6 +38,23 @@ def _extract_primary_result(payload: dict) -> dict:
         if isinstance(first, dict):
             return first
     return {}
+
+
+def _record_cache_metrics(payload: dict) -> None:
+    """Update cache hit/miss counters from orchestrator result payloads."""
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        tools = result.get("tools")
+        if not isinstance(tools, list):
+            continue
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            record_cache_operation("hit" if tool.get("cache_hit") else "miss")
 
 
 def insert_running_scan(scan_id: str, started_at: str, target_type: str, name: str, target: str) -> None:
@@ -111,6 +130,7 @@ def run_scan(
     insert_running_scan(scan_id, started_at, target_type, name, target)
     LOGGER.info("scan.starting", scan_id=scan_id, name=name, target=target, target_type=target_type)
     publish_sync("scan_started", {"scan_id": scan_id, "target_name": name, "target_type": target_type})
+    started_monotonic = monotonic()
 
     try:
         resolved_root_dir = Path(root_dir).resolve()
@@ -161,7 +181,14 @@ def run_scan(
         try:
             output_json = json.loads(result.stdout)
             primary_result = _extract_primary_result(output_json)
+            _record_cache_metrics(output_json)
+            duration_seconds = monotonic() - started_monotonic
             if result.returncode == 0:
+                record_scan_metric(
+                    primary_result.get("status") or "COMPLETED",
+                    primary_result.get("policy_status") or "UNKNOWN",
+                    duration_seconds,
+                )
                 LOGGER.info("scan.completed", scan_id=scan_id, returncode=result.returncode)
                 publish_sync(
                     "scan_completed", {"scan_id": scan_id, "target_name": name, "returncode": result.returncode}
@@ -175,6 +202,11 @@ def run_scan(
 
             if primary_result.get("status") == "BLOCK" or result.returncode == 3:
                 msg = primary_result.get("error_message") or "Scan blocked by policy"
+                record_scan_metric(
+                    primary_result.get("status") or "BLOCKED",
+                    primary_result.get("policy_status") or "BLOCK",
+                    duration_seconds,
+                )
                 LOGGER.warning("scan.blocked", scan_id=scan_id, returncode=result.returncode, message=msg)
                 publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
                 return {
@@ -186,6 +218,11 @@ def run_scan(
                 }
 
             msg = primary_result.get("error_message") or f"Orchestrator exited with code {result.returncode}"
+            record_scan_metric(
+                primary_result.get("status") or "FAILED",
+                primary_result.get("policy_status") or "UNKNOWN",
+                duration_seconds,
+            )
             LOGGER.error("scan.failed", scan_id=scan_id, returncode=result.returncode, message=msg)
             update_scan_failed(scan_id, msg)
             publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
@@ -198,6 +235,7 @@ def run_scan(
             }
         except json.JSONDecodeError:
             msg = "Failed to parse orchestrator output"
+            record_scan_metric("FAILED", "UNKNOWN", monotonic() - started_monotonic)
             LOGGER.error("scan.output_parse_error", scan_id=scan_id, returncode=result.returncode)
             update_scan_failed(scan_id, msg)
             publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
@@ -205,11 +243,13 @@ def run_scan(
 
     except subprocess.TimeoutExpired:
         msg = "Scan timed out after 30 minutes"
+        record_scan_metric("FAILED", "UNKNOWN", monotonic() - started_monotonic)
         LOGGER.error("scan.timeout", scan_id=scan_id, name=name)
         update_scan_failed(scan_id, msg)
         publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
         return {"status": "error", "scan_id": scan_id, "message": msg}
     except Exception as e:
+        record_scan_metric("FAILED", "UNKNOWN", monotonic() - started_monotonic)
         LOGGER.exception("scan.unexpected_error", scan_id=scan_id, error=str(e))
         update_scan_failed(scan_id, str(e))
         publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": str(e)})

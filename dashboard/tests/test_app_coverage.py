@@ -592,6 +592,16 @@ class TestMonitoringEndpoints:
         resp = client.get("/api/metrics", headers=admin_headers)
         assert resp.status_code == 200
 
+    def test_metrics_expose_api_request_counter_after_request(self, client, isolated_db, admin_headers):
+        """Prometheus scrape should include request counters recorded by the security middleware."""
+        _init_tables(isolated_db)
+        health_resp = client.get("/api/health")
+        assert health_resp.status_code == 200
+
+        metrics_resp = client.get("/api/metrics", headers=admin_headers)
+        assert metrics_resp.status_code == 200
+        assert 'ssp_api_requests_total{method="GET",path="/api/health",status_code="200"}' in metrics_resp.text
+
 
 # ---------------------------------------------------------------------------
 # Analytics and remediation endpoints tests

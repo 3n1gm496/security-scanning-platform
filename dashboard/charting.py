@@ -209,9 +209,10 @@ class ChartingEngine:
                 DATE(created_at) as date,
                 COUNT(*) as total_scans,
                 SUM(CASE WHEN UPPER(status)
-                    IN ('COMPLETED_CLEAN', 'COMPLETED_WITH_FINDINGS')
+                    IN ('COMPLETED', 'COMPLETED_CLEAN', 'COMPLETED_WITH_FINDINGS')
                     THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN UPPER(status) = 'FAILED'
+                SUM(CASE WHEN UPPER(status)
+                    IN ('FAILED', 'PARTIAL_FAILED', 'ERROR')
                     THEN 1 ELSE 0 END) as failed
             FROM scans
             WHERE created_at >= ?

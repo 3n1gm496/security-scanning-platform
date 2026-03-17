@@ -121,10 +121,15 @@ def export_to_sarif(
             }
 
             # Add location if available
-            if "file" in finding or "target" in finding:
+            if "file" in finding or "target" in finding or "target_name" in finding:
                 location = {
                     "physicalLocation": {
-                        "artifactLocation": {"uri": finding.get("file", finding.get("target", "unknown"))}
+                        "artifactLocation": {
+                            "uri": finding.get("file")
+                            or finding.get("target")
+                            or finding.get("target_name")
+                            or "unknown"
+                        }
                     }
                 }
 
@@ -298,7 +303,7 @@ def export_to_html(findings: List[Dict[str, Any]], scan_info: Dict[str, Any] = N
         <h1>Security Scan Report</h1>
         <p>Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
         {f'<p>Scan ID: {html_escape(str(scan_info.get("scan_id")))}</p>' if scan_info.get("scan_id") else ''}
-        {f'<p>Target: {html_escape(str(scan_info.get("target")))}</p>' if scan_info.get("target") else ''}
+        {f'<p>Target: {html_escape(str(scan_info.get("target") or scan_info.get("target_name")))}</p>' if (scan_info.get("target") or scan_info.get("target_name")) else ''}
     </div>
 
     <div class="summary">

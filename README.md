@@ -33,7 +33,7 @@ The platform is designed to scan code repositories, local paths, live URLs, and 
 - API key management, webhooks, notifications, audit log, health, readiness, and Prometheus metrics
 
 ### Current repository baseline
-- `614` Python tests green
+- `620` Python tests green
 - browser smoke covers login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile nav
 - CI builds Docker images and scans them with Trivy
 - reusable `Security Scan` workflow supports either remote platform scan or local Gitleaks fallback

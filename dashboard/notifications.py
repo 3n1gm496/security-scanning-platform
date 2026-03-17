@@ -28,7 +28,7 @@ def _safe_dashboard_url(dashboard_url: str) -> str:
     """Normalize dashboard URLs used in emails to http/https only."""
     parsed = urlsplit(dashboard_url or "")
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return "http://localhost:8000"
+        return "http://localhost:8080"
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
 
 

@@ -33,6 +33,8 @@ MAX_SCAN_QUEUE: int = int(os.getenv("DASHBOARD_MAX_SCAN_QUEUE", "20"))
 scan_executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=MAX_SCAN_WORKERS, thread_name_prefix="scan-worker")
 _scan_queue_depth = 0
 _scan_queue_lock = Lock()
+_active_scan_workers = 0
+_active_scan_workers_lock = Lock()
 
 
 def scan_queue_submit(fn, *args, **kwargs):
@@ -47,10 +49,26 @@ def scan_queue_submit(fn, *args, **kwargs):
         _scan_queue_depth += 1
 
     def _wrapper():
-        global _scan_queue_depth
+        global _scan_queue_depth, _active_scan_workers
         try:
+            with _active_scan_workers_lock:
+                _active_scan_workers += 1
+                try:
+                    from monitoring import set_active_scan_workers
+
+                    set_active_scan_workers(_active_scan_workers)
+                except Exception:
+                    pass
             return fn(*args, **kwargs)
         finally:
+            with _active_scan_workers_lock:
+                _active_scan_workers = max(0, _active_scan_workers - 1)
+                try:
+                    from monitoring import set_active_scan_workers
+
+                    set_active_scan_workers(_active_scan_workers)
+                except Exception:
+                    pass
             with _scan_queue_lock:
                 _scan_queue_depth -= 1
 

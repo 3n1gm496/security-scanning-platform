@@ -15,7 +15,7 @@ if "bcrypt" not in sys.modules:
     sys.modules["bcrypt"] = fake_bcrypt
 
 from db_adapter import get_connection
-from notifications import EmailNotificationEngine, NotificationPreferencesManager
+from notifications import EmailNotificationEngine, NotificationPreferencesManager, _safe_dashboard_url
 
 
 def test_notification_engine_init():
@@ -23,6 +23,13 @@ def test_notification_engine_init():
     engine = EmailNotificationEngine()
     assert engine.smtp_server
     assert engine.from_email
+
+
+def test_safe_dashboard_url_falls_back_to_dashboard_port():
+    """Unsafe or invalid dashboard URLs should fall back to the real local dashboard port."""
+    assert _safe_dashboard_url("") == "http://localhost:8080"
+    assert _safe_dashboard_url("javascript:alert(1)") == "http://localhost:8080"
+    assert _safe_dashboard_url("https://dashboard.example.com/base/path/") == "https://dashboard.example.com/base/path"
 
 
 def test_notification_preferences_save():

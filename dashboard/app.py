@@ -305,9 +305,12 @@ class SecurityMiddleware:
 
         nonce = base64.b64encode(secrets.token_bytes(16)).decode()
         scope.setdefault("state", {})["csp_nonce"] = nonce
+        response_status = 500
 
         async def send_with_security_headers(message):
+            nonlocal response_status
             if message["type"] == "http.response.start":
+                response_status = int(message["status"])
                 headers = MutableHeaders(scope=message)
                 headers["X-Content-Type-Options"] = "nosniff"
                 headers["X-Frame-Options"] = "DENY"
@@ -332,7 +335,15 @@ class SecurityMiddleware:
                 )
             await send(message)
 
-        await self.app(scope, receive, send_with_security_headers)
+        try:
+            await self.app(scope, receive, send_with_security_headers)
+        finally:
+            try:
+                from monitoring import record_api_request_metric
+
+                record_api_request_metric(request.method, path, response_status)
+            except Exception:
+                pass
 
 
 app.add_middleware(SecurityMiddleware)

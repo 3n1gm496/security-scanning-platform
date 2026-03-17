@@ -133,6 +133,12 @@ curl -fsS http://localhost:8080/api/health
 curl -fsS http://localhost:8080/api/ready
 ```
 
+If you also scrape Prometheus metrics, authenticate that request explicitly:
+
+```bash
+curl -fsS -H "Authorization: Bearer ${SECURITY_SCANNER_API_KEY}" http://localhost:8080/metrics
+```
+
 ---
 
 ## Calling the platform from another GitLab repository

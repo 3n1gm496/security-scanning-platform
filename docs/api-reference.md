@@ -22,6 +22,7 @@ Routes:
 Notes:
 - browser clients should use the CSRF token for mutating requests
 - API key callers bypass CSRF only after key verification
+- `GET /logout` exists only to reject logout-via-GET and returns `405`
 
 ---
 
@@ -131,12 +132,16 @@ Webhooks:
 - `POST /api/webhooks`
 - `PATCH /api/webhooks/{webhook_id}`
 - `DELETE /api/webhooks/{webhook_id}`
-- `POST /api/webhooks/{webhook_id}/test`
+- `POST /api/webhooks/{webhook_id}/rotate-secret`
 
 Notifications:
 - `POST /api/notifications/send-alert`
 - `POST /api/notifications/preferences`
 - `GET /api/notifications/preferences`
+
+Notes:
+- notification preferences are JSON-body based
+- `send-alert` is a targeted operational action, not a general outbound mail gateway
 
 Audit:
 - `GET /api/audit`
@@ -154,7 +159,7 @@ Routes:
 - `GET /metrics`
 
 Notes:
-- `/metrics` is the Prometheus scrape endpoint exposed by the app
+- `/metrics` is the Prometheus scrape endpoint exposed by the app and requires authentication
 - `/api/health` and `/api/ready` are the preferred liveness/readiness checks for operational tooling
 
 ---

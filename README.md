@@ -33,7 +33,7 @@ The platform is designed to scan code repositories, local paths, live URLs, and 
 - API key management, webhooks, notifications, audit log, health, readiness, and Prometheus metrics
 
 ### Current repository baseline
-- `607` Python tests green
+- `614` Python tests green
 - browser smoke covers login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile nav
 - CI builds Docker images and scans them with Trivy
 - reusable `Security Scan` workflow supports either remote platform scan or local Gitleaks fallback
@@ -220,8 +220,12 @@ Health checks:
 ```bash
 curl -fsS http://localhost:8080/api/health
 curl -fsS http://localhost:8080/api/ready
-curl -fsS http://localhost:8080/metrics
+curl -fsS -H "Authorization: Bearer $API_KEY" http://localhost:8080/metrics
 ```
+
+Note:
+- `/metrics` is authenticated
+- use `/api/health` and `/api/ready` for anonymous liveness/readiness checks
 
 ### Database path behavior
 
@@ -273,7 +277,7 @@ Important configuration files:
 - `config/targets.yaml`
 
 Important caveat:
-- the application now fails fast on insecure runtime auth defaults
+- the application warns when insecure runtime auth defaults are still in use
 - Compose still contains some fallback values, so real deployments must provide a proper `.env`
 
 ---
@@ -354,6 +358,10 @@ GitHub Actions currently runs:
 Current `Security Scan` behavior:
 - remote scan when `SECURITY_SCANNER_URL` and `SECURITY_SCANNER_API_KEY` exist
 - local Gitleaks fallback otherwise
+
+That means a green security-scan workflow can represent either:
+- a remote platform scan
+- or a local Gitleaks-only fallback
 
 Docker security/build notes:
 - `trivy` is compiled from source in the image build with the required patched dependency version

@@ -61,10 +61,14 @@ Recommended checks:
 ```bash
 curl -fsS http://localhost:8080/api/health
 curl -fsS http://localhost:8080/api/ready
-curl -fsS http://localhost:8080/metrics
+curl -fsS -H "Authorization: Bearer $API_KEY" http://localhost:8080/metrics
 ```
 
 Use `ops.sh health` for a quick combined stack + dashboard check.
+
+Notes:
+- `/api/health` and `/api/ready` are the anonymous probe endpoints
+- `/metrics` requires auth and is intended for authenticated Prometheus scraping
 
 ---
 

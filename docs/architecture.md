@@ -2,7 +2,7 @@
 
 This document is the current product-level architecture reference for the platform.
 
-The Mermaid source of truth lives in [architecture.mmd](architecture.mmd). The generated PNG in the repository is a convenience artifact and can lag behind the Mermaid source.
+The Mermaid source of truth lives in [architecture.mmd](architecture.mmd), and a compact rendered view is also embedded in the repository README.
 
 ---
 
@@ -15,6 +15,7 @@ The platform is split into two major runtimes:
 Persistence is shared:
 - SQLite by default
 - PostgreSQL optionally through `DATABASE_URL`
+- optional PostgreSQL read routing through `DATABASE_READ_URL` on dashboard read-heavy paths
 
 The operator-facing experience is the dashboard SPA:
 - Vue-based single-page app
@@ -190,6 +191,11 @@ Scanner toolchain notes:
 - `trivy` is built from source with the patched dependency version required by current scanning policy
 - `gitleaks` is built from source with a patched Go toolchain
 - `docker/scanner-tools.Dockerfile` is used to prime and reuse scanner-tool cache in CI
+
+Current security-scan workflow semantics:
+- remote platform scan when scanner secrets are configured
+- local Gitleaks fallback otherwise
+- therefore a green workflow result does not always mean the same security depth
 
 ---
 

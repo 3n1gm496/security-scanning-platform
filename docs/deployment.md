@@ -138,6 +138,6 @@ Always verify that the deployment path referenced by the units matches your actu
 - `.env` configured with real secrets
 - storage directories created
 - dashboard health and readiness green
-- metrics reachable
+- authenticated metrics reachable
 - browser smoke green against the candidate build if UI changed
 - CI green on the commit being deployed

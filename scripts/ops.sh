@@ -769,8 +769,12 @@ cmd_backup() {
     warn "DB non trovato: ${DB_FILE}"
   fi
 
-  tar -czf "${reports_backup}" -C "${DATA_DIR}" reports
-  info "Reports backup: ${reports_backup}"
+  if [[ -d "${REPORTS_DIR}" ]]; then
+    tar -czf "${reports_backup}" -C "${REPORTS_DIR}" .
+    info "Reports backup: ${reports_backup}"
+  else
+    warn "Reports directory non trovato: ${REPORTS_DIR}"
+  fi
 }
 
 cmd_retention() {

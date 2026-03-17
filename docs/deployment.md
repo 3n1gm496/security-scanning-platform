@@ -35,12 +35,14 @@ Responsibilities:
 - exposes API endpoints
 - owns auth/session/RBAC/webhook/notification/export/analytics logic
 - triggers orchestrator work through subprocess execution
+- reads SQLite from `DASHBOARD_DB_PATH` when `DATABASE_URL` is unset
 
 ### `orchestrator`
 
 Responsibilities:
 - scanner execution and report generation
 - typically run manually or through scan trigger paths
+- reads SQLite from `ORCH_DB_PATH` when `DATABASE_URL` is unset
 
 ### `postgres`
 
@@ -118,6 +120,11 @@ Use when:
 Enable with:
 - `DATABASE_URL`
 - `docker compose --profile postgres up -d`
+
+SQLite path notes:
+- `DASHBOARD_DB_PATH` controls the dashboard-side SQLite path
+- `ORCH_DB_PATH` controls the orchestrator-side SQLite path
+- for shared SQLite deployments, point both at the same file
 
 ---
 

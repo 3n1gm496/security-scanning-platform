@@ -137,7 +137,7 @@ services:
     env_file:
       - .env
     environment:
-      DASHBOARD_DB_PATH: ${ORCH_DB_PATH:-/data/security_scans.db}
+      DASHBOARD_DB_PATH: ${DASHBOARD_DB_PATH:-/data/security_scans.db}
       DATABASE_URL: ${DATABASE_URL:-}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-change-me}

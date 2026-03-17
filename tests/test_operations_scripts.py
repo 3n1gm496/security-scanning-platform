@@ -62,6 +62,66 @@ def test_backup_script_uses_dashboard_db_path_and_writes_archive(tmp_path):
     assert any(name.endswith("security_scans.db") for name in names)
 
 
+def test_backup_and_restore_honor_custom_reports_dir(tmp_path):
+    _copy_script(PROJECT_ROOT, "backup.sh", tmp_path)
+    _copy_script(PROJECT_ROOT, "restore.sh", tmp_path)
+
+    reports_dir = tmp_path / "custom-reports"
+    reports_dir.mkdir(parents=True)
+    (reports_dir / "normalized.json").write_text('{"ok": true}\n', encoding="utf-8")
+
+    db_path = tmp_path / "data" / "security_scans.db"
+    db_path.parent.mkdir(parents=True)
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE scans (id INTEGER PRIMARY KEY, status TEXT)")
+    conn.commit()
+    conn.close()
+
+    backup_dir = tmp_path / "backups"
+    env = os.environ.copy()
+    env["DASHBOARD_DB_PATH"] = str(db_path)
+    env["REPORTS_DIR"] = str(reports_dir)
+    env["BACKUP_DIR"] = str(backup_dir)
+
+    subprocess.run(
+        ["bash", str(tmp_path / "scripts" / "backup.sh")],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    archive_path = next(backup_dir.glob("ssp-backup-*.tar.gz"))
+    shutil.rmtree(reports_dir)
+    reports_dir.mkdir(parents=True)
+    (reports_dir / "stale.txt").write_text("stale", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker_log = tmp_path / "docker.log"
+    _write_executable(
+        bin_dir / "docker",
+        "#!/usr/bin/env bash\n" 'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n' "exit 0\n",
+    )
+
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["DOCKER_LOG"] = str(docker_log)
+    env["RESTORE_YES"] = "1"
+
+    subprocess.run(
+        ["bash", str(tmp_path / "scripts" / "restore.sh"), str(archive_path)],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert (reports_dir / "normalized.json").exists()
+    assert not (reports_dir / "stale.txt").exists()
+
+
 def test_restore_script_restores_custom_db_path_reports_and_config_without_nesting(tmp_path):
     _copy_script(PROJECT_ROOT, "restore.sh", tmp_path)
 
@@ -141,6 +201,101 @@ def test_restore_script_restores_custom_db_path_reports_and_config_without_nesti
     assert not (tmp_path / "config" / "stale.yaml").exists()
     assert not (custom_db_dir / "restored.sqlite3-wal").exists()
     assert not (custom_db_dir / "restored.sqlite3-shm").exists()
+
+
+def test_backup_script_uses_docker_pg_dump_for_compose_postgres_hostname(tmp_path):
+    _copy_script(PROJECT_ROOT, "backup.sh", tmp_path)
+
+    backup_dir = tmp_path / "out"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker_log = tmp_path / "docker.log"
+    pg_dump_log = tmp_path / "pg_dump.log"
+
+    _write_executable(
+        bin_dir / "docker",
+        "#!/usr/bin/env bash\n"
+        'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
+        'if [[ "$*" == *" pg_dump "* ]] || [[ "$*" == *" pg_dump" ]]; then\n'
+        '  printf "PGDUMP"\n'
+        "fi\n",
+    )
+    _write_executable(
+        bin_dir / "pg_dump",
+        "#!/usr/bin/env bash\n" "printf 'host-pg-dump\\n' >> \"$PG_DUMP_LOG\"\n" "exit 42\n",
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["DATABASE_URL"] = "postgresql://security:secret@postgres:5432/security_scans"
+    env["BACKUP_DIR"] = str(backup_dir)
+    env["DOCKER_LOG"] = str(docker_log)
+    env["PG_DUMP_LOG"] = str(pg_dump_log)
+
+    subprocess.run(
+        ["bash", str(tmp_path / "scripts" / "backup.sh")],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert not pg_dump_log.exists()
+    assert "pg_dump" in docker_log.read_text(encoding="utf-8")
+    archives = sorted(backup_dir.glob("ssp-backup-*.tar.gz"))
+    assert archives
+
+
+def test_restore_script_uses_docker_pg_restore_for_compose_postgres_hostname(tmp_path):
+    _copy_script(PROJECT_ROOT, "restore.sh", tmp_path)
+
+    backup_root = tmp_path / "backup-src" / "ssp-backup-20260317T000000Z"
+    backup_root.mkdir(parents=True)
+    (backup_root / "database.pgdump").write_bytes(b"PGDUMP")
+
+    archive_path = tmp_path / "backup.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as tar:
+        tar.add(backup_root, arcname=backup_root.name)
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker_log = tmp_path / "docker.log"
+    pg_restore_log = tmp_path / "pg_restore.log"
+    _write_executable(
+        bin_dir / "docker",
+        "#!/usr/bin/env bash\n"
+        'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
+        'if [[ "$1" == compose && "$2" == exec && "$4" == postgres && "$5" == pg_isready ]]; then exit 0; fi\n'
+        'if [[ "$1" == compose && "$2" == exec && "$4" == postgres && "$5" == pg_restore ]]; then cat >/dev/null; exit 0; fi\n'
+        "exit 0\n",
+    )
+    _write_executable(
+        bin_dir / "pg_restore",
+        "#!/usr/bin/env bash\n" "printf 'host-pg-restore\\n' >> \"$PG_RESTORE_LOG\"\n" "exit 41\n",
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["RESTORE_YES"] = "1"
+    env["DATABASE_URL"] = "postgresql://security:secret@postgres:5432/security_scans"
+    env["DOCKER_LOG"] = str(docker_log)
+    env["PG_RESTORE_LOG"] = str(pg_restore_log)
+
+    subprocess.run(
+        ["bash", str(tmp_path / "scripts" / "restore.sh"), str(archive_path)],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert not pg_restore_log.exists()
+    logged = docker_log.read_text(encoding="utf-8")
+    assert "up -d postgres" in logged
+    assert "exec -T postgres pg_isready" in logged
+    assert "exec -T postgres pg_restore" in logged
 
 
 def test_ops_health_uses_api_health_and_ready_endpoints(tmp_path):

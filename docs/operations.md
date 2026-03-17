@@ -88,6 +88,8 @@ This backs up:
 Behavior details:
 - SQLite backups prefer `sqlite3 .backup` for a consistent live snapshot and fall back to plain copy only if `sqlite3` is unavailable
 - the scripts honor `DASHBOARD_DB_PATH` when the dashboard DB lives outside the default `/data/security_scans.db`
+- the scripts honor `REPORTS_DIR` when reports live outside the default `/data/reports`
+- when `DATABASE_URL` points at the Compose service hostname `postgres`, backup and restore use `docker compose exec` for `pg_dump` / `pg_restore` instead of host-side tools
 
 Backup destination:
 - `${DATA_DIR}/backups`
@@ -101,8 +103,10 @@ RESTORE_YES=1 ./scripts/restore.sh data/backups/<archive>.tar.gz
 Restore behavior:
 - stops the Compose stack before applying data
 - restores the configured SQLite path or PostgreSQL dump
-- replaces the current reports directory before extracting the archived one
+- replaces the configured reports directory before extracting the archived one
 - restores config contents without creating nested `config/config` paths
+- removes stale SQLite `-wal` and `-shm` sidecar files before restoring the main DB
+- accepts both current report archives and older archives that store files under a top-level `reports/` directory
 
 ---
 
@@ -146,6 +150,7 @@ SQLite:
 PostgreSQL:
 - enable with `DATABASE_URL` and the Compose `postgres` profile
 - preferred when concurrency or external DB operations matter more
+- if you use the internal Compose PostgreSQL service, set both `DATABASE_URL` and `DASHBOARD_DB_PATH` / `ORCH_DB_PATH` consistently for the mode you want
 
 The dashboard and orchestrator both support PostgreSQL-aware SQL adaptation through the shared adapter layers.
 

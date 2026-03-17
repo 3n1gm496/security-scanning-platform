@@ -31,6 +31,22 @@ PG_URL="${DATABASE_URL:-}"
 PG_USER="${POSTGRES_USER:-security}"
 PG_DB="${POSTGRES_DB:-security_scans}"
 
+pg_url_host() {
+    local url="${1:-}"
+    local without_scheme without_creds hostport
+    [ -n "${url}" ] || return 0
+    without_scheme="${url#*://}"
+    without_creds="${without_scheme#*@}"
+    hostport="${without_creds%%/*}"
+    printf '%s\n' "${hostport%%:*}"
+}
+
+should_use_docker_postgres() {
+    local host
+    host="$(pg_url_host "${PG_URL}")"
+    [[ "${host}" == "postgres" ]]
+}
+
 mkdir -p "${BACKUP_PATH}"
 
 echo "=== SSP Backup — ${TIMESTAMP} ==="
@@ -40,13 +56,11 @@ echo "Destination: ${BACKUP_PATH}"
 
 if [ -n "${PG_URL}" ]; then
     echo "[db] PostgreSQL detected — running pg_dump..."
-    # Extract connection components from DATABASE_URL
-    # Format: postgresql://user:pass@host:port/dbname
-    if command -v pg_dump >/dev/null 2>&1; then
+    if command -v pg_dump >/dev/null 2>&1 && ! should_use_docker_postgres; then
         pg_dump "${PG_URL}" --format=custom --file="${BACKUP_PATH}/database.pgdump" 2>&1
         echo "[db] PostgreSQL dump saved: database.pgdump ($(du -h "${BACKUP_PATH}/database.pgdump" | cut -f1))"
     else
-        echo "[db] WARNING: pg_dump not found — attempting via docker..."
+        echo "[db] Using docker-based pg_dump..."
         if docker compose -f "${PROJECT_ROOT}/docker-compose.yml" exec -T postgres \
             pg_dump -U "${PG_USER}" -Fc "${PG_DB}" > "${BACKUP_PATH}/database.pgdump" 2>/dev/null; then
             echo "[db] PostgreSQL dump saved via docker"
@@ -74,7 +88,7 @@ fi
 
 if [ -d "${REPORTS_DIR}" ] && [ "$(ls -A "${REPORTS_DIR}" 2>/dev/null)" ]; then
     echo "[reports] Archiving reports directory..."
-    tar -czf "${BACKUP_PATH}/reports.tar.gz" -C "${DATA_DIR}" reports 2>&1
+    tar -czf "${BACKUP_PATH}/reports.tar.gz" -C "${REPORTS_DIR}" . 2>&1
     echo "[reports] Reports archived: reports.tar.gz ($(du -h "${BACKUP_PATH}/reports.tar.gz" | cut -f1))"
 else
     echo "[reports] No reports directory found — skipping"

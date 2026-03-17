@@ -36,9 +36,39 @@ fi
 
 DATA_DIR="${PROJECT_ROOT}/data"
 DB_FILE="${DASHBOARD_DB_PATH:-${DATA_DIR}/security_scans.db}"
+REPORTS_DIR="${REPORTS_DIR:-${DATA_DIR}/reports}"
 PG_URL="${DATABASE_URL:-}"
 PG_USER="${POSTGRES_USER:-security}"
 PG_DB="${POSTGRES_DB:-security_scans}"
+
+pg_url_host() {
+    local url="${1:-}"
+    local without_scheme without_creds hostport
+    [ -n "${url}" ] || return 0
+    without_scheme="${url#*://}"
+    without_creds="${without_scheme#*@}"
+    hostport="${without_creds%%/*}"
+    printf '%s\n' "${hostport%%:*}"
+}
+
+should_use_docker_postgres() {
+    local host
+    host="$(pg_url_host "${PG_URL}")"
+    [[ "${host}" == "postgres" ]]
+}
+
+wait_for_compose_postgres() {
+    local attempts="${1:-20}"
+    local i
+    for ((i = 1; i <= attempts; i += 1)); do
+        if docker compose exec -T postgres pg_isready -U "${PG_USER}" -d "${PG_DB}" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    echo "[db] ERROR: PostgreSQL service did not become ready in time" >&2
+    return 1
+}
 
 echo "=== SSP Restore ==="
 echo "Archive: ${BACKUP_ARCHIVE}"
@@ -79,16 +109,13 @@ docker compose down 2>/dev/null || true
 
 if [ -f "${RESTORE_DIR}/database.pgdump" ] && [ -n "${PG_URL}" ]; then
     echo "[db] Restoring PostgreSQL dump..."
-    if command -v pg_restore >/dev/null 2>&1; then
-        # Start only postgres for the restore
-        docker compose up -d postgres 2>/dev/null || true
-        sleep 3
+    if command -v pg_restore >/dev/null 2>&1 && ! should_use_docker_postgres; then
         pg_restore --clean --if-exists --no-owner -d "${PG_URL}" "${RESTORE_DIR}/database.pgdump" 2>&1
         echo "[db] PostgreSQL restored"
     else
-        echo "[db] WARNING: pg_restore not found — attempting via docker..."
+        echo "[db] Using docker-based pg_restore..."
         docker compose up -d postgres 2>/dev/null || true
-        sleep 3
+        wait_for_compose_postgres
         docker compose exec -T postgres pg_restore --clean --if-exists --no-owner \
             -U "${PG_USER}" -d "${PG_DB}" < "${RESTORE_DIR}/database.pgdump" 2>/dev/null
         echo "[db] PostgreSQL restored via docker"
@@ -107,9 +134,15 @@ fi
 
 if [ -f "${RESTORE_DIR}/reports.tar.gz" ]; then
     echo "[reports] Restoring reports..."
-    mkdir -p "${DATA_DIR}"
-    rm -rf "${DATA_DIR}/reports"
-    tar -xzf "${RESTORE_DIR}/reports.tar.gz" -C "${DATA_DIR}"
+    mkdir -p "${REPORTS_DIR}"
+    rm -rf "${REPORTS_DIR}"
+    mkdir -p "${REPORTS_DIR}"
+    first_entry="$(tar -tzf "${RESTORE_DIR}/reports.tar.gz" | head -n1 || true)"
+    if [[ "${first_entry}" == reports/* ]]; then
+        tar -xzf "${RESTORE_DIR}/reports.tar.gz" --strip-components=1 -C "${REPORTS_DIR}"
+    else
+        tar -xzf "${RESTORE_DIR}/reports.tar.gz" -C "${REPORTS_DIR}"
+    fi
     echo "[reports] Reports restored"
 else
     echo "[reports] No reports archive in backup — skipping"

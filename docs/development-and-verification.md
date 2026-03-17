@@ -45,7 +45,7 @@ node scripts/browser_smoke.mjs
 The smoke flow:
 - seeds a runtime database
 - starts the dashboard on a temporary port
-- exercises login, navigation, compare, settings, theme toggle, modals, and mobile nav
+- exercises login, navigation, compare, settings, theme toggle, modals, mobile nav, keyboard row activation, and `Escape`-driven modal close
 - writes screenshots to `artifacts/browser-smoke/`
 
 ---

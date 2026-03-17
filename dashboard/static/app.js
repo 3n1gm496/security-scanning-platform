@@ -170,7 +170,6 @@ createApp({
       kpis: init.kpis || {},
       recentScans: init.recentScans || [],
       severityBreakdown: init.severityBreakdown || {},
-      toolBreakdown: init.toolBreakdown || {},
       trend: init.trend || [],
       availableTargets: init.availableTargets || [],
       availableTools: init.availableTools || [],
@@ -299,8 +298,7 @@ createApp({
       // ── Dark mode
       darkMode: true,
 
-      // ── UI overlays
-      showFindingModal: false,
+      _lastFocusBeforeOverlay: null,
     };
   },
 
@@ -465,6 +463,22 @@ createApp({
         return title.length > 80 || file.length > 44 || target.length > 32;
       });
     },
+    analyticsHasRiskData() {
+      const dist = this.analyticsData.riskDistribution?.distribution || {};
+      return Object.keys(dist).length > 0;
+    },
+    analyticsHasComplianceData() {
+      return Array.isArray(this.analyticsData.compliance?.owasp_top_10) && this.analyticsData.compliance.owasp_top_10.length > 0;
+    },
+    analyticsHasToolData() {
+      return Array.isArray(this.analyticsData.toolEffectiveness) && this.analyticsData.toolEffectiveness.length > 0;
+    },
+    analyticsHasSeverityData() {
+      return this.analyticsHasRiskData;
+    },
+    analyticsHasTrendData() {
+      return Array.isArray(this.analyticsData.trends?.trend) && this.analyticsData.trends.trend.length > 0;
+    },
   },
 
    async mounted() {
@@ -517,8 +531,8 @@ createApp({
     // ── Keyboard: Escape to close modals + Tab focus trap
     this._keyHandler = (e) => {
       if (e.key === 'Escape') {
-        this.showFindingModal = false;
-        this.selectedFinding = null;
+        this.closeMobileNav();
+        this.closeFindingModal();
         this.closeScanDetail();
         this.closeScanModal();
         this.closeCreateKeyModal();
@@ -604,14 +618,31 @@ createApp({
   methods: {
     // ── Modal accessibility ───────────────────────────────────────────────────
 
-    async focusModal() {
+    rememberOverlayFocus() {
+      if (document.activeElement instanceof HTMLElement) {
+        this._lastFocusBeforeOverlay = document.activeElement;
+      }
+    },
+
+    restoreOverlayFocus() {
+      const target = this._lastFocusBeforeOverlay;
+      this._lastFocusBeforeOverlay = null;
+      if (target && target.isConnected) {
+        requestAnimationFrame(() => target.focus());
+      }
+    },
+
+    async focusModal(preferredRef = null) {
       await nextTick();
-      const overlay = document.querySelector('.modal-overlay[role="dialog"]');
-      if (!overlay) return;
-      const first = overlay.querySelector(
+      const container = preferredRef && this.$refs[preferredRef]
+        ? this.$refs[preferredRef]
+        : document.querySelector('.modal-overlay[role="dialog"] .modal');
+      if (!container) return;
+      const first = container.querySelector(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
       if (first) first.focus();
+      else if (typeof container.focus === 'function') container.focus();
     },
 
     // ── Chart theme helpers ────────────────────────────────────────────────────
@@ -985,11 +1016,15 @@ createApp({
     },
 
     toggleMobileNav() {
+      if (!this.mobileNavOpen) this.rememberOverlayFocus();
       this.mobileNavOpen = !this.mobileNavOpen;
+      if (!this.mobileNavOpen) this.restoreOverlayFocus();
     },
 
     closeMobileNav() {
+      const wasOpen = this.mobileNavOpen;
       this.mobileNavOpen = false;
+      if (wasOpen) this.restoreOverlayFocus();
     },
 
     cancelAnalyticsWarmup() {
@@ -1586,6 +1621,12 @@ createApp({
       return sort.order === 'ASC' ? '↑' : '↓';
     },
 
+    ariaSort(table, col) {
+      const sort = table === 'scans' ? this.scansSort : this.findingsSort;
+      if (!sort || sort.by !== col) return 'none';
+      return sort.order === 'ASC' ? 'ascending' : 'descending';
+    },
+
     async nextScansPage() {
       if (!this.scansCursor) return;
       // Push the cursor that fetched the *current* page so prevPage can restore it.
@@ -1610,45 +1651,57 @@ createApp({
     },
 
     openScanDetail(scan) {
+      this.rememberOverlayFocus();
       this.selectedScan = scan;
-      this.focusModal();
+      this.focusModal('scanDetailModal');
     },
 
     openScanModalDialog() {
+      this.rememberOverlayFocus();
       this.showScanModal = true;
-      this.focusModal();
+      this.focusModal('scanModal');
     },
 
     closeScanModal() {
+      const wasOpen = this.showScanModal;
       this.showScanModal = false;
       this.scanTriggering = false;
       this.newScanForm = { name: '', target: '', target_type: 'local' };
+      if (wasOpen) this.restoreOverlayFocus();
     },
 
     openCreateKeyModal() {
+      this.rememberOverlayFocus();
       this.showCreateKeyModal = true;
       this.newKeyResult = '';
-      this.focusModal();
+      this.focusModal('createKeyModal');
     },
 
     closeCreateKeyModal() {
+      const wasOpen = this.showCreateKeyModal;
       this.showCreateKeyModal = false;
       this.newKeyResult = '';
       this.newKeyForm = { name: '', role: 'operator', expires_days: '' };
+      if (wasOpen) this.restoreOverlayFocus();
     },
 
     openCreateWebhookModal() {
+      this.rememberOverlayFocus();
       this.showCreateWebhookModal = true;
-      this.focusModal();
+      this.focusModal('createWebhookModal');
     },
 
     closeCreateWebhookModal() {
+      const wasOpen = this.showCreateWebhookModal;
       this.showCreateWebhookModal = false;
       this.newWebhookForm = { name: '', url: '', events: 'scan.completed', secret: '' };
+      if (wasOpen) this.restoreOverlayFocus();
     },
 
     closeScanDetail() {
+      const hadSelection = !!this.selectedScan;
       this.selectedScan = null;
+      if (hadSelection) this.restoreOverlayFocus();
     },
 
     viewScanFindings(scan) {
@@ -1796,8 +1849,9 @@ createApp({
     // ── Finding Detail ────────────────────────────────────────────────────────
 
     async openFindingDetail(finding) {
+      this.rememberOverlayFocus();
       this.selectedFinding = finding;
-      this.focusModal();
+      this.focusModal('findingModal');
       this.findingModalTab = 'info';
       this.newFindingStatus = '';
       this.findingStatusNotes = '';
@@ -1828,7 +1882,9 @@ createApp({
     },
 
     closeFindingModal() {
+      const hadSelection = !!this.selectedFinding;
       this.selectedFinding = null;
+      if (hadSelection) this.restoreOverlayFocus();
     },
 
     async updateFindingStatus() {

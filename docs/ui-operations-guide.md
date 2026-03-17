@@ -157,6 +157,7 @@ Expected behavior:
 - dark layered surfaces
 - clear footer actions
 - keyboard focus remains visible
+- `Escape` closes the active modal without dropping the operator into a broken focus state
 
 ---
 
@@ -175,6 +176,7 @@ Current principles:
 - analytics does not aggressively rerender on every scan tick
 - findings refresh is conservative to preserve analyst context
 - charts use restrained motion based on update context
+- keyboard operators can sort tables, open row details, and move through modal flows without relying on the mouse
 
 This is deliberate. If you see a page constantly jumping, treat it as a regression.
 

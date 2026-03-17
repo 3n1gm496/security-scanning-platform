@@ -155,6 +155,23 @@ html, body {
   outline-offset: 2px;
 }
 
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.tab-btn:focus-visible,
+.nav-item:focus-visible,
+.sidebar-toggle:focus-visible,
+.mobile-nav-toggle:focus-visible,
+.logout-btn:focus-visible,
+.btn-icon:focus-visible,
+.btn-icon-sm:focus-visible,
+.th-sortable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* ── Layout ───────────────────────────────────────────────── */
 
 #app {
@@ -807,6 +824,10 @@ tr:last-child td { border-bottom: none; }
 .row-clickable { cursor: pointer; transition: background var(--transition); }
 .row-clickable:hover td { background: var(--color-primary-light); }
 .row-selected td { background: var(--color-primary-light) !important; }
+.row-clickable:focus-visible td {
+  background: var(--color-primary-light);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
 
 .cell-wrap { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-wrap-wide { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1154,6 +1175,10 @@ tr:last-child td { border-bottom: none; }
   animation: slideUp 0.2s ease;
   width: 100%;
 }
+.modal:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
 
 .modal-sm { max-width: 480px; }
 .modal-lg { max-width: 900px; }
@@ -1189,6 +1214,21 @@ tr:last-child td { border-bottom: none; }
   border-radius: var(--radius-sm);
 }
 .modal-close:hover { color: var(--color-text); background: var(--color-bg); }
+
+.chart-empty-state {
+  height: 100%;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface) 72%, var(--color-bg));
+}
 
 .modal-body { padding: var(--space-6); }
 
@@ -1583,6 +1623,10 @@ tr:last-child td { border-bottom: none; }
 
 .toggle-switch input:checked + .toggle-slider { background: var(--color-primary); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+.toggle-switch input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
 
 /* ── Compare page ─────────────────────────────────────────── */
 
@@ -1668,6 +1712,13 @@ tr:last-child td { border-bottom: none; }
   color: var(--color-text-muted);
   gap: var(--space-4);
   font-size: var(--font-md);
+}
+
+.empty-compare-inline {
+  padding: var(--space-6) var(--space-5);
+  align-items: flex-start;
+  text-align: left;
+  color: var(--color-text-secondary);
 }
 
 /* ── Column toggle bar ────────────────────────────────────── */

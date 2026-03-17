@@ -325,6 +325,11 @@ async function main() {
       await page.screenshot({ path: resolve(artifactsDir, "03-scans.png"), fullPage: true });
 
       await clickNav(page, "Findings");
+      await page.locator("tr.row-clickable").nth(1).focus();
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(700);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
       await page.getByRole("button", { name: "Details" }).first().click();
       await page.waitForTimeout(700);
       await page.screenshot({ path: resolve(artifactsDir, "04-findings-modal.png"), fullPage: true });
@@ -348,7 +353,7 @@ async function main() {
       await page.screenshot({ path: resolve(artifactsDir, "08-settings-apikeys-modal.png"), fullPage: true });
       await page.locator(".modal-close").first().click();
       await page.waitForTimeout(300);
-      await page.getByRole("button", { name: "Webhooks" }).click();
+      await page.getByRole("tab", { name: "Webhooks" }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks.png"), fullPage: true });
       await page.getByRole("button", { name: /new webhook/i }).click();
@@ -356,7 +361,7 @@ async function main() {
       await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks-modal.png"), fullPage: true });
       await page.locator(".modal-close").first().click();
       await page.waitForTimeout(300);
-      await page.getByRole("button", { name: "Notifications" }).click();
+      await page.getByRole("tab", { name: "Notifications" }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "10-settings-notifications.png"), fullPage: true });
 
@@ -380,7 +385,7 @@ async function main() {
       await page.getByRole("button", { name: /new scan/i }).first().click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "13-scan-modal.png"), fullPage: true });
-      await page.locator(".modal-close").first().click();
+      await page.keyboard.press("Escape");
       await page.waitForTimeout(400);
 
       insertFreshRuntimeScan();

@@ -34,7 +34,7 @@
          SIDEBAR
     ================================================================ -->
     <div v-if="mobileNavOpen" class="mobile-nav-backdrop" @click="closeMobileNav" aria-hidden="true"></div>
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed, 'mobile-open': mobileNavOpen }" role="complementary" aria-label="Sidebar navigation">
+    <aside id="main-sidebar" class="sidebar" :class="{ collapsed: sidebarCollapsed, 'mobile-open': mobileNavOpen }" role="complementary" aria-label="Sidebar navigation">
       <div class="sidebar-header">
         <div class="sidebar-logo" v-if="!sidebarCollapsed">
           <div class="logo-mark">
@@ -54,7 +54,7 @@
             <path d="M9 12L11 14L15 10" stroke="#071118" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <button class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+        <button class="sidebar-toggle" type="button" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-expanded="sidebarCollapsed ? 'false' : 'true'" aria-controls="main-sidebar">
           <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
             <path v-if="sidebarCollapsed" d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path v-else d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -67,24 +67,24 @@
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Dashboard</span>
         </a>
-        <a class="nav-item" :class="{ active: currentPage === 'scans' }" @click.prevent="navigate('scans')" href="#" :title="sidebarCollapsed ? 'Scans' : ''">
+        <a class="nav-item" :class="{ active: currentPage === 'scans' }" @click.prevent="navigate('scans')" href="#scans" :title="sidebarCollapsed ? 'Scans' : ''" :aria-current="currentPage === 'scans' ? 'page' : false">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Scans</span>
         </a>
-        <a class="nav-item" :class="{ active: currentPage === 'findings' }" @click.prevent="navigate('findings')" href="#" :title="sidebarCollapsed ? 'Findings' : ''">
+        <a class="nav-item" :class="{ active: currentPage === 'findings' }" @click.prevent="navigate('findings')" href="#findings" :title="sidebarCollapsed ? 'Findings' : ''" :aria-current="currentPage === 'findings' ? 'page' : false">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Findings</span>
           <span class="nav-badge" v-if="kpis.critical_findings > 0">{{ kpis.critical_findings }}</span>
         </a>
-        <a class="nav-item" :class="{ active: currentPage === 'analytics' }" @click.prevent="navigate('analytics')" href="#" :title="sidebarCollapsed ? 'Analytics' : ''">
+        <a class="nav-item" :class="{ active: currentPage === 'analytics' }" @click.prevent="navigate('analytics')" href="#analytics" :title="sidebarCollapsed ? 'Analytics' : ''" :aria-current="currentPage === 'analytics' ? 'page' : false">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Analytics</span>
         </a>
-        <a class="nav-item" :class="{ active: currentPage === 'compare' }" @click.prevent="navigate('compare')" href="#" :title="sidebarCollapsed ? 'Compare' : ''">
+        <a class="nav-item" :class="{ active: currentPage === 'compare' }" @click.prevent="navigate('compare')" href="#compare" :title="sidebarCollapsed ? 'Compare' : ''" :aria-current="currentPage === 'compare' ? 'page' : false">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Compare</span>
         </a>
-        <a class="nav-item" :class="{ active: currentPage === 'settings' }" @click.prevent="navigate('settings')" href="#" :title="sidebarCollapsed ? 'Settings' : ''">
+        <a class="nav-item" :class="{ active: currentPage === 'settings' }" @click.prevent="navigate('settings')" href="#settings" :title="sidebarCollapsed ? 'Settings' : ''" :aria-current="currentPage === 'settings' ? 'page' : false">
           <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2"/></svg>
           <span class="nav-label" v-if="!sidebarCollapsed">Settings</span>
         </a>
@@ -112,7 +112,7 @@
       <!-- Top bar -->
       <header class="topbar-slim" role="banner">
         <div class="topbar-left">
-          <button type="button" class="mobile-nav-toggle" @click="toggleMobileNav" aria-label="Open navigation menu" :aria-expanded="mobileNavOpen ? 'true' : 'false'">
+          <button type="button" class="mobile-nav-toggle" @click="toggleMobileNav" aria-label="Open navigation menu" :aria-expanded="mobileNavOpen ? 'true' : 'false'" aria-controls="main-sidebar">
             <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
               <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
@@ -143,7 +143,7 @@
           <div class="refresh-control">
             <span class="refresh-dot" :class="{ active: autoRefresh }"></span>
             <span class="refresh-label">{{ autoRefresh ? 'Live' : 'Paused' }}</span>
-            <button class="btn-icon" @click="autoRefresh = !autoRefresh" :title="autoRefresh ? 'Pause auto-refresh' : 'Start auto-refresh'">
+            <button class="btn-icon" type="button" @click="autoRefresh = !autoRefresh" :title="autoRefresh ? 'Pause auto-refresh' : 'Start auto-refresh'" :aria-label="autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'" :aria-pressed="autoRefresh ? 'true' : 'false'">
               <svg v-if="autoRefresh" viewBox="0 0 24 24" fill="none" width="14" height="14"><rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/></svg>
               <svg v-else viewBox="0 0 24 24" fill="none" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
             </button>
@@ -152,7 +152,7 @@
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14" class="u-mr-4"><polyline points="23 4 23 10 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Refresh
           </button>
-          <button class="btn-icon" @click="toggleDarkMode" :title="darkMode ? 'Light mode' : 'Dark mode'" aria-label="Toggle theme">
+          <button class="btn-icon" type="button" @click="toggleDarkMode" :title="darkMode ? 'Light mode' : 'Dark mode'" aria-label="Toggle theme" :aria-pressed="darkMode ? 'true' : 'false'">
             <svg v-if="darkMode" viewBox="0 0 24 24" fill="none" width="16" height="16"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             <svg v-else viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -320,7 +320,7 @@
                   <tr v-if="recentScans.length === 0">
                     <td colspan="4" class="empty-state">No scans with findings</td>
                   </tr>
-                  <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" class="row-clickable">
+                  <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)" class="row-clickable" tabindex="0">
                     <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
                     <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
                     <td><strong>{{ scan.findings_count }}</strong></td>
@@ -426,15 +426,15 @@
                   <th scope="col" class="th-check">
                     <input type="checkbox" disabled title="Select to compare" aria-label="Selection unavailable for this scan row">
                   </th>
-                  <th scope="col" v-if="colVisible('id')" class="th-sortable" @click="sortScans('id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
-                  <th scope="col" v-if="colVisible('target_name')" class="th-sortable" @click="sortScans('target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
-                  <th scope="col" v-if="colVisible('target_type')" class="th-sortable" @click="sortScans('target_type')">Type <span class="sort-icon">{{ sortIcon('scans', 'target_type') }}</span></th>
-                  <th scope="col" v-if="colVisible('status')" class="th-sortable" @click="sortScans('status')">Status <span class="sort-icon">{{ sortIcon('scans', 'status') }}</span></th>
-                  <th scope="col" v-if="colVisible('policy_status')" class="th-sortable" @click="sortScans('policy_status')">Policy <span class="sort-icon">{{ sortIcon('scans', 'policy_status') }}</span></th>
-                  <th scope="col" v-if="colVisible('findings_count')" class="th-sortable" @click="sortScans('findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
-                  <th scope="col" v-if="colVisible('critical_count')" class="th-sortable" @click="sortScans('critical_count')" title="Critical findings">Critical <span class="sort-icon">{{ sortIcon('scans', 'critical_count') }}</span></th>
-                  <th scope="col" v-if="colVisible('high_count')" class="th-sortable" @click="sortScans('high_count')" title="High findings">High <span class="sort-icon">{{ sortIcon('scans', 'high_count') }}</span></th>
-                  <th scope="col" v-if="colVisible('created_at')" class="th-sortable" @click="sortScans('created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
+                  <th scope="col" v-if="colVisible('id')" class="th-sortable" tabindex="0" @click="sortScans('id')" @keydown.enter.prevent="sortScans('id')" @keydown.space.prevent="sortScans('id')" :aria-sort="ariaSort('scans', 'id')">ID <span class="sort-icon">{{ sortIcon('scans', 'id') }}</span></th>
+                  <th scope="col" v-if="colVisible('target_name')" class="th-sortable" tabindex="0" @click="sortScans('target_name')" @keydown.enter.prevent="sortScans('target_name')" @keydown.space.prevent="sortScans('target_name')" :aria-sort="ariaSort('scans', 'target_name')">Target <span class="sort-icon">{{ sortIcon('scans', 'target_name') }}</span></th>
+                  <th scope="col" v-if="colVisible('target_type')" class="th-sortable" tabindex="0" @click="sortScans('target_type')" @keydown.enter.prevent="sortScans('target_type')" @keydown.space.prevent="sortScans('target_type')" :aria-sort="ariaSort('scans', 'target_type')">Type <span class="sort-icon">{{ sortIcon('scans', 'target_type') }}</span></th>
+                  <th scope="col" v-if="colVisible('status')" class="th-sortable" tabindex="0" @click="sortScans('status')" @keydown.enter.prevent="sortScans('status')" @keydown.space.prevent="sortScans('status')" :aria-sort="ariaSort('scans', 'status')">Status <span class="sort-icon">{{ sortIcon('scans', 'status') }}</span></th>
+                  <th scope="col" v-if="colVisible('policy_status')" class="th-sortable" tabindex="0" @click="sortScans('policy_status')" @keydown.enter.prevent="sortScans('policy_status')" @keydown.space.prevent="sortScans('policy_status')" :aria-sort="ariaSort('scans', 'policy_status')">Policy <span class="sort-icon">{{ sortIcon('scans', 'policy_status') }}</span></th>
+                  <th scope="col" v-if="colVisible('findings_count')" class="th-sortable" tabindex="0" @click="sortScans('findings_count')" @keydown.enter.prevent="sortScans('findings_count')" @keydown.space.prevent="sortScans('findings_count')" :aria-sort="ariaSort('scans', 'findings_count')">Findings <span class="sort-icon">{{ sortIcon('scans', 'findings_count') }}</span></th>
+                  <th scope="col" v-if="colVisible('critical_count')" class="th-sortable" tabindex="0" @click="sortScans('critical_count')" @keydown.enter.prevent="sortScans('critical_count')" @keydown.space.prevent="sortScans('critical_count')" :aria-sort="ariaSort('scans', 'critical_count')" title="Critical findings">Critical <span class="sort-icon">{{ sortIcon('scans', 'critical_count') }}</span></th>
+                  <th scope="col" v-if="colVisible('high_count')" class="th-sortable" tabindex="0" @click="sortScans('high_count')" @keydown.enter.prevent="sortScans('high_count')" @keydown.space.prevent="sortScans('high_count')" :aria-sort="ariaSort('scans', 'high_count')" title="High findings">High <span class="sort-icon">{{ sortIcon('scans', 'high_count') }}</span></th>
+                  <th scope="col" v-if="colVisible('created_at')" class="th-sortable" tabindex="0" @click="sortScans('created_at')" @keydown.enter.prevent="sortScans('created_at')" @keydown.space.prevent="sortScans('created_at')" :aria-sort="ariaSort('scans', 'created_at')">Date <span class="sort-icon">{{ sortIcon('scans', 'created_at') }}</span></th>
                   <th scope="col" class="th-actions">Actions</th>
                 </tr>
               </thead>
@@ -448,7 +448,7 @@
                     No scans found. Adjust your filters or trigger a new scan.
                   </td>
                 </tr>
-                <tr v-for="scan in scans" :key="scan.id" class="row-clickable" :class="{ 'row-selected': selectedScans.includes(scan.id) }">
+                <tr v-for="scan in scans" :key="scan.id" class="row-clickable" :class="{ 'row-selected': selectedScans.includes(scan.id) }" tabindex="0" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)">
                   <td class="th-check" @click.stop>
                     <input type="checkbox" :value="scan.id" v-model="selectedScans" :disabled="selectedScans.length >= 2 && !selectedScans.includes(scan.id)" :aria-label="`Select scan ${scan.id} for comparison`">
                   </td>
@@ -462,10 +462,10 @@
                   <td v-if="colVisible('high_count')" @click="openScanDetail(scan)"><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
                   <td v-if="colVisible('created_at')" @click="openScanDetail(scan)" class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
                   <td @click.stop>
-                    <button class="btn-icon-sm" @click="openScanDetail(scan)" title="Details">
+                    <button class="btn-icon-sm" type="button" @click="openScanDetail(scan)" title="Details" :aria-label="`View details for scan ${scan.id}`">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
-                    <button class="btn-icon-sm" @click="viewScanFindings(scan)" title="Findings">
+                    <button class="btn-icon-sm" type="button" @click="viewScanFindings(scan)" title="Findings" :aria-label="`Open findings for scan ${scan.id}`">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/></svg>
                     </button>
                   </td>
@@ -614,13 +614,13 @@
                   <th scope="col" class="th-check">
                     <input type="checkbox" @change="toggleSelectAll" :checked="allSelected" aria-label="Select all findings on this page">
                   </th>
-                  <th scope="col" v-if="colVisibleF('severity')" class="th-sortable" @click="sortFindings('severity')">Severity <span class="sort-icon">{{ sortIcon('findings', 'severity') }}</span></th>
-                  <th scope="col" v-if="colVisibleF('tool')" class="th-sortable" @click="sortFindings('tool')">Tool <span class="sort-icon">{{ sortIcon('findings', 'tool') }}</span></th>
-                  <th scope="col" v-if="colVisibleF('target')" class="th-sortable" @click="sortFindings('target_name')">Target <span class="sort-icon">{{ sortIcon('findings', 'target_name') }}</span></th>
-                  <th scope="col" v-if="colVisibleF('title')" class="th-sortable" @click="sortFindings('title')">Title <span class="sort-icon">{{ sortIcon('findings', 'title') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('severity')" class="th-sortable" tabindex="0" @click="sortFindings('severity')" @keydown.enter.prevent="sortFindings('severity')" @keydown.space.prevent="sortFindings('severity')" :aria-sort="ariaSort('findings', 'severity')">Severity <span class="sort-icon">{{ sortIcon('findings', 'severity') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('tool')" class="th-sortable" tabindex="0" @click="sortFindings('tool')" @keydown.enter.prevent="sortFindings('tool')" @keydown.space.prevent="sortFindings('tool')" :aria-sort="ariaSort('findings', 'tool')">Tool <span class="sort-icon">{{ sortIcon('findings', 'tool') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('target')" class="th-sortable" tabindex="0" @click="sortFindings('target_name')" @keydown.enter.prevent="sortFindings('target_name')" @keydown.space.prevent="sortFindings('target_name')" :aria-sort="ariaSort('findings', 'target_name')">Target <span class="sort-icon">{{ sortIcon('findings', 'target_name') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('title')" class="th-sortable" tabindex="0" @click="sortFindings('title')" @keydown.enter.prevent="sortFindings('title')" @keydown.space.prevent="sortFindings('title')" :aria-sort="ariaSort('findings', 'title')">Title <span class="sort-icon">{{ sortIcon('findings', 'title') }}</span></th>
                   <th scope="col" v-if="colVisibleF('cve')">CVE / ID</th>
                   <th scope="col" v-if="colVisibleF('file')">File</th>
-                  <th scope="col" v-if="colVisibleF('status')" class="th-sortable" @click="sortFindings('mgmt_status')">Status <span class="sort-icon">{{ sortIcon('findings', 'mgmt_status') }}</span></th>
+                  <th scope="col" v-if="colVisibleF('status')" class="th-sortable" tabindex="0" @click="sortFindings('mgmt_status')" @keydown.enter.prevent="sortFindings('mgmt_status')" @keydown.space.prevent="sortFindings('mgmt_status')" :aria-sort="ariaSort('findings', 'mgmt_status')">Status <span class="sort-icon">{{ sortIcon('findings', 'mgmt_status') }}</span></th>
                   <th scope="col" class="th-actions">Actions</th>
                 </tr>
               </thead>
@@ -634,7 +634,7 @@
                     No findings match the current filters.
                   </td>
                 </tr>
-                <tr v-for="finding in findings" :key="finding.id" class="row-clickable" :class="{ 'row-selected': selectedFindings.includes(finding.id) }">
+                <tr v-for="finding in findings" :key="finding.id" class="row-clickable" :class="{ 'row-selected': selectedFindings.includes(finding.id) }" tabindex="0" @keydown.enter.prevent="openFindingDetail(finding)" @keydown.space.prevent="openFindingDetail(finding)">
                   <td class="th-check" @click.stop>
                     <input type="checkbox" :value="finding.id" v-model="selectedFindings" :aria-label="`Select finding ${finding.id}`">
                   </td>
@@ -642,22 +642,22 @@
                     <span class="severity-badge" :class="'sev-' + (finding.severity || 'unknown').toLowerCase()">{{ finding.severity }}</span>
                   </td>
                   <td v-if="colVisibleF('tool')" @click="openFindingDetail(finding)" class="cell-nowrap">{{ finding.tool }}</td>
-                  <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap">{{ finding.target_name }}</td>
-                  <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title">{{ finding.title }}</td>
+                  <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap" :title="finding.target_name">{{ finding.target_name }}</td>
+                  <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title" :title="finding.title">{{ finding.title }}</td>
                   <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-nowrap">
                     <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop>{{ finding.cve }}</a>
                     <span v-else-if="finding.cve" class="text-muted">{{ finding.cve }}</span>
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td v-if="colVisibleF('file')" @click="openFindingDetail(finding)" class="cell-wrap">
-                    <code v-if="finding.file" class="file-code">{{ finding.file }}</code>
+                    <code v-if="finding.file" class="file-code" :title="finding.file">{{ finding.file }}</code>
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td v-if="colVisibleF('status')" @click="openFindingDetail(finding)">
                     <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ finding.mgmt_status || 'new' }}</span>
                   </td>
                   <td @click.stop>
-                    <button class="btn-icon-sm" @click="openFindingDetail(finding)" title="Details">
+                    <button class="btn-icon-sm" type="button" @click="openFindingDetail(finding)" title="Details" :aria-label="`View details for finding ${finding.id}`">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
                   </td>
@@ -707,7 +707,7 @@
             <h2 class="analytics-board-title">Exposure analytics and compliance intelligence</h2>
           </div>
           <div class="card-actions">
-            <button class="btn-secondary btn-sm" @click="refreshAnalyticsNow" :disabled="analyticsRefreshing">Refresh</button>
+            <button class="btn-secondary btn-sm" type="button" @click="refreshAnalyticsNow" :disabled="analyticsRefreshing" :aria-busy="analyticsRefreshing ? 'true' : 'false'">Refresh</button>
             <select id="analytics-days" name="analytics_days" v-model="analyticsDays" @change="loadAnalytics('user-change')" class="filter-select filter-select-sm">
               <option :value="30">30 days</option>
               <option :value="60">60 days</option>
@@ -719,7 +719,10 @@
         <div class="chart-grid analytics-grid" v-if="chartsAvailable">
           <div class="card chart-card">
             <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>Risk score distribution</h2></div></div>
-            <div class="chart-container"><canvas ref="riskChart"></canvas></div>
+            <div class="chart-container">
+              <div v-if="!analyticsHasRiskData" class="chart-empty-state">Risk distribution will appear after findings are indexed.</div>
+              <canvas v-else ref="riskChart"></canvas>
+            </div>
             <div class="chart-stat" v-if="analyticsData.riskDistribution">
               Avg Risk: <strong>{{ analyticsData.riskDistribution.average_risk }}/100</strong>
               &bull; High Risk Findings: <strong>{{ analyticsData.riskDistribution.high_risk_count }}</strong>
@@ -728,22 +731,34 @@
           </div>
           <div class="card chart-card">
             <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>OWASP exposure map</h2></div></div>
-            <div class="chart-container chart-container-roomy"><canvas ref="owaspChart"></canvas></div>
+            <div class="chart-container chart-container-roomy">
+              <div v-if="!analyticsHasComplianceData" class="chart-empty-state">OWASP mapping appears when compliance-tagged findings are available.</div>
+              <canvas v-else ref="owaspChart"></canvas>
+            </div>
             <p class="chart-hint">Top mapped OWASP 2021 categories by finding volume, with full category names shown in the tooltip.</p>
           </div>
           <div class="card chart-card">
             <div class="card-header"><div><span class="panel-kicker">Coverage</span><h2>Tool effectiveness</h2></div></div>
-            <div class="chart-container chart-container-roomy"><canvas ref="toolEffChart"></canvas></div>
+            <div class="chart-container chart-container-roomy">
+              <div v-if="!analyticsHasToolData" class="chart-empty-state">Tool coverage appears after multiple scanners contribute findings.</div>
+              <canvas v-else ref="toolEffChart"></canvas>
+            </div>
           </div>
           <div class="card chart-card">
             <div class="card-header"><div><span class="panel-kicker">Composition</span><h2>Findings by severity</h2></div></div>
-            <div class="chart-container chart-container-roomy"><canvas ref="severityDistChart"></canvas></div>
+            <div class="chart-container chart-container-roomy">
+              <div v-if="!analyticsHasSeverityData" class="chart-empty-state">Severity composition becomes available once findings are present.</div>
+              <canvas v-else ref="severityDistChart"></canvas>
+            </div>
           </div>
           <div class="card chart-card chart-card-full">
             <div class="card-header">
               <div><span class="panel-kicker">Trend intelligence</span><h2>Trend risk score</h2></div>
             </div>
-            <div class="chart-container chart-container-tall"><canvas ref="analyticsTrendChart"></canvas></div>
+            <div class="chart-container chart-container-tall">
+              <div v-if="!analyticsHasTrendData" class="chart-empty-state">Trend analysis appears after enough historical scans accumulate.</div>
+              <canvas v-else ref="analyticsTrendChart"></canvas>
+            </div>
           </div>
         </div>
 
@@ -881,6 +896,16 @@
             </div>
           </div>
 
+          <div v-if="compareResult.new_findings.length === 0 && compareResult.resolved_findings.length === 0" class="card compare-no-diff-card">
+            <div class="card-header">
+              <div><span class="panel-kicker">Diff result</span><h2>No drift detected</h2></div>
+            </div>
+            <div class="empty-compare empty-compare-inline">
+              <p><strong>The selected baselines are materially aligned.</strong></p>
+              <p>There are no new or resolved findings between these two scans. Use the unchanged count to review persistent exposure.</p>
+            </div>
+          </div>
+
           <!-- New findings table -->
           <div class="card" v-if="compareResult.new_findings.length > 0">
             <div class="card-header">
@@ -893,8 +918,8 @@
                   <tr v-for="f in compareResult.new_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
                     <td>{{ f.tool }}</td>
-                    <td class="cell-wrap-wide">{{ f.title }}</td>
-                    <td class="cell-wrap"><code v-if="f.file" class="file-code">{{ f.file }}</code><span v-else class="text-muted">—</span></td>
+                    <td class="cell-wrap-wide" :title="f.title">{{ f.title }}</td>
+                    <td class="cell-wrap"><code v-if="f.file" class="file-code" :title="f.file">{{ f.file }}</code><span v-else class="text-muted">—</span></td>
                   </tr>
                 </tbody>
               </table>
@@ -913,8 +938,8 @@
                   <tr v-for="f in compareResult.resolved_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
                     <td>{{ f.tool }}</td>
-                    <td class="cell-wrap-wide">{{ f.title }}</td>
-                    <td class="cell-wrap"><code v-if="f.file" class="file-code">{{ f.file }}</code><span v-else class="text-muted">—</span></td>
+                    <td class="cell-wrap-wide" :title="f.title">{{ f.title }}</td>
+                    <td class="cell-wrap"><code v-if="f.file" class="file-code" :title="f.file">{{ f.file }}</code><span v-else class="text-muted">—</span></td>
                   </tr>
                 </tbody>
               </table>
@@ -942,10 +967,10 @@
             </div>
           </div>
         </div>
-        <div class="settings-tabs">
-          <button class="tab-btn" :class="{ active: settingsTab === 'apikeys' }" @click="settingsTab = 'apikeys'; loadApiKeys()">API Keys</button>
-          <button class="tab-btn" :class="{ active: settingsTab === 'webhooks' }" @click="settingsTab = 'webhooks'; loadWebhooks()">Webhooks</button>
-          <button class="tab-btn" :class="{ active: settingsTab === 'notifications' }" @click="settingsTab = 'notifications'; loadNotificationPrefs()">Notifications</button>
+        <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+          <button class="tab-btn" type="button" role="tab" :aria-selected="settingsTab === 'apikeys' ? 'true' : 'false'" :class="{ active: settingsTab === 'apikeys' }" @click="settingsTab = 'apikeys'; loadApiKeys()">API Keys</button>
+          <button class="tab-btn" type="button" role="tab" :aria-selected="settingsTab === 'webhooks' ? 'true' : 'false'" :class="{ active: settingsTab === 'webhooks' }" @click="settingsTab = 'webhooks'; loadWebhooks()">Webhooks</button>
+          <button class="tab-btn" type="button" role="tab" :aria-selected="settingsTab === 'notifications' ? 'true' : 'false'" :class="{ active: settingsTab === 'notifications' }" @click="settingsTab = 'notifications'; loadNotificationPrefs()">Notifications</button>
         </div>
 
         <!-- API Keys tab -->
@@ -1079,25 +1104,25 @@
     <!-- ================================================================
          MODAL: FINDING DETAIL
     ================================================================ -->
-    <div class="modal-overlay" v-if="selectedFinding" @click.self="closeFindingModal" role="dialog" aria-modal="true" aria-label="Finding detail">
-      <div class="modal modal-xl modal-shell-investigation" ref="findingModal">
+    <div class="modal-overlay" v-if="selectedFinding" @click.self="closeFindingModal" role="dialog" aria-modal="true" aria-labelledby="finding-modal-title">
+      <div class="modal modal-xl modal-shell-investigation" ref="findingModal" tabindex="-1">
         <div class="modal-header">
           <div class="modal-title-group">
             <span class="severity-badge" :class="'sev-' + (selectedFinding.severity || 'unknown').toLowerCase()">{{ selectedFinding.severity }}</span>
-            <h2 class="modal-title">{{ selectedFinding.title }}</h2>
+            <h2 class="modal-title" id="finding-modal-title">{{ selectedFinding.title }}</h2>
           </div>
           <div class="u-flex u-items-center u-gap-8">
             <span class="risk-score-badge" v-if="selectedFinding.risk_score">Risk: {{ selectedFinding.risk_score }}/100</span>
-            <button class="modal-close" @click="closeFindingModal">&#x2715;</button>
+            <button type="button" class="modal-close" @click="closeFindingModal" aria-label="Close finding detail">&#x2715;</button>
           </div>
         </div>
 
         <!-- Modal tabs -->
-        <div class="modal-tabs">
-          <button class="tab-btn" :class="{ active: findingModalTab === 'info' }" @click="findingModalTab = 'info'">Information</button>
-          <button class="tab-btn" :class="{ active: findingModalTab === 'remediation' }" @click="findingModalTab = 'remediation'">Remediation</button>
-          <button class="tab-btn" :class="{ active: findingModalTab === 'manage' }" @click="findingModalTab = 'manage'">Management</button>
-          <button class="tab-btn" :class="{ active: findingModalTab === 'comments' }" @click="findingModalTab = 'comments'">Comments <span class="count-badge" v-if="findingComments.length > 0">{{ findingComments.length }}</span></button>
+        <div class="modal-tabs" role="tablist" aria-label="Finding detail tabs">
+          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'info' ? 'true' : 'false'" :class="{ active: findingModalTab === 'info' }" @click="findingModalTab = 'info'">Information</button>
+          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'remediation' ? 'true' : 'false'" :class="{ active: findingModalTab === 'remediation' }" @click="findingModalTab = 'remediation'">Remediation</button>
+          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'manage' ? 'true' : 'false'" :class="{ active: findingModalTab === 'manage' }" @click="findingModalTab = 'manage'">Management</button>
+          <button class="tab-btn" type="button" role="tab" :aria-selected="findingModalTab === 'comments' ? 'true' : 'false'" :class="{ active: findingModalTab === 'comments' }" @click="findingModalTab = 'comments'">Comments <span class="count-badge" v-if="findingComments.length > 0">{{ findingComments.length }}</span></button>
         </div>
 
         <div class="modal-body">
@@ -1254,12 +1279,12 @@
     <!-- ================================================================
          MODAL: SCAN DETAIL
     ================================================================ -->
-    <div class="modal-overlay" v-if="selectedScan" @click.self="closeScanDetail" role="dialog" aria-modal="true" aria-label="Scan detail">
-      <div class="modal modal-lg modal-shell-investigation">
+    <div class="modal-overlay" v-if="selectedScan" @click.self="closeScanDetail" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
+      <div class="modal modal-lg modal-shell-investigation" ref="scanDetailModal" tabindex="-1">
         <div class="modal-header">
           <div class="modal-title-group">
             <span class="badge" :class="statusBadgeClass(selectedScan.status)">{{ statusLabel(selectedScan.status) }}</span>
-            <h2 class="modal-title" :title="selectedScan.target_name">{{ formatModalTarget(selectedScan.target_name) }}</h2>
+            <h2 class="modal-title" id="scan-modal-title" :title="selectedScan.target_name">{{ formatModalTarget(selectedScan.target_name) }}</h2>
           </div>
           <button type="button" class="modal-close" @click="closeScanDetail">&#x2715;</button>
         </div>
@@ -1337,14 +1362,14 @@
     <!-- ================================================================
          MODAL: NEW SCAN
     ================================================================ -->
-    <div class="modal-overlay" v-if="showScanModal" @click.self="closeScanModal" role="dialog" aria-modal="true" aria-label="New scan">
-      <div class="modal modal-sm modal-shell-form" ref="scanModal">
+    <div class="modal-overlay" v-if="showScanModal" @click.self="closeScanModal" role="dialog" aria-modal="true" aria-labelledby="new-scan-modal-title">
+      <div class="modal modal-sm modal-shell-form" ref="scanModal" tabindex="-1">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Scan orchestration</span>
-            <h2 class="modal-title">New Scan</h2>
+            <h2 class="modal-title" id="new-scan-modal-title">New Scan</h2>
           </div>
-          <button type="button" class="modal-close" @click="closeScanModal">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeScanModal" aria-label="Close new scan dialog">&#x2715;</button>
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="triggerScan">
           <p class="modal-subtitle">Configure and start a new security scan.</p>
@@ -1383,14 +1408,14 @@
     <!-- ================================================================
          MODAL: CREATE API KEY
     ================================================================ -->
-    <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="closeCreateKeyModal" role="dialog" aria-modal="true" aria-label="Create API key">
-      <div class="modal modal-sm modal-shell-form">
+    <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="closeCreateKeyModal" role="dialog" aria-modal="true" aria-labelledby="new-key-modal-title">
+      <div class="modal modal-sm modal-shell-form" ref="createKeyModal" tabindex="-1">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Access automation</span>
-            <h2 class="modal-title">New API Key</h2>
+            <h2 class="modal-title" id="new-key-modal-title">New API Key</h2>
           </div>
-          <button type="button" class="modal-close" @click="closeCreateKeyModal">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeCreateKeyModal" aria-label="Close API key dialog">&#x2715;</button>
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="createApiKey">
           <p class="modal-subtitle">Issue a role-scoped credential for CI, automation, or external integrations.</p>
@@ -1429,14 +1454,14 @@
     <!-- ================================================================
          MODAL: CREATE WEBHOOK
     ================================================================ -->
-    <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="closeCreateWebhookModal" role="dialog" aria-modal="true" aria-label="Create webhook">
-      <div class="modal modal-sm modal-shell-form">
+    <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="closeCreateWebhookModal" role="dialog" aria-modal="true" aria-labelledby="new-webhook-modal-title">
+      <div class="modal modal-sm modal-shell-form" ref="createWebhookModal" tabindex="-1">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Outbound automation</span>
-            <h2 class="modal-title">New Webhook</h2>
+            <h2 class="modal-title" id="new-webhook-modal-title">New Webhook</h2>
           </div>
-          <button type="button" class="modal-close" @click="closeCreateWebhookModal">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeCreateWebhookModal" aria-label="Close webhook dialog">&#x2715;</button>
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="createWebhook">
           <p class="modal-subtitle">Register an event endpoint for scan and finding notifications.</p>
@@ -1474,7 +1499,6 @@
       kpis: {{ kpis | tojson }},
       recentScans: {{ recent_scans | tojson }},
       severityBreakdown: {{ severity_breakdown | tojson }},
-      toolBreakdown: {{ tool_breakdown | tojson }},
       trend: {{ trend | tojson }},
       availableTargets: {{ available_targets | tojson }},
       availableTools: {{ available_tools | tojson }},

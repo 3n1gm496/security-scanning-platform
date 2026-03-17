@@ -1495,7 +1495,7 @@ tr:last-child td { border-bottom: none; }
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-width: 560px;
+  max-width: 680px;
   padding: var(--space-6);
 }
 
@@ -1563,8 +1563,8 @@ tr:last-child td { border-bottom: none; }
 .settings-actions {
   display: flex;
   justify-content: flex-end;
-  padding-top: var(--space-5);
-  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  margin-top: var(--space-3);
   border-top: 1px solid var(--color-border-light);
 }
 
@@ -2019,9 +2019,17 @@ code {
     flex-direction: column;
     gap: 10px;
   }
+  .sidebar.mobile-open .user-chip {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 14px;
+  }
   .sidebar.mobile-open .logout-btn {
     width: 100%;
     justify-content: center;
+    min-height: 44px;
+    border-color: rgba(110, 216, 255, 0.26);
+    background: rgba(17, 34, 49, 0.94);
   }
   .mobile-nav-backdrop {
     display: block;
@@ -4336,10 +4344,17 @@ textarea {
 
 .compare-setup-card .compare-selectors {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 136px;
   padding: 18px 20px 20px;
   gap: 12px;
   align-items: end;
+}
+
+.compare-setup-card .compare-selectors > .btn-primary {
+  min-height: 42px;
+  width: 100%;
+  justify-self: stretch;
+  align-self: end;
 }
 
 .compare-selector-group {

@@ -219,7 +219,7 @@
               </p>
               <div class="hero-side-actions">
                 <button class="btn-alert" v-if="kpis.critical_findings > 0" @click="viewCriticalFindings()">Open critical queue</button>
-                <button class="btn-primary btn-sm" v-else @click="showScanModal = true">Launch new scan</button>
+                <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">Launch new scan</button>
                 <button class="btn-secondary btn-sm" @click="navigate('analytics')">Open intelligence board</button>
               </div>
             </div>
@@ -259,7 +259,7 @@
               <h2>Severity pressure by recent scan</h2>
             </div>
             <div class="card-actions">
-              <button class="btn-primary btn-sm" @click="showScanModal = true">+ New Scan</button>
+              <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">+ New Scan</button>
               <button class="btn-secondary btn-sm" @click="navigate('scans')">Open queue</button>
             </div>
           </div>
@@ -383,7 +383,7 @@
               </select>
             </div>
             <button class="btn-secondary btn-sm" @click="resetScansFilter">Reset</button>
-            <button class="btn-primary btn-sm" @click="showScanModal = true">+ New Scan</button>
+            <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">+ New Scan</button>
           </div>
           <div class="active-filter-row" v-if="scansActiveFilters.length > 0">
             <span class="active-filter-label">Active filters</span>
@@ -952,7 +952,7 @@
         <div v-if="settingsTab === 'apikeys'" class="card settings-panel">
           <div class="card-header">
             <h2>API Keys</h2>
-            <button class="btn-primary btn-sm" @click="showCreateKeyModal = true; newKeyResult = ''">+ New Key</button>
+            <button class="btn-primary btn-sm" type="button" @click="openCreateKeyModal">+ New Key</button>
           </div>
           <p class="section-hint">Manage API keys for programmatic platform access. Each key has a role and specific permissions.</p>
           <div class="table-wrap">
@@ -980,7 +980,7 @@
         <div v-if="settingsTab === 'webhooks'" class="card settings-panel">
           <div class="card-header">
             <h2>Webhooks</h2>
-            <button class="btn-primary btn-sm" @click="showCreateWebhookModal = true">+ New Webhook</button>
+            <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">+ New Webhook</button>
           </div>
           <p class="section-hint">Receive real-time notifications for events such as scan completion or critical findings.</p>
           <div class="table-wrap">
@@ -1254,14 +1254,14 @@
     <!-- ================================================================
          MODAL: SCAN DETAIL
     ================================================================ -->
-    <div class="modal-overlay" v-if="selectedScan" @click.self="selectedScan = null" role="dialog" aria-modal="true" aria-label="Scan detail">
+    <div class="modal-overlay" v-if="selectedScan" @click.self="closeScanDetail" role="dialog" aria-modal="true" aria-label="Scan detail">
       <div class="modal modal-lg modal-shell-investigation">
         <div class="modal-header">
           <div class="modal-title-group">
             <span class="badge" :class="statusBadgeClass(selectedScan.status)">{{ statusLabel(selectedScan.status) }}</span>
             <h2 class="modal-title" :title="selectedScan.target_name">{{ formatModalTarget(selectedScan.target_name) }}</h2>
           </div>
-          <button class="modal-close" @click="selectedScan = null">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeScanDetail">&#x2715;</button>
         </div>
         <div class="modal-body">
           <div class="detail-grid">
@@ -1337,14 +1337,14 @@
     <!-- ================================================================
          MODAL: NEW SCAN
     ================================================================ -->
-    <div class="modal-overlay" v-if="showScanModal" @click.self="showScanModal = false" role="dialog" aria-modal="true" aria-label="New scan">
+    <div class="modal-overlay" v-if="showScanModal" @click.self="closeScanModal" role="dialog" aria-modal="true" aria-label="New scan">
       <div class="modal modal-sm modal-shell-form" ref="scanModal">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Scan orchestration</span>
             <h2 class="modal-title">New Scan</h2>
           </div>
-          <button class="modal-close" @click="showScanModal = false">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeScanModal">&#x2715;</button>
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="triggerScan">
           <p class="modal-subtitle">Configure and start a new security scan.</p>
@@ -1370,7 +1370,7 @@
             <span class="input-hint" v-else>Absolute path of the directory to scan</span>
           </div>
           <div class="modal-actions">
-            <button class="btn-secondary" @click="showScanModal = false">Cancel</button>
+            <button type="button" class="btn-secondary" @click="closeScanModal">Cancel</button>
             <button type="submit" class="btn-primary" :disabled="!newScanForm.name || !newScanForm.target || scanTriggering">
               <span v-if="scanTriggering"><span class="spinner-sm u-inline-block u-mr-6"></span>Starting...</span>
               <span v-else>Start scan</span>
@@ -1383,14 +1383,14 @@
     <!-- ================================================================
          MODAL: CREATE API KEY
     ================================================================ -->
-    <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="showCreateKeyModal = false" role="dialog" aria-modal="true" aria-label="Create API key">
+    <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="closeCreateKeyModal" role="dialog" aria-modal="true" aria-label="Create API key">
       <div class="modal modal-sm modal-shell-form">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Access automation</span>
             <h2 class="modal-title">New API Key</h2>
           </div>
-          <button class="modal-close" @click="showCreateKeyModal = false">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeCreateKeyModal">&#x2715;</button>
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="createApiKey">
           <p class="modal-subtitle">Issue a role-scoped credential for CI, automation, or external integrations.</p>
@@ -1413,14 +1413,14 @@
           <div v-if="newKeyResult" class="new-key-result">
             <p>Key created. Copy it now — it will not be shown again:</p>
             <code class="key-display">{{ newKeyResult }}</code>
-            <button class="btn-secondary btn-sm" @click="copyToClipboard(newKeyResult)">Copy</button>
+            <button type="button" class="btn-secondary btn-sm" @click="copyToClipboard(newKeyResult)">Copy</button>
           </div>
           <div class="modal-actions" v-if="!newKeyResult">
-            <button type="button" class="btn-secondary" @click="showCreateKeyModal = false">Cancel</button>
+            <button type="button" class="btn-secondary" @click="closeCreateKeyModal">Cancel</button>
             <button type="submit" class="btn-primary" :disabled="!newKeyForm.name">Create</button>
           </div>
           <div class="modal-actions" v-else>
-            <button type="button" class="btn-primary" @click="showCreateKeyModal = false; newKeyResult = ''">Close</button>
+            <button type="button" class="btn-primary" @click="closeCreateKeyModal">Close</button>
           </div>
         </form>
       </div>
@@ -1429,14 +1429,14 @@
     <!-- ================================================================
          MODAL: CREATE WEBHOOK
     ================================================================ -->
-    <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="showCreateWebhookModal = false" role="dialog" aria-modal="true" aria-label="Create webhook">
+    <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="closeCreateWebhookModal" role="dialog" aria-modal="true" aria-label="Create webhook">
       <div class="modal modal-sm modal-shell-form">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Outbound automation</span>
             <h2 class="modal-title">New Webhook</h2>
           </div>
-          <button class="modal-close" @click="showCreateWebhookModal = false">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeCreateWebhookModal">&#x2715;</button>
         </div>
         <form class="modal-body modal-body-form" @submit.prevent="createWebhook">
           <p class="modal-subtitle">Register an event endpoint for scan and finding notifications.</p>
@@ -1457,7 +1457,7 @@
             <input id="webhook-secret" name="webhook_secret" type="password" v-model="newWebhookForm.secret" class="filter-input">
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" @click="showCreateWebhookModal = false">Cancel</button>
+            <button type="button" class="btn-secondary" @click="closeCreateWebhookModal">Cancel</button>
             <button type="submit" class="btn-primary" :disabled="!newWebhookForm.name || !newWebhookForm.url">Create</button>
           </div>
         </form>

@@ -518,11 +518,11 @@ createApp({
     this._keyHandler = (e) => {
       if (e.key === 'Escape') {
         this.showFindingModal = false;
-        this.showScanModal = false;
         this.selectedFinding = null;
-        this.selectedScan = null;
-        this.showCreateKeyModal = false;
-        this.showCreateWebhookModal = false;
+        this.closeScanDetail();
+        this.closeScanModal();
+        this.closeCreateKeyModal();
+        this.closeCreateWebhookModal();
       }
       // Focus trap: keep Tab within the active modal
       if (e.key === 'Tab') {
@@ -1614,8 +1614,45 @@ createApp({
       this.focusModal();
     },
 
-    viewScanFindings(scan) {
+    openScanModalDialog() {
+      this.showScanModal = true;
+      this.focusModal();
+    },
+
+    closeScanModal() {
+      this.showScanModal = false;
+      this.scanTriggering = false;
+      this.newScanForm = { name: '', target: '', target_type: 'local' };
+    },
+
+    openCreateKeyModal() {
+      this.showCreateKeyModal = true;
+      this.newKeyResult = '';
+      this.focusModal();
+    },
+
+    closeCreateKeyModal() {
+      this.showCreateKeyModal = false;
+      this.newKeyResult = '';
+      this.newKeyForm = { name: '', role: 'operator', expires_days: '' };
+    },
+
+    openCreateWebhookModal() {
+      this.showCreateWebhookModal = true;
+      this.focusModal();
+    },
+
+    closeCreateWebhookModal() {
+      this.showCreateWebhookModal = false;
+      this.newWebhookForm = { name: '', url: '', events: 'scan.completed', secret: '' };
+    },
+
+    closeScanDetail() {
       this.selectedScan = null;
+    },
+
+    viewScanFindings(scan) {
+      this.closeScanDetail();
       // Reset all filters and set scan_id + auto-select the scan's target
       this.findingsFilter = {
         search: '', severity: '', tool: '',
@@ -2482,8 +2519,7 @@ createApp({
           body: formData.toString(),
         });
         // Close modal and reset form on success
-        this.showScanModal = false;
-        this.newScanForm = { name: '', target: '', target_type: 'local' };
+        this.closeScanModal();
         this.showToast('Scan started successfully');
         await this.loadScans(true);
         this.startScanPolling(resp.scan_id);
@@ -2581,8 +2617,7 @@ createApp({
         fd.append('events', this.newWebhookForm.events);
         if (this.newWebhookForm.secret) fd.append('secret', this.newWebhookForm.secret);
         await apiSend('/api/webhooks', { method: 'POST', body: fd });
-        this.showCreateWebhookModal = false;
-        this.newWebhookForm = { name: '', url: '', events: 'scan.completed', secret: '' };
+        this.closeCreateWebhookModal();
         await this.loadWebhooks();
         this.showToast('Webhook created');
       } catch (e) {

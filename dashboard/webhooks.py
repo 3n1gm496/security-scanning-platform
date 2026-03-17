@@ -476,6 +476,22 @@ async def notify_scan_completed(scan_id: int, scan_data: dict):
         await trigger_webhook(webhook, WebhookEvent.SCAN_COMPLETED, payload)
 
 
+async def notify_scan_failed(scan_id: int, scan_data: dict):
+    """Notify all webhooks about a failed or blocked scan."""
+    webhooks = list_webhooks(include_secret=True)
+
+    for webhook in webhooks:
+        if not webhook["is_active"]:
+            continue
+
+        events = webhook["events"].split(",")
+        if WebhookEvent.SCAN_FAILED.value not in events:
+            continue
+
+        payload = {"scan_id": scan_id, **scan_data}
+        await trigger_webhook(webhook, WebhookEvent.SCAN_FAILED, payload)
+
+
 async def notify_critical_finding(finding_data: dict):
     """Notify all webhooks about a critical/high severity finding."""
     severity = finding_data.get("severity", "").lower()

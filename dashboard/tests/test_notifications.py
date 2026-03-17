@@ -15,7 +15,12 @@ if "bcrypt" not in sys.modules:
     sys.modules["bcrypt"] = fake_bcrypt
 
 from db_adapter import get_connection
-from notifications import EmailNotificationEngine, NotificationPreferencesManager, _safe_dashboard_url
+from notifications import (
+    DEFAULT_DASHBOARD_URL,
+    EmailNotificationEngine,
+    NotificationPreferencesManager,
+    _safe_dashboard_url,
+)
 
 
 def test_notification_engine_init():
@@ -137,6 +142,64 @@ def test_scan_summary_uses_findings_count_fallback_and_spa_link():
     assert "scan-456" in captured["html"]
     assert "TOTAL: 6" in captured["text"]
     assert "/#scans?search=scan-456" in captured["html"]
+
+
+def test_notification_default_dashboard_url_uses_real_dashboard_port():
+    engine = EmailNotificationEngine()
+    captured = {}
+
+    def fake_send(_to_email, _subject, text_body, html_body):
+        captured["text"] = text_body
+        captured["html"] = html_body
+        return True
+
+    engine._send_email = fake_send  # type: ignore[method-assign]
+
+    assert engine.send_critical_finding_alert("test@example.com", {"title": "Critical finding", "scan_id": "scan-1"})
+    assert f"{DEFAULT_DASHBOARD_URL}/#findings?scan_id=scan-1" in captured["text"]
+    assert f"{DEFAULT_DASHBOARD_URL}/#settings" in captured["text"]
+
+
+def test_high_finding_alert_uses_high_severity_copy():
+    engine = EmailNotificationEngine()
+    captured = {}
+
+    def fake_send(_to_email, subject, text_body, html_body):
+        captured["subject"] = subject
+        captured["text"] = text_body
+        captured["html"] = html_body
+        return True
+
+    engine._send_email = fake_send  # type: ignore[method-assign]
+
+    assert engine.send_high_finding_alert("test@example.com", {"title": "High finding", "scan_id": "scan-2"})
+    assert captured["subject"].startswith("[HIGH]")
+    assert "HIGH SECURITY FINDING" in captured["text"]
+
+
+def test_get_subscribers_query_is_backend_portable():
+    class FakeConn:
+        def __init__(self):
+            self.query = None
+            self.params = None
+
+        def execute(self, query, params=()):
+            self.query = query
+            self.params = params
+
+            class _Result:
+                @staticmethod
+                def fetchall():
+                    return [{"user_email": "user@example.com"}]
+
+            return _Result()
+
+    conn = FakeConn()
+    subscribers = NotificationPreferencesManager.get_subscribers_for_alerts(conn, "critical_alerts")
+
+    assert subscribers == ["user@example.com"]
+    assert "critical_alerts AND preferred_channel = ?" in conn.query
+    assert conn.params == ("email",)
 
 
 def test_send_email_skips_starttls_when_server_does_not_support_it(monkeypatch):

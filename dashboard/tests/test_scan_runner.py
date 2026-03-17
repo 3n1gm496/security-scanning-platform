@@ -106,6 +106,7 @@ def test_run_scan_returns_blocked_on_policy_exit(monkeypatch, tmp_path):
 def test_run_scan_records_scan_and_cache_metrics(monkeypatch, tmp_path):
     monkeypatch.setattr(_scan_runner, "insert_running_scan", lambda *args, **kwargs: None)
     monkeypatch.setattr(_scan_runner, "publish_sync", lambda *args, **kwargs: None)
+    monkeypatch.setattr(_scan_runner, "_dispatch_scan_notifications", lambda *args, **kwargs: None)
 
     scan_metrics = []
     cache_metrics = []
@@ -136,3 +137,53 @@ def test_run_scan_records_scan_and_cache_metrics(monkeypatch, tmp_path):
     assert scan_metrics[0][0] == "COMPLETED_WITH_FINDINGS"
     assert scan_metrics[0][1] == "PASS"
     assert scan_metrics[0][2] is not None
+
+
+def test_run_scan_dispatches_notifications_for_completed_scan(monkeypatch, tmp_path):
+    monkeypatch.setattr(_scan_runner, "insert_running_scan", lambda *args, **kwargs: None)
+    monkeypatch.setattr(_scan_runner, "publish_sync", lambda *args, **kwargs: None)
+    dispatched = []
+    monkeypatch.setattr(_scan_runner, "_dispatch_scan_notifications", lambda payload: dispatched.append(payload))
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = (
+            '{"results":[{"scan_id":"scan-900","status":"COMPLETED_WITH_FINDINGS","policy_status":"PASS",'
+            '"findings":[{"severity":"CRITICAL","title":"Critical finding"}]}]}'
+        )
+
+    monkeypatch.setattr(_scan_runner.subprocess, "run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    result = _scan_runner.run_scan("git", "https://example.com/repo.git", "repo", str(tmp_path), scan_id="scan-900")
+
+    assert result["status"] == "completed"
+    assert len(dispatched) == 1
+    assert dispatched[0]["scan_id"] == "scan-900"
+
+
+def test_run_scan_dispatches_failed_notifications(monkeypatch, tmp_path):
+    monkeypatch.setattr(_scan_runner, "insert_running_scan", lambda *args, **kwargs: None)
+    monkeypatch.setattr(_scan_runner, "publish_sync", lambda *args, **kwargs: None)
+    monkeypatch.setattr(_scan_runner, "update_scan_failed", lambda *args, **kwargs: None)
+    dispatched = []
+    monkeypatch.setattr(
+        _scan_runner,
+        "_dispatch_failed_scan_notifications",
+        lambda scan_id, payload: dispatched.append((scan_id, payload)),
+    )
+
+    class FakeCompletedProcess:
+        returncode = 4
+        stdout = (
+            '{"results":[{"scan_id":"scan-901","status":"FAILED","error_message":"Tool execution failed"}],'
+            '"generated_at":"2026-03-17T00:00:00+00:00"}'
+        )
+
+    monkeypatch.setattr(_scan_runner.subprocess, "run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    result = _scan_runner.run_scan("git", "https://example.com/repo.git", "repo", str(tmp_path), scan_id="scan-901")
+
+    assert result["status"] == "error"
+    assert dispatched == [
+        ("scan-901", {"scan_id": "scan-901", "status": "FAILED", "error_message": "Tool execution failed"})
+    ]

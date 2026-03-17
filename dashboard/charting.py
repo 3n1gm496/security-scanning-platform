@@ -101,9 +101,9 @@ class ChartingEngine:
         Returns data for bar chart.
         """
         query = """
-            SELECT tool, COUNT(*) as finding_count
+            SELECT COALESCE(NULLIF(tool, ''), 'unknown') as tool, COUNT(*) as finding_count
             FROM findings
-            GROUP BY tool
+            GROUP BY COALESCE(NULLIF(tool, ''), 'unknown')
             ORDER BY finding_count DESC
             LIMIT 10
         """
@@ -146,7 +146,7 @@ class ChartingEngine:
         """
         query = """
             SELECT
-                s.target_name,
+                COALESCE(NULLIF(s.target_name, ''), 'Unknown target') as target_name,
                 COUNT(CASE WHEN f.severity = 'CRITICAL' THEN 1 END) as critical_count,
                 COUNT(CASE WHEN f.severity = 'HIGH' THEN 1 END) as high_count,
                 COUNT(CASE WHEN f.severity = 'MEDIUM' THEN 1 END) as medium_count,
@@ -169,7 +169,7 @@ class ChartingEngine:
                 ) as risk_score
             FROM scans s
             LEFT JOIN findings f ON s.id = f.scan_id
-            GROUP BY s.target_name
+            GROUP BY COALESCE(NULLIF(s.target_name, ''), 'Unknown target')
             ORDER BY risk_score DESC
             LIMIT 20
         """

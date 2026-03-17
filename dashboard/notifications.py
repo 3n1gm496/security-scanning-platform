@@ -23,13 +23,14 @@ from db_adapter import adapt_schema, is_postgres
 from logging_config import get_logger
 
 logger = get_logger(__name__)
+DEFAULT_DASHBOARD_URL = "http://localhost:8080"
 
 
 def _safe_dashboard_url(dashboard_url: str) -> str:
     """Normalize dashboard URLs used in emails to http/https only."""
     parsed = urlsplit(dashboard_url or "")
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return "http://localhost:8080"
+        return DEFAULT_DASHBOARD_URL
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
 
 
@@ -62,11 +63,17 @@ class EmailNotificationEngine:
         self.from_email = os.getenv("EMAIL_FROM", "security@example.com")
         self.from_name = os.getenv("EMAIL_FROM_NAME", "Security Scanner")
 
-    def send_critical_finding_alert(
-        self, to_email: str, finding: dict[str, Any], dashboard_url: str = "http://localhost:8000"
+    def _send_finding_alert(
+        self,
+        to_email: str,
+        finding: dict[str, Any],
+        severity_label: str,
+        dashboard_url: str = DEFAULT_DASHBOARD_URL,
     ) -> bool:
-        """Send alert for critical finding."""
-        subject = f"[CRITICAL] Security Finding: {finding.get('title', 'Unknown')}"
+        """Send alert for a high-severity finding."""
+        severity_text = (severity_label or finding.get("severity") or "UNKNOWN").upper()
+        severity_color = "#d32f2f" if severity_text == "CRITICAL" else "#f57c00"
+        subject = f"[{severity_text}] Security Finding: {finding.get('title', 'Unknown')}"
         base_url = _safe_dashboard_url(dashboard_url)
         file_path = finding.get("file") or finding.get("file_path") or "N/A"
         line_number = finding.get("line") or finding.get("line_number") or "N/A"
@@ -85,10 +92,10 @@ class EmailNotificationEngine:
         html_body = f"""
         <html>
             <body style="font-family: Arial, sans-serif;">
-                <h2 style="color: #d32f2f;">Critical Security Finding</h2>
+                <h2 style="color: {severity_color};">{severity_text.title()} Security Finding</h2>
 
                 <p><strong>Title:</strong> {e.get('title', 'N/A')}</p>
-                <p><strong>Severity:</strong> <span style="color: #d32f2f; font-weight: bold;">CRITICAL</span></p>
+                <p><strong>Severity:</strong> <span style="color: {severity_color}; font-weight: bold;">{severity_text}</span></p>
                 <p><strong>Type:</strong> {e.get('category', 'Unknown')}</p>
                 <p><strong>Description:</strong> {e.get('description', 'N/A')}</p>
 
@@ -106,7 +113,7 @@ class EmailNotificationEngine:
 
                 <p>
                     <a href="{finding_url}"
-                       style="background-color: #d32f2f; color: white; padding: 10px 20px;
+                       style="background-color: {severity_color}; color: white; padding: 10px 20px;
                               text-decoration: none; border-radius: 5px;">
                         View in Dashboard
                     </a>
@@ -122,10 +129,10 @@ class EmailNotificationEngine:
         """
 
         text_body = f"""
-        CRITICAL SECURITY FINDING
+        {severity_text} SECURITY FINDING
 
         Title: {finding.get('title', 'N/A')}
-        Severity: CRITICAL
+        Severity: {severity_text}
         Type: {finding.get('category', 'Unknown')}
         Description: {finding.get('description', 'N/A')}
 
@@ -144,11 +151,23 @@ class EmailNotificationEngine:
 
         return self._send_email(to_email, subject, text_body, html_body)
 
+    def send_critical_finding_alert(
+        self, to_email: str, finding: dict[str, Any], dashboard_url: str = DEFAULT_DASHBOARD_URL
+    ) -> bool:
+        """Send alert for critical finding."""
+        return self._send_finding_alert(to_email, finding, "CRITICAL", dashboard_url)
+
+    def send_high_finding_alert(
+        self, to_email: str, finding: dict[str, Any], dashboard_url: str = DEFAULT_DASHBOARD_URL
+    ) -> bool:
+        """Send alert for high-severity finding."""
+        return self._send_finding_alert(to_email, finding, "HIGH", dashboard_url)
+
     def send_scan_summary(
         self,
         to_email: str,
         scan_results: dict[str, Any],
-        dashboard_url: str = "http://localhost:8000",
+        dashboard_url: str = DEFAULT_DASHBOARD_URL,
     ) -> bool:
         """Send scan summary digest email."""
         subject = f"Security Scan Summary - {scan_results.get('target_name', 'Unknown')}"
@@ -237,7 +256,7 @@ class EmailNotificationEngine:
         self,
         to_email: str,
         digest_data: dict[str, Any],
-        dashboard_url: str = "http://localhost:8000",
+        dashboard_url: str = DEFAULT_DASHBOARD_URL,
     ) -> bool:
         """Send weekly digest email."""
         subject = "Weekly Security Report"
@@ -443,27 +462,8 @@ class NotificationPreferencesManager:
             if not alert_column:
                 return []
 
-            if alert_column == "critical_alerts":
-                query = (
-                    "SELECT user_email FROM notification_preferences "
-                    "WHERE critical_alerts = 1 AND preferred_channel = 'email'"
-                )
-            elif alert_column == "high_alerts":
-                query = (
-                    "SELECT user_email FROM notification_preferences "
-                    "WHERE high_alerts = 1 AND preferred_channel = 'email'"
-                )
-            elif alert_column == "scan_summaries":
-                query = (
-                    "SELECT user_email FROM notification_preferences "
-                    "WHERE scan_summaries = 1 AND preferred_channel = 'email'"
-                )
-            else:
-                query = (
-                    "SELECT user_email FROM notification_preferences "
-                    "WHERE weekly_digest = 1 AND preferred_channel = 'email'"
-                )
-            rows = conn.execute(query).fetchall()
+            query = "SELECT user_email FROM notification_preferences " f"WHERE {alert_column} AND preferred_channel = ?"
+            rows = conn.execute(query, ("email",)).fetchall()
             return [row["user_email"] for row in rows]
         except Exception:
             return []

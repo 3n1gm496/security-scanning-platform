@@ -439,14 +439,14 @@ def get_target_risk_ranking(db_path: str) -> list[dict[str, Any]]:
     risk_sql = _risk_score_sql()
     query_template = """
         SELECT
-            target_name AS target,
+            COALESCE(NULLIF(target_name, ''), 'Unknown target') AS target,
             COUNT(*) AS findings_count,
             ROUND(COALESCE(SUM(__RISK_SQL__), 0.0), 2) AS total_risk,
             ROUND(COALESCE(AVG(__RISK_SQL__), 0.0), 2) AS average_risk,
             ROUND(COALESCE(MAX(__RISK_SQL__), 0.0), 2) AS max_risk
         FROM findings
-        GROUP BY target_name
-        ORDER BY total_risk DESC, target_name ASC
+        GROUP BY COALESCE(NULLIF(target_name, ''), 'Unknown target')
+        ORDER BY total_risk DESC, target ASC
         """
     query = query_template.replace("__RISK_SQL__", risk_sql)
     with get_connection(db_path) as conn:
@@ -459,7 +459,7 @@ def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
     risk_sql = _risk_score_sql()
     query_template = """
         SELECT
-            tool,
+            COALESCE(NULLIF(tool, ''), 'unknown') AS tool,
             COUNT(*) AS total_findings,
             COALESCE(SUM(CASE WHEN __RISK_SQL__ >= 50 THEN 1 ELSE 0 END), 0) AS high_risk_findings,
             ROUND(COALESCE(AVG(__RISK_SQL__), 0.0), 2) AS average_risk,
@@ -469,7 +469,7 @@ def get_tool_effectiveness(db_path: str) -> list[dict[str, Any]]:
             COALESCE(SUM(CASE WHEN UPPER(severity) = 'LOW' THEN 1 ELSE 0 END), 0) AS low_count,
             COALESCE(SUM(CASE WHEN UPPER(severity) = 'INFO' THEN 1 ELSE 0 END), 0) AS info_count
         FROM findings
-        GROUP BY tool
+        GROUP BY COALESCE(NULLIF(tool, ''), 'unknown')
         ORDER BY high_risk_findings DESC, tool ASC
         """
     query = query_template.replace("__RISK_SQL__", risk_sql)

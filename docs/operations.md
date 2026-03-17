@@ -132,11 +132,14 @@ Retention policy behavior depends on configuration and current data layout, so v
 Email notifications:
 - require SMTP configuration
 - are managed through Settings -> Notifications
+- scan summaries are emitted automatically for subscribers with `scan_summaries`
+- critical and high findings emit per-finding alerts for subscribers with the matching preference enabled
 
 Webhooks:
 - are managed through Settings -> Webhooks
 - support event-driven delivery with retries and HMAC signatures
 - are subject to SSRF validation and delivery controls
+- `scan.completed`, `scan.failed`, `finding.high`, and `finding.critical` are dispatched automatically from the scan runtime flow
 
 ---
 

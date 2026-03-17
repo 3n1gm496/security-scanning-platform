@@ -468,6 +468,69 @@ def test_get_tool_effectiveness(analytics_db):
         assert result[0]["high_risk_findings"] >= result[1]["high_risk_findings"]
 
 
+def test_analytics_normalize_blank_target_and_tool_labels(tmp_path):
+    db_path = str(tmp_path / "analytics_sparse.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE findings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_name TEXT,
+            tool TEXT,
+            category TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            file TEXT,
+            line INTEGER,
+            package TEXT,
+            version TEXT,
+            cve TEXT,
+            remediation TEXT,
+            raw_reference TEXT,
+            fingerprint TEXT
+        )
+    """)
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """
+        INSERT INTO findings (
+            scan_id, timestamp, target_type, target_name, tool, category, severity, title,
+            description, file, line, package, version, cve, remediation, raw_reference, fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "scan-x",
+            now,
+            "repo",
+            "",
+            "",
+            "Logging",
+            "LOW",
+            "Sparse finding",
+            "desc",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "fp-sparse",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    target_rows = get_target_risk_ranking(db_path)
+    tool_rows = get_tool_effectiveness(db_path)
+
+    assert target_rows[0]["target"] == "Unknown target"
+    assert tool_rows[0]["tool"] == "unknown"
+
+
 def test_risk_score_capping():
     """Test that risk scores are capped at 100."""
     finding = {

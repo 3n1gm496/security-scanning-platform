@@ -323,14 +323,19 @@ def severity_breakdown(db_path: str) -> dict[str, int]:
 
 def tool_breakdown(db_path: str) -> dict[str, int]:
     with _conn(db_path, read_only=True) as conn:
-        rows = conn.execute("SELECT tool, COUNT(*) AS total FROM findings GROUP BY tool ORDER BY total DESC").fetchall()
+        rows = conn.execute(
+            "SELECT COALESCE(NULLIF(tool, ''), 'unknown') AS tool, COUNT(*) AS total "
+            "FROM findings GROUP BY COALESCE(NULLIF(tool, ''), 'unknown') ORDER BY total DESC"
+        ).fetchall()
     return {row["tool"]: row["total"] for row in rows}
 
 
 def target_breakdown(db_path: str) -> dict[str, int]:
     with _conn(db_path, read_only=True) as conn:
         rows = conn.execute(
-            "SELECT target_name, COUNT(*) AS total FROM findings" " GROUP BY target_name ORDER BY total DESC LIMIT 20"
+            "SELECT COALESCE(NULLIF(target_name, ''), 'Unknown target') AS target_name, COUNT(*) AS total "
+            "FROM findings GROUP BY COALESCE(NULLIF(target_name, ''), 'Unknown target') "
+            "ORDER BY total DESC LIMIT 20"
         ).fetchall()
     return {row["target_name"]: row["total"] for row in rows}
 
@@ -355,13 +360,18 @@ def scans_trend(db_path: str, days: int = 30) -> list[dict[str, Any]]:
 
 def distinct_targets(db_path: str) -> list[str]:
     with _conn(db_path, read_only=True) as conn:
-        rows = conn.execute("SELECT DISTINCT target_name FROM scans ORDER BY target_name ASC").fetchall()
+        rows = conn.execute(
+            "SELECT DISTINCT COALESCE(NULLIF(target_name, ''), 'Unknown target') AS target_name "
+            "FROM scans ORDER BY target_name ASC"
+        ).fetchall()
     return [row["target_name"] for row in rows]
 
 
 def distinct_tools(db_path: str) -> list[str]:
     with _conn(db_path, read_only=True) as conn:
-        rows = conn.execute("SELECT DISTINCT tool FROM findings ORDER BY tool ASC").fetchall()
+        rows = conn.execute(
+            "SELECT DISTINCT COALESCE(NULLIF(tool, ''), 'unknown') AS tool FROM findings ORDER BY tool ASC"
+        ).fetchall()
     return [row["tool"] for row in rows]
 
 

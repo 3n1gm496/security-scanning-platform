@@ -31,6 +31,7 @@ from webhooks import (
     delete_webhook,
     init_webhook_tables,
     list_webhooks,
+    notify_scan_failed,
     rotate_webhook_secret,
     toggle_webhook,
     trigger_webhook,
@@ -435,3 +436,21 @@ class TestWebhookCircuitBreaker:
 
         webhook = list_webhooks()[0]
         assert webhook["last_triggered_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_notify_scan_failed_only_targets_matching_events(monkeypatch, db_setup):
+    create_webhook(name="Failure Hook", url="https://example.com/fail", events=[WebhookEvent.SCAN_FAILED])
+    create_webhook(name="Completion Hook", url="https://example.com/done", events=[WebhookEvent.SCAN_COMPLETED])
+
+    calls = []
+
+    async def fake_trigger(webhook, event_type, payload):
+        calls.append((event_type, payload["scan_id"], webhook["name"]))
+        return True, None
+
+    monkeypatch.setattr("webhooks.trigger_webhook", fake_trigger)
+
+    await notify_scan_failed("scan-failed", {"status": "FAILED", "error_message": "boom"})
+
+    assert calls == [(WebhookEvent.SCAN_FAILED, "scan-failed", "Failure Hook")]

@@ -6,6 +6,7 @@ Extracted from app.py to allow independent unit testing and cleaner imports.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess  # nosec B404
@@ -103,6 +104,82 @@ def update_scan_failed(scan_id: str, error_message: str) -> None:
         LOGGER.warning("update_scan_failed failed for %s", scan_id, exc_info=True)
 
 
+def _fire_and_forget(coro) -> None:
+    """Run an async notification coroutine safely from sync code."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(coro)
+        return
+    loop.create_task(coro)
+
+
+def _dispatch_scan_notifications(primary_result: dict) -> None:
+    """Emit webhook and email notifications for a completed scan."""
+    from notifications import EmailNotificationEngine, NotificationPreferencesManager
+    from webhooks import notify_critical_finding, notify_scan_completed
+
+    scan_id = primary_result.get("scan_id")
+    findings = primary_result.get("findings") or []
+    engine = EmailNotificationEngine()
+
+    try:
+        with get_connection(_db_path()) as conn:
+            critical_subscribers = set(
+                NotificationPreferencesManager.get_subscribers_for_alerts(conn, "critical_alerts")
+            )
+            high_subscribers = set(NotificationPreferencesManager.get_subscribers_for_alerts(conn, "high_alerts"))
+            summary_subscribers = set(NotificationPreferencesManager.get_subscribers_for_alerts(conn, "scan_summaries"))
+    except Exception:
+        LOGGER.warning("scan.notifications_subscribers_failed", scan_id=scan_id, exc_info=True)
+        critical_subscribers, high_subscribers, summary_subscribers = set(), set(), set()
+
+    for to_email in summary_subscribers:
+        try:
+            engine.send_scan_summary(to_email=to_email, scan_results=primary_result)
+        except Exception:
+            LOGGER.warning("scan.summary_notification_failed", scan_id=scan_id, to_email=to_email, exc_info=True)
+
+    async def _notify_webhooks() -> None:
+        await notify_scan_completed(scan_id, primary_result)
+        for finding in findings:
+            severity = str(finding.get("severity") or "").upper()
+            if severity in {"CRITICAL", "HIGH"}:
+                await notify_critical_finding(finding)
+
+    _fire_and_forget(_notify_webhooks())
+
+    for finding in findings:
+        severity = str(finding.get("severity") or "").upper()
+        if severity == "CRITICAL":
+            for to_email in critical_subscribers:
+                try:
+                    engine.send_critical_finding_alert(to_email=to_email, finding=finding)
+                except Exception:
+                    LOGGER.warning(
+                        "scan.critical_notification_failed",
+                        scan_id=scan_id,
+                        to_email=to_email,
+                        exc_info=True,
+                    )
+        elif severity == "HIGH":
+            for to_email in high_subscribers:
+                try:
+                    engine.send_high_finding_alert(to_email=to_email, finding=finding)
+                except Exception:
+                    LOGGER.warning("scan.high_notification_failed", scan_id=scan_id, to_email=to_email, exc_info=True)
+
+
+def _dispatch_failed_scan_notifications(scan_id: str, payload: dict) -> None:
+    """Emit webhook notifications for failed or blocked scans."""
+    from webhooks import notify_scan_failed
+
+    async def _notify_webhooks() -> None:
+        await notify_scan_failed(scan_id, payload)
+
+    _fire_and_forget(_notify_webhooks())
+
+
 def run_scan(
     target_type: str,
     target: str,
@@ -193,6 +270,7 @@ def run_scan(
                 publish_sync(
                     "scan_completed", {"scan_id": scan_id, "target_name": name, "returncode": result.returncode}
                 )
+                _dispatch_scan_notifications(primary_result)
                 return {
                     "status": "completed",
                     "scan_id": scan_id,
@@ -209,6 +287,7 @@ def run_scan(
                 )
                 LOGGER.warning("scan.blocked", scan_id=scan_id, returncode=result.returncode, message=msg)
                 publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
+                _dispatch_failed_scan_notifications(scan_id, primary_result | {"error_message": msg})
                 return {
                     "status": "blocked",
                     "scan_id": scan_id,
@@ -226,6 +305,7 @@ def run_scan(
             LOGGER.error("scan.failed", scan_id=scan_id, returncode=result.returncode, message=msg)
             update_scan_failed(scan_id, msg)
             publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
+            _dispatch_failed_scan_notifications(scan_id, primary_result | {"error_message": msg})
             return {
                 "status": "error",
                 "scan_id": scan_id,
@@ -239,6 +319,9 @@ def run_scan(
             LOGGER.error("scan.output_parse_error", scan_id=scan_id, returncode=result.returncode)
             update_scan_failed(scan_id, msg)
             publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
+            _dispatch_failed_scan_notifications(
+                scan_id, {"scan_id": scan_id, "target_name": name, "error_message": msg}
+            )
             return {"status": "error", "scan_id": scan_id, "message": msg, "returncode": result.returncode}
 
     except subprocess.TimeoutExpired:
@@ -247,10 +330,12 @@ def run_scan(
         LOGGER.error("scan.timeout", scan_id=scan_id, name=name)
         update_scan_failed(scan_id, msg)
         publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": msg})
+        _dispatch_failed_scan_notifications(scan_id, {"scan_id": scan_id, "target_name": name, "error_message": msg})
         return {"status": "error", "scan_id": scan_id, "message": msg}
     except Exception as e:
         record_scan_metric("FAILED", "UNKNOWN", monotonic() - started_monotonic)
         LOGGER.exception("scan.unexpected_error", scan_id=scan_id, error=str(e))
         update_scan_failed(scan_id, str(e))
         publish_sync("scan_failed", {"scan_id": scan_id, "target_name": name, "error": str(e)})
+        _dispatch_failed_scan_notifications(scan_id, {"scan_id": scan_id, "target_name": name, "error_message": str(e)})
         return {"status": "error", "scan_id": scan_id, "message": str(e)}

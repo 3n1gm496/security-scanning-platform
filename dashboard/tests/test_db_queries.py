@@ -165,3 +165,58 @@ def test_deduplicated_findings_reapplies_outer_filters(query_db):
     assert rows
     assert all(row["target_name"] == "repo-a" for row in rows)
     assert all(not (row["fingerprint"] == "fp-shared" and row["target_name"] == "repo-b") for row in rows)
+
+
+def test_breakdowns_and_distinct_lists_normalize_blank_labels(query_db):
+    with _db.get_connection(query_db) as conn:
+        conn.execute(
+            """
+            INSERT INTO scans (
+                id, created_at, finished_at, target_type, target_name, target_value,
+                status, policy_status, findings_count, critical_count, high_count,
+                medium_count, low_count, info_count, unknown_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "scan-blank",
+                "2026-03-03T10:00:00+00:00",
+                "2026-03-03T10:01:00+00:00",
+                "git",
+                "",
+                "https://example.com/blank.git",
+                "COMPLETED_WITH_FINDINGS",
+                "PASS",
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO findings (
+                scan_id, timestamp, target_type, target_name, tool, category, severity,
+                title, description, fingerprint
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "scan-blank",
+                "2026-03-03T10:00:00+00:00",
+                "git",
+                "",
+                "",
+                "misc",
+                "MEDIUM",
+                "Blank labels",
+                "d",
+                "fp-blank",
+            ),
+        )
+
+    assert _db.tool_breakdown(query_db)["unknown"] == 1
+    assert _db.target_breakdown(query_db)["Unknown target"] == 1
+    assert "unknown" in _db.distinct_tools(query_db)
+    assert "Unknown target" in _db.distinct_targets(query_db)

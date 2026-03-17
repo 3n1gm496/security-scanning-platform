@@ -63,6 +63,7 @@ Recommended production posture:
 - terminate TLS in Nginx, Caddy, or another reverse proxy
 - forward to the dashboard on `127.0.0.1:8080`
 - set `DASHBOARD_HTTPS_ONLY=1`
+- override `DASHBOARD_CSP_ALLOW_UNSAFE_EVAL=0` unless your runtime actually needs the compatibility default from Compose
 
 Reverse proxy should pass:
 - `Host`

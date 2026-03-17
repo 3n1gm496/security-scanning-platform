@@ -52,8 +52,9 @@ Current protections include:
 - rate limiting for login and API traffic
 
 Important nuance:
-- `DASHBOARD_CSP_ALLOW_UNSAFE_EVAL` is not enabled by default in Compose
-- enable it explicitly only if your execution mode requires it
+- the application itself defaults `DASHBOARD_CSP_ALLOW_UNSAFE_EVAL` to off
+- the shipped `docker-compose.yml` currently turns it on by default unless you override it in `.env`
+- treat that Compose default as a compatibility choice, not as the hardened target posture
 
 ---
 

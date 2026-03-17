@@ -34,7 +34,6 @@ Routes:
 - `GET /api/scans/compare`
 - `GET /api/scans/events`
 - `GET /api/scans/{scan_id}`
-- `GET /api/scans/{scan_id}/findings`
 - `POST /api/scan/trigger`
 
 Main use cases:
@@ -61,8 +60,8 @@ Routes:
 - `POST /api/findings/{finding_id}/assign`
 - `POST /api/findings/{finding_id}/false-positive`
 - `POST /api/findings/{finding_id}/accept-risk`
-- `POST /api/findings/{finding_id}/comments`
-- `POST /api/findings/bulk/status`
+- `POST /api/findings/{finding_id}/comment`
+- `POST /api/findings/bulk/update-status`
 - `GET /api/badge/{target_name}.svg`
 
 Main use cases:
@@ -178,7 +177,11 @@ Routes:
 - `GET /scans`
 - `GET /findings`
 
-These serve the SPA entrypoint or page aliases used by the operator UI.
+These serve the SPA entrypoint or server-side page aliases used by the operator UI.
+
+Notes:
+- `analytics`, `compare`, and `settings` are hash-routed SPA states, not separate server routes
+- the operator UI primarily navigates with `#dashboard`, `#scans`, `#findings`, `#analytics`, `#compare`, and `#settings`
 
 ---
 

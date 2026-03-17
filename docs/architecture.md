@@ -22,6 +22,7 @@ The operator-facing experience is the dashboard SPA:
 - dark-first SOC interface
 - charts via Chart.js
 - soft-live refresh model for active scan visibility
+- hash-routed navigation for `dashboard`, `scans`, `findings`, `analytics`, `compare`, and `settings`
 
 ---
 

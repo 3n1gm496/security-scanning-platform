@@ -317,13 +317,16 @@ curl -X POST http://localhost:8080/api/scan/trigger \
   -d "async_mode=true"
 
 # Paginated findings
-curl "http://localhost:8080/api/findings/paginated?per_page=20&severity=CRITICAL&status=new"
+curl "http://localhost:8080/api/findings/paginated?per_page=20&severity=CRITICAL&status=new" \
+  -H "Authorization: Bearer $API_KEY"
 
 # Compare two scans
-curl "http://localhost:8080/api/scans/compare?scan_id_1=<scan_a>&scan_id_2=<scan_b>"
+curl "http://localhost:8080/api/scans/compare?scan_id_1=<scan_a>&scan_id_2=<scan_b>" \
+  -H "Authorization: Bearer $API_KEY"
 
 # SSE stream
-curl "http://localhost:8080/api/scans/events"
+curl "http://localhost:8080/api/scans/events" \
+  -H "Authorization: Bearer $API_KEY"
 ```
 
 Full reference:
@@ -415,7 +418,7 @@ node scripts/browser_smoke.mjs
 The browser smoke:
 - seeds a runtime DB
 - boots the dashboard
-- exercises login, navigation, compare, settings, modals, theme toggle, and mobile nav
+- exercises login, navigation, compare, settings, modals, theme toggle, keyboard interaction, and mobile nav
 - writes screenshots to `artifacts/browser-smoke/`
 
 Engineering checklist:

@@ -936,7 +936,7 @@
           </div>
         </div>
         <div class="card compare-setup-card">
-          <div class="card-header"><div><span class="panel-kicker">Comparison setup</span><h2>Select scans to compare</h2><p class="card-subtitle">A establishes the baseline. B is the run whose drift you want to evaluate against it.</p></div></div>
+          <div class="card-header"><div><span class="panel-kicker">Comparison setup</span><h2>Select scans to compare</h2><p class="card-subtitle">Anchor one baseline, then evaluate drift against the next run on the same target.</p></div></div>
           <div class="compare-selectors">
             <div class="compare-selector-group">
               <label class="filter-label" for="compare-scan-a">Scan A (baseline)</label>
@@ -963,19 +963,19 @@
             </button>
           </div>
           <div class="compare-setup-note">
-            <span>Choose two scans for the same target to measure new, resolved, and unchanged exposure between runs.</span>
+            <span>Baseline A anchors the target. Comparison B highlights what entered, cleared, or persisted across the same scope.</span>
           </div>
           <div class="compare-context-inline" v-if="compareContext.scanA && compareContext.scanB && !compareResult">
             <div class="compare-context-inline-card" v-if="compareContext.scanA">
               <span class="panel-kicker">Baseline selected</span>
               <strong :title="compareContext.scanA.target_name">{{ compareContext.scanA.target_name }}</strong>
-              <span>Run {{ formatShortScanId(compareContext.scanA.id) }} · {{ formatDate(compareContext.scanA.created_at) }}</span>
+              <span class="compare-context-meta">Run {{ formatShortScanId(compareContext.scanA.id) }} · {{ formatDate(compareContext.scanA.created_at) }}</span>
             </div>
             <div class="compare-context-divider compare-context-divider-inline">A/B</div>
             <div class="compare-context-inline-card" v-if="compareContext.scanB">
               <span class="panel-kicker">Comparison selected</span>
               <strong :title="compareContext.scanB.target_name">{{ compareContext.scanB.target_name }}</strong>
-              <span>Run {{ formatShortScanId(compareContext.scanB.id) }} · {{ formatDate(compareContext.scanB.created_at) }}</span>
+              <span class="compare-context-meta">Run {{ formatShortScanId(compareContext.scanB.id) }} · {{ formatDate(compareContext.scanB.created_at) }}</span>
             </div>
           </div>
         </div>
@@ -986,30 +986,30 @@
             <div class="compare-context-card">
               <span class="panel-kicker">Baseline</span>
               <strong :title="compareResult.scan_1.target_name">{{ compareResult.scan_1.target_name }}</strong>
-              <span>Run {{ formatShortScanId(compareResult.scan_1.id) }} · {{ formatDate(compareResult.scan_1.created_at) }}</span>
+              <span class="compare-context-meta">Run {{ formatShortScanId(compareResult.scan_1.id) }} · {{ formatDate(compareResult.scan_1.created_at) }}</span>
             </div>
             <div class="compare-context-divider">A/B</div>
             <div class="compare-context-card">
               <span class="panel-kicker">Comparison</span>
               <strong :title="compareResult.scan_2.target_name">{{ compareResult.scan_2.target_name }}</strong>
-              <span>Run {{ formatShortScanId(compareResult.scan_2.id) }} · {{ formatDate(compareResult.scan_2.created_at) }}</span>
+              <span class="compare-context-meta">Run {{ formatShortScanId(compareResult.scan_2.id) }} · {{ formatDate(compareResult.scan_2.created_at) }}</span>
             </div>
           </div>
           <div class="compare-summary-grid">
             <div class="compare-summary-card compare-new">
               <div class="compare-summary-num">{{ compareResult.summary.new }}</div>
               <div class="compare-summary-label">New Findings</div>
-              <div class="compare-summary-desc">Present in B, not in A</div>
+              <div class="compare-summary-desc">Entered the comparison run</div>
             </div>
             <div class="compare-summary-card compare-resolved">
               <div class="compare-summary-num">{{ compareResult.summary.resolved }}</div>
               <div class="compare-summary-label">Resolved</div>
-              <div class="compare-summary-desc">Present in A, not in B</div>
+              <div class="compare-summary-desc">Dropped out after the baseline</div>
             </div>
             <div class="compare-summary-card compare-unchanged">
               <div class="compare-summary-num">{{ compareResult.summary.unchanged }}</div>
               <div class="compare-summary-label">Unchanged</div>
-              <div class="compare-summary-desc">Present in both</div>
+              <div class="compare-summary-desc">Persisted across both runs</div>
             </div>
           </div>
 
@@ -1194,7 +1194,7 @@
               <h3>Automate downstream response</h3>
               <p>Create a webhook to forward scan and finding events into chatops, ticketing, or orchestration systems.</p>
             </div>
-            <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">Create first webhook</button>
+            <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">Create webhook</button>
           </div>
         </div>
 
@@ -1210,6 +1210,23 @@
             <span class="settings-context-chip">Email delivery</span>
             <span class="settings-context-chip">Severity-driven alerts</span>
             <span class="settings-context-chip">Digest cadence</span>
+          </div>
+          <div class="settings-signal-grid">
+            <div class="settings-signal-card">
+              <span class="panel-kicker">Recipient</span>
+              <strong :title="notifPrefs.user_email || 'No recipient configured'">{{ notifPrefs.user_email || 'No recipient configured' }}</strong>
+              <span>{{ notifPrefs.user_email ? 'Delivery target for operator notifications.' : 'Add an address before enabling sustained alerting.' }}</span>
+            </div>
+            <div class="settings-signal-card">
+              <span class="panel-kicker">Alert posture</span>
+              <strong>{{ notifPrefs.critical_alerts ? 'Critical live' : 'Critical muted' }}</strong>
+              <span>{{ notifPrefs.high_alerts ? 'High severity alerts are included.' : 'Only critical escalation is active.' }}</span>
+            </div>
+            <div class="settings-signal-card">
+              <span class="panel-kicker">Cadence</span>
+              <strong>{{ notifPrefs.weekly_digest ? 'Weekly digest on' : 'Digest off' }}</strong>
+              <span>{{ notifPrefs.scan_summaries ? 'Per-scan summaries are enabled.' : 'Only alert-driven mail is active.' }}</span>
+            </div>
           </div>
           <form class="settings-form" @submit.prevent="saveNotificationPrefs">
             <!-- Delivery -->

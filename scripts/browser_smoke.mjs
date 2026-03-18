@@ -382,7 +382,7 @@ async function main() {
       await page.getByRole("tab", { name: "Webhooks" }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks.png"), fullPage: true });
-      await page.getByRole("button", { name: /create webhook|new webhook/i }).click();
+      await page.locator("#settings-panel-webhooks").getByRole("button", { name: /create webhook|new webhook/i }).first().click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks-modal.png"), fullPage: true });
       await page.locator(".modal-close").first().click();

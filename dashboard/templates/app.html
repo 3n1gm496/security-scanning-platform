@@ -180,19 +180,19 @@
         <div class="soc-hero-grid">
           <section class="hero-panel hero-panel-primary">
             <div class="hero-copy">
-              <span class="panel-kicker">Hybrid SOC posture</span>
+              <span class="panel-kicker">Command posture</span>
               <h2 class="hero-title">Attack surface in focus</h2>
               <p class="hero-text">
-                Live posture across active scans, exposed targets, and remediation pressure, condensed for rapid operator triage.
+                Live scan pressure, exposed targets, and remediation load condensed for immediate operator triage.
               </p>
             </div>
             <div class="hero-live-row">
               <span class="status-beacon" :class="{ active: autoRefresh }">
                 <span class="status-beacon-dot"></span>
-                {{ autoRefresh ? 'Live telemetry streaming' : 'Manual refresh mode' }}
+                {{ autoRefresh ? 'Live telemetry' : 'Manual refresh' }}
               </span>
               <span class="hero-context-pill" :class="{ warning: hasRunningScans }">
-                {{ hasRunningScans ? 'Scan execution in progress' : 'No active scan jobs' }}
+                {{ hasRunningScans ? 'Scan queue active' : 'Queue idle' }}
               </span>
             </div>
             <div class="signal-tile-grid">
@@ -210,27 +210,30 @@
                 <span class="panel-kicker">Live threat rail</span>
                 <span class="threat-count">{{ kpis.critical_findings || 0 }} critical</span>
               </div>
+              <span class="threat-priority-chip" :class="{ critical: kpis.critical_findings > 0 }">
+                {{ kpis.critical_findings > 0 ? 'Immediate queue pressure' : 'No active escalation' }}
+              </span>
               <h3>{{ kpis.critical_findings > 0 ? 'Critical exposure requires action' : 'No critical escalation at the moment' }}</h3>
               <p>
                 {{ kpis.critical_findings > 0
-                  ? 'Prioritize the active critical queue before new work enters the remediation stream.'
-                  : 'Focus can remain on high-severity remediation, scan cadence, and closing aged findings.'
+                  ? 'Clear the active critical queue before new work enters the remediation stream.'
+                  : 'Stay focused on high-severity remediation, cadence health, and aging findings.'
                 }}
               </p>
               <div class="hero-side-actions">
-                <button class="btn-alert" v-if="kpis.critical_findings > 0" @click="viewCriticalFindings()">Open critical queue</button>
-                <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">Launch new scan</button>
-                <button class="btn-secondary btn-sm" @click="navigate('analytics')">View analytics</button>
+                <button class="btn-alert" v-if="kpis.critical_findings > 0" @click="viewCriticalFindings()">Open queue</button>
+                <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">Launch scan</button>
+                <button class="btn-secondary btn-sm" @click="navigate('analytics')">Analytics</button>
               </div>
             </div>
 
             <div class="hero-panel-compact">
               <div class="hero-compact-row">
-                <span class="hero-compact-label">Observation mode</span>
+                <span class="hero-compact-label">Observation</span>
                 <strong>{{ autoRefresh ? 'Live' : 'Manual' }}</strong>
               </div>
               <div class="hero-compact-row">
-                <span class="hero-compact-label">Running scans</span>
+                <span class="hero-compact-label">Queue state</span>
                 <strong>{{ hasRunningScans ? 'Yes' : 'No' }}</strong>
               </div>
               <div class="hero-compact-row">
@@ -256,8 +259,8 @@
             <div class="card-header">
               <div>
                 <span class="panel-kicker">Primary visualization</span>
-                <h2>Recent scan severity mix</h2>
-                <p class="card-subtitle">Critical-to-info findings across the latest indexed scans with findings.</p>
+                <h2>Severity pressure across recent scans</h2>
+                <p class="card-subtitle">Critical-to-info findings across the most recent indexed runs with findings.</p>
               </div>
               <div class="card-actions">
                 <button class="btn-secondary btn-sm" @click="navigate('scans')">Review scans</button>
@@ -273,10 +276,10 @@
               <div>
                 <span class="panel-kicker">Watchlist</span>
                 <h2>Recent hot targets</h2>
-                <p class="card-subtitle">Newest runs with findings, critical load, and execution state.</p>
+                <p class="card-subtitle">Newest targets with findings pressure, critical load, and queue state.</p>
               </div>
               <div class="card-actions">
-                <button class="btn-secondary btn-sm" @click="navigate('findings')">Open finding queue</button>
+                <button class="btn-secondary btn-sm" @click="navigate('findings')">Open queue</button>
               </div>
             </div>
             <div class="table-wrap table-wrap-watchlist table-wrap-watchlist-compact">

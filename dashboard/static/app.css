@@ -3894,45 +3894,45 @@ table.col-resizing * {
 }
 
 .hero-panel-primary {
-  padding: 16px 20px 14px;
-  min-height: 206px;
-  gap: 10px;
+  padding: 14px 18px 12px;
+  min-height: 186px;
+  gap: 8px;
 }
 
 .hero-copy {
-  max-width: 680px;
+  max-width: 620px;
 }
 
 .hero-title {
-  font-size: clamp(24px, 2.6vw, 34px);
-  max-width: 14ch;
+  font-size: clamp(22px, 2.35vw, 31px);
+  max-width: 13ch;
 }
 
 .hero-text {
-  margin-top: 4px;
-  font-size: 12px;
-  max-width: 58ch;
+  margin-top: 2px;
+  font-size: 11px;
+  max-width: 52ch;
 }
 
 .hero-live-row {
-  gap: 8px;
+  gap: 6px;
 }
 
 .status-beacon,
 .hero-context-pill {
-  padding: 8px 12px;
-  font-size: 12px;
+  padding: 7px 11px;
+  font-size: 11px;
 }
 
 .signal-tile-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
 }
 
 .signal-tile {
-  min-height: 82px;
-  padding: 10px 12px;
-  gap: 4px;
+  min-height: 76px;
+  padding: 9px 11px;
+  gap: 3px;
 }
 
 .signal-tile-analytics {
@@ -3940,7 +3940,7 @@ table.col-resizing * {
 }
 
 .signal-value {
-  font-size: clamp(24px, 2.2vw, 34px);
+  font-size: clamp(22px, 2.05vw, 30px);
 }
 
 .signal-label {
@@ -3948,8 +3948,8 @@ table.col-resizing * {
 }
 
 .signal-hint {
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.28;
 }
 
 .signal-tile-analytics .signal-value {
@@ -3980,35 +3980,71 @@ table.col-resizing * {
 }
 
 .hero-panel-side {
-  gap: 12px;
+  gap: 10px;
 }
 
 .threat-rail-card,
 .hero-panel-compact {
-  padding: 16px 18px;
+  padding: 14px 16px;
+}
+
+.threat-rail-card {
+  position: relative;
 }
 
 .threat-rail-card h3 {
-  margin-top: 6px;
-  font-size: 17px;
+  margin-top: 5px;
+  font-size: 16px;
 }
 
 .threat-rail-card p {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.threat-priority-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(133, 160, 184, 0.16);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.threat-priority-chip.critical {
+  border-color: rgba(255, 91, 91, 0.24);
+  background: rgba(255, 91, 91, 0.09);
+  color: #ffb3b3;
 }
 
 .hero-side-actions {
-  margin-top: 10px;
+  margin-top: 8px;
+  gap: 6px;
+}
+
+.hero-side-actions .btn-alert {
+  min-width: 124px;
+}
+
+.hero-side-actions .btn-sm {
+  min-height: 34px;
+  padding-inline: 12px;
 }
 
 .hero-compact-row {
-  padding-bottom: 8px;
+  padding-bottom: 7px;
 }
 
 .hero-compact-row strong,
 .workspace-metric-value {
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .chart-card.chart-card-hero .card-header,
@@ -4046,7 +4082,7 @@ table.col-resizing * {
 }
 
 .chart-container-tall {
-  min-height: 242px;
+  min-height: 262px;
 }
 
 .chart-container-roomy {
@@ -4055,7 +4091,7 @@ table.col-resizing * {
 
 .dashboard-primary-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.92fr);
+  grid-template-columns: minmax(0, 1.96fr) minmax(312px, 0.84fr);
   gap: 12px;
 }
 
@@ -4068,7 +4104,16 @@ table.col-resizing * {
 }
 
 .cell-watch-target {
-  max-width: 220px;
+  max-width: 200px;
+}
+
+.card-watchlist-compact .soc-table td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.card-watchlist-compact .soc-table th {
+  font-size: 9px;
 }
 
 .metric-pill {

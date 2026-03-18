@@ -408,7 +408,7 @@ async function main() {
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.waitForTimeout(600);
 
-      await page.getByRole("button", { name: /new scan/i }).first().click();
+      await page.getByRole("button", { name: /launch scan|new scan/i }).first().click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "13-scan-modal.png"), fullPage: true });
       await page.keyboard.press("Escape");

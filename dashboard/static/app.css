@@ -3939,6 +3939,10 @@ table.col-resizing * {
   min-height: 116px;
 }
 
+.signal-tile-hotspot {
+  position: relative;
+}
+
 .signal-value {
   font-size: clamp(22px, 2.05vw, 30px);
 }
@@ -3967,9 +3971,9 @@ table.col-resizing * {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  max-width: 14ch;
-  font-size: clamp(18px, 1.55vw, 24px);
-  line-height: 1.08;
+  max-width: 13ch;
+  font-size: clamp(17px, 1.45vw, 22px);
+  line-height: 1.12;
 }
 
 .signal-tile-analytics .signal-hint {
@@ -3977,6 +3981,10 @@ table.col-resizing * {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
+}
+
+.signal-tile-hotspot .signal-hint {
+  color: color-mix(in srgb, var(--color-text-secondary) 85%, #f8d39a 15%);
 }
 
 .hero-panel-side {
@@ -4441,6 +4449,10 @@ textarea {
   font-size: 24px;
 }
 
+.analytics-board-copy {
+  max-width: 64ch;
+}
+
 .intel-summary-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
@@ -4459,6 +4471,58 @@ textarea {
 .chart-hint {
   padding: 0 14px 14px;
   font-size: 12px;
+}
+
+.analytics-grid .chart-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.analytics-grid .chart-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent 24%),
+    radial-gradient(circle at top right, rgba(52, 211, 255, 0.08), transparent 38%);
+  pointer-events: none;
+}
+
+.analytics-grid .card-header,
+.analytics-grid .chart-stat,
+.analytics-grid .chart-hint {
+  position: relative;
+  z-index: 1;
+}
+
+.analytics-grid .chart-hint {
+  color: color-mix(in srgb, var(--color-text-muted) 88%, #9fdfff 12%);
+}
+
+.risk-ranking {
+  padding: 8px 18px 18px;
+}
+
+.risk-row {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.risk-row:last-child {
+  border-bottom: none;
+}
+
+.risk-name-wrap {
+  min-width: 0;
+}
+
+.risk-meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .compare-setup-card .compare-selectors {

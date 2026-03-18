@@ -784,7 +784,7 @@
         <div v-if="analyticsRefreshing && analyticsData.riskDistribution && analyticsRefreshingMode === 'background-refresh'" class="analytics-refreshing-bar"></div>
 
         <div class="intel-summary-grid">
-          <article v-for="tile in analyticsSummaryTiles" :key="tile.key" class="signal-tile signal-tile-analytics" :class="tile.tone" :title="tile.fullValue || tile.value">
+          <article v-for="tile in analyticsSummaryTiles" :key="tile.key" class="signal-tile signal-tile-analytics" :class="[tile.tone, { 'signal-tile-hotspot': tile.key === 'hotspot' }]" :title="tile.fullValue || tile.value">
             <span class="signal-label">{{ tile.label }}</span>
             <strong class="signal-value" :class="{ 'signal-value-wrap': tile.wrapValue }">{{ tile.value }}</strong>
             <span class="signal-hint">{{ tile.hint }}</span>
@@ -801,7 +801,7 @@
           <div>
             <span class="panel-kicker">Intelligence board</span>
             <h2 class="analytics-board-title">Exposure analytics and compliance intelligence</h2>
-            <p class="card-subtitle">Risk distribution, mapped compliance categories, and target-level pressure for the selected observation window.</p>
+            <p class="card-subtitle analytics-board-copy">Risk posture, mapped compliance pressure, and target-level concentration across the active observation window.</p>
           </div>
           <div class="card-actions">
             <button class="btn-secondary btn-sm" type="button" @click="refreshAnalyticsNow" :disabled="analyticsRefreshing" :aria-busy="analyticsRefreshing ? 'true' : 'false'">Refresh</button>
@@ -815,7 +815,7 @@
 
         <div class="chart-grid analytics-grid" v-if="chartsAvailable">
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>Risk score distribution</h2><p class="card-subtitle">Finding volume grouped by blended risk score bands.</p></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Risk intelligence</span><h2>Risk pressure bands</h2><p class="card-subtitle">Finding volume grouped into blended risk-score tiers for faster posture reading.</p></div></div>
             <div class="chart-container">
               <div v-if="!analyticsHasRiskData" class="chart-empty-state">Risk distribution will appear after findings are indexed.</div>
               <canvas v-else ref="riskChart"></canvas>
@@ -824,25 +824,25 @@
               Avg Risk: <strong>{{ analyticsData.riskDistribution.average_risk }}/100</strong>
               &bull; High Risk Findings: <strong>{{ analyticsData.riskDistribution.high_risk_count }}</strong>
             </div>
-            <p class="chart-hint">Risk scores are computed per-finding (0-100) based on severity, exploitability, and context.</p>
+            <p class="chart-hint">Scores represent blended risk pressure per finding, combining severity, exploitability, and contextual exposure.</p>
           </div>
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Intelligence</span><h2>OWASP exposure map</h2><p class="card-subtitle">Top mapped OWASP 2021 categories by indexed finding count.</p></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Attack surface</span><h2>OWASP exposure map</h2><p class="card-subtitle">Leading OWASP 2021 categories by mapped finding concentration.</p></div></div>
             <div class="chart-container chart-container-roomy">
               <div v-if="!analyticsHasComplianceData" class="chart-empty-state">OWASP mapping appears when compliance-tagged findings are available.</div>
               <canvas v-else ref="owaspChart"></canvas>
             </div>
-            <p class="chart-hint">Top mapped OWASP 2021 categories by finding volume, with full category names shown in the tooltip.</p>
+            <p class="chart-hint">Bars show mapped concentration; full category names remain available in the tooltip for long labels.</p>
           </div>
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Coverage</span><h2>Tool effectiveness</h2><p class="card-subtitle">Average severity and volume contribution by scanner.</p></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Scanner signal</span><h2>Tool effectiveness</h2><p class="card-subtitle">Volume contribution and average severity pressure by scanner.</p></div></div>
             <div class="chart-container chart-container-roomy">
               <div v-if="!analyticsHasToolData" class="chart-empty-state">Tool coverage appears after multiple scanners contribute findings.</div>
               <canvas v-else ref="toolEffChart"></canvas>
             </div>
           </div>
           <div class="card chart-card">
-            <div class="card-header"><div><span class="panel-kicker">Composition</span><h2>Findings by severity</h2><p class="card-subtitle">Current severity mix across the indexed findings corpus.</p></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Severity mix</span><h2>Findings by severity</h2><p class="card-subtitle">Current severity composition across the indexed finding corpus.</p></div></div>
             <div class="chart-container chart-container-roomy">
               <div v-if="!analyticsHasSeverityData" class="chart-empty-state">Severity composition becomes available once findings are present.</div>
               <canvas v-else ref="severityDistChart"></canvas>
@@ -850,7 +850,7 @@
           </div>
           <div class="card chart-card chart-card-full">
             <div class="card-header">
-              <div><span class="panel-kicker">Trend intelligence</span><h2>Risk trajectory over time</h2><p class="card-subtitle">Average and peak risk evolution across the selected time window.</p></div>
+              <div><span class="panel-kicker">Trend intelligence</span><h2>Risk trajectory over time</h2><p class="card-subtitle">Average and peak risk pressure across the selected time window.</p></div>
             </div>
             <div class="chart-container chart-container-tall">
               <div v-if="!analyticsHasTrendData" class="chart-empty-state">Trend analysis appears after enough historical scans accumulate.</div>
@@ -861,7 +861,7 @@
 
         <div class="two-cols-grid">
           <div class="card">
-            <div class="card-header"><div><span class="panel-kicker">Exposure ranking</span><h2>Target risk ranking</h2><p class="card-subtitle">Highest-pressure assets ranked by average risk score and finding volume.</p></div></div>
+            <div class="card-header"><div><span class="panel-kicker">Exposure ranking</span><h2>Target risk ranking</h2><p class="card-subtitle">Highest-pressure assets ranked by average risk score and indexed finding volume.</p></div></div>
             <div class="risk-ranking" v-if="analyticsData.targetRisk">
               <!-- Sort by average_risk descending so highest-risk target is always #1 -->
               <div v-for="(target, idx) in analyticsData.targetRisk.slice().sort((a,b) => b.average_risk - a.average_risk).slice(0, 10)" :key="target.target" class="risk-row">

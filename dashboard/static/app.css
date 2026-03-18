@@ -3402,9 +3402,16 @@ code,
 
 .compare-context-inline {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 12px;
   padding: 0 20px 20px;
+}
+
+.compare-setup-note {
+  padding: 0 20px 18px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .compare-context-inline-card {
@@ -3433,6 +3440,10 @@ code,
   font-family: var(--font-display);
   font-size: 24px;
   letter-spacing: 0.08em;
+}
+
+.compare-context-divider-inline {
+  align-self: center;
 }
 
 .compare-summary-card {
@@ -4547,14 +4558,6 @@ textarea {
 .compare-selector-group .filter-select {
   max-width: 100%;
   text-overflow: ellipsis;
-}
-
-.compare-selector-hint {
-  display: block;
-  margin-top: 8px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .compare-select {

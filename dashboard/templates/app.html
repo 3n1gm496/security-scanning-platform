@@ -930,12 +930,12 @@
             <div>
               <span class="panel-kicker">Diff intelligence</span>
               <h2>Compare scan baselines</h2>
-              <p>Contrast two runs on the same target to isolate new pressure, resolved findings, and persistent issues without losing baseline context.</p>
+              <p>Contrast two runs on the same target to isolate new pressure, resolved exposure, and persistent issues with clear baseline framing.</p>
             </div>
           </div>
         </div>
         <div class="card compare-setup-card">
-          <div class="card-header"><div><span class="panel-kicker">Comparison setup</span><h2>Select scans to compare</h2><p class="card-subtitle">Baseline A is the earlier reference point; B is the run you want to measure drift against.</p></div></div>
+          <div class="card-header"><div><span class="panel-kicker">Comparison setup</span><h2>Select scans to compare</h2><p class="card-subtitle">A establishes the baseline. B is the run whose drift you want to evaluate against it.</p></div></div>
           <div class="compare-selectors">
             <div class="compare-selector-group">
               <label class="filter-label" for="compare-scan-a">Scan A (baseline)</label>
@@ -945,7 +945,6 @@
                   {{ compareOptionLabel(s) }}
                 </option>
               </select>
-              <span class="compare-selector-hint">Choose the earlier reference run for this target.</span>
             </div>
             <div class="compare-vs">VS</div>
             <div class="compare-selector-group">
@@ -956,19 +955,22 @@
                   {{ compareOptionLabel(s) }}
                 </option>
               </select>
-              <span class="compare-selector-hint">Choose the run whose drift you want to evaluate.</span>
             </div>
             <button class="btn-primary" @click="runCompare" :disabled="!compareIdA || !compareIdB || compareIdA === compareIdB || compareLoading">
               <span v-if="compareLoading"><span class="spinner-sm u-inline-block u-mr-6"></span>Analyzing...</span>
               <span v-else>Run comparison</span>
             </button>
           </div>
-          <div class="compare-context-inline" v-if="compareContext.scanA || compareContext.scanB">
+          <div class="compare-setup-note">
+            <span>Choose two scans for the same target to measure new, resolved, and unchanged exposure between runs.</span>
+          </div>
+          <div class="compare-context-inline" v-if="compareContext.scanA && compareContext.scanB">
             <div class="compare-context-inline-card" v-if="compareContext.scanA">
               <span class="panel-kicker">Baseline selected</span>
               <strong :title="compareContext.scanA.target_name">{{ compareContext.scanA.target_name }}</strong>
               <span>Run {{ formatShortScanId(compareContext.scanA.id) }} · {{ formatDate(compareContext.scanA.created_at) }}</span>
             </div>
+            <div class="compare-context-divider compare-context-divider-inline">A/B</div>
             <div class="compare-context-inline-card" v-if="compareContext.scanB">
               <span class="panel-kicker">Comparison selected</span>
               <strong :title="compareContext.scanB.target_name">{{ compareContext.scanB.target_name }}</strong>

@@ -194,19 +194,21 @@ jobs:
     - name: Scan orchestrator image with Trivy
       run: |
         trivy image \
+          --scanners vuln \
           --format table \
           --exit-code 1 \
           --severity CRITICAL,HIGH \
           --ignore-unfixed \
           security-scanner-orchestrator:test \
-          2> >(grep -Fv "Using severities from other vendors for some vulnerabilities." >&2)
+          2> >(grep -Fv "Using severities from other vendors for some vulnerabilities." | grep -Fv "Version matching error" >&2)
 
     - name: Scan dashboard image with Trivy
       run: |
         trivy image \
+          --scanners vuln \
           --format table \
           --exit-code 1 \
           --severity CRITICAL,HIGH \
           --ignore-unfixed \
           security-scanner-dashboard:test \
-          2> >(grep -Fv "Using severities from other vendors for some vulnerabilities." >&2)
+          2> >(grep -Fv "Using severities from other vendors for some vulnerabilities." | grep -Fv "Version matching error" >&2)

@@ -84,8 +84,7 @@ COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
 # Install scanner binaries from GitHub releases with SHA-256 verification.
 RUN python /tmp/fetch_binaries.py \
       --syft-version "${SYFT_VERSION}" \
-      --grype-version "${GRYPE_VERSION}" \
-      --nuclei-version "${NUCLEI_VERSION}" && \
+      --grype-version "${GRYPE_VERSION}" && \
     semgrep --version && \
     checkov --version && \
     trivy --version && \

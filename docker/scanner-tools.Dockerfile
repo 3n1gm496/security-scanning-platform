@@ -80,8 +80,7 @@ COPY orchestrator/scripts/fetch_binaries.py /tmp/fetch_binaries.py
 
 RUN python /tmp/fetch_binaries.py \
       --syft-version "${SYFT_VERSION}" \
-      --grype-version "${GRYPE_VERSION}" \
-      --nuclei-version "${NUCLEI_VERSION}" && \
+      --grype-version "${GRYPE_VERSION}" && \
     semgrep --version && \
     checkov --version && \
     trivy --version && \

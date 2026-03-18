@@ -221,9 +221,9 @@
                 }}
               </p>
               <div class="hero-side-actions">
-                <button class="btn-alert" v-if="kpis.critical_findings > 0" @click="viewCriticalFindings()">Open queue</button>
+                <button class="btn-alert" v-if="kpis.critical_findings > 0" @click="viewCriticalFindings()">Review queue</button>
                 <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">Launch scan</button>
-                <button class="btn-secondary btn-sm" @click="navigate('analytics')">Analytics</button>
+                <button class="btn-secondary btn-sm" @click="navigate('analytics')">View analytics</button>
               </div>
             </div>
 
@@ -279,7 +279,7 @@
                 <p class="card-subtitle">Newest targets with findings pressure, critical load, and queue state.</p>
               </div>
               <div class="card-actions">
-                <button class="btn-secondary btn-sm" @click="navigate('findings')">Open queue</button>
+                <button class="btn-secondary btn-sm" @click="navigate('findings')">Review queue</button>
               </div>
             </div>
             <div class="table-wrap table-wrap-watchlist table-wrap-watchlist-compact">
@@ -453,7 +453,7 @@
             <span class="compare-info">{{ selectedScans.length }} scan{{ selectedScans.length === 1 ? '' : 's' }} selected</span>
             <button class="btn-primary btn-sm" @click="goToCompare" :disabled="selectedScans.length !== 2">
               <svg viewBox="0 0 24 24" fill="none" width="14" height="14" class="u-mr-4"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              {{ selectedScans.length === 2 ? 'Compare selected scans' : 'Select 2 scans to compare' }}
+              {{ selectedScans.length === 2 ? 'Compare selected' : 'Select 2 scans to compare' }}
             </button>
             <button class="btn-secondary btn-sm" @click="selectedScans = []">Deselect all</button>
           </div>
@@ -677,7 +677,7 @@
           </div>
           <div v-if="hasPendingFindingUpdates" class="live-banner live-banner-info" role="status">
             <span>{{ findingsLiveMessage || 'New findings are ready.' }}</span>
-            <button class="btn-secondary btn-sm" @click="refreshFindingsNow">Refresh results</button>
+            <button class="btn-secondary btn-sm" @click="refreshFindingsNow">Refresh queue</button>
           </div>
           <div v-else-if="hasRunningScans" class="live-banner live-banner-subtle" role="status">
             <span>{{ findingsLiveMessage || 'Scan running. Results will update when ready.' }}</span>
@@ -940,7 +940,7 @@
             <div class="compare-selector-group">
               <label class="filter-label" for="compare-scan-a">Scan A (baseline)</label>
               <select id="compare-scan-a" name="compare_scan_a" v-model="compareIdA" @change="compareIdB = ''" class="filter-select compare-select">
-                <option value="">Select...</option>
+                <option value="">Choose run</option>
                 <option v-for="s in compareScanList" :key="s.id" :value="s.id">
                   {{ compareOptionLabel(s) }}
                 </option>
@@ -950,7 +950,7 @@
             <div class="compare-selector-group">
               <label class="filter-label" for="compare-scan-b">Scan B (comparison)</label>
               <select id="compare-scan-b" name="compare_scan_b" v-model="compareIdB" class="filter-select compare-select" :disabled="!compareIdA">
-                <option value="">{{ compareIdA ? (compareScanListB.length ? 'Select...' : 'No scans with same target') : 'Select scan A first' }}</option>
+                <option value="">{{ compareIdA ? (compareScanListB.length ? 'Choose run' : 'No runs for this target') : 'Choose baseline first' }}</option>
                 <option v-for="s in compareScanListB" :key="s.id" :value="s.id">
                   {{ compareOptionLabel(s) }}
                 </option>
@@ -958,7 +958,7 @@
             </div>
             <button class="btn-primary" @click="runCompare" :disabled="!compareIdA || !compareIdB || compareIdA === compareIdB || compareLoading">
               <span v-if="compareLoading"><span class="spinner-sm u-inline-block u-mr-6"></span>Analyzing...</span>
-              <span v-else>Run comparison</span>
+              <span v-else>Analyze drift</span>
             </button>
           </div>
           <div class="compare-setup-note">
@@ -1078,8 +1078,8 @@
 
         <div v-else-if="!compareLoading" class="empty-compare empty-compare-hero">
           <svg viewBox="0 0 24 24" fill="none" width="56" height="56" style="opacity:0.2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <p><strong>Compare two scans</strong></p>
-          <p style="font-size:13px;max-width:360px;text-align:center">Select scan A (baseline) and scan B (comparison) to identify new and resolved findings between two runs.</p>
+          <p><strong>No comparison selected</strong></p>
+          <p style="font-size:13px;max-width:360px;text-align:center">Choose a baseline and a comparison run for the same target to identify new and resolved findings.</p>
         </div>
       </div>
 
@@ -1119,7 +1119,7 @@
               <h2>API Keys</h2>
               <p class="card-subtitle">Role-scoped credentials for CI pipelines, service integrations, and operator automation without exposing interactive sessions.</p>
             </div>
-            <button class="btn-primary btn-sm" type="button" @click="openCreateKeyModal">+ New Key</button>
+            <button class="btn-primary btn-sm" type="button" @click="openCreateKeyModal">Create key</button>
           </div>
           <div class="settings-context-strip">
             <span class="settings-context-chip">Scoped access</span>
@@ -1159,7 +1159,7 @@
               <h2>Webhooks</h2>
               <p class="card-subtitle">Outbound event delivery for scan completion, critical findings, and downstream automation.</p>
             </div>
-            <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">+ New Webhook</button>
+            <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">Create webhook</button>
           </div>
           <div class="settings-context-strip">
             <span class="settings-context-chip">Event delivery</span>

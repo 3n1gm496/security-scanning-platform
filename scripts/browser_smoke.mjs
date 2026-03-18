@@ -138,7 +138,7 @@ async function ensureCompareSelection(page) {
   await page.selectOption("#compare-scan-b", pair.b);
   await Promise.all([
     page.waitForResponse((res) => res.url().includes("/api/scans/compare") && res.status() < 400, { timeout: 15000 }),
-    page.getByRole("button", { name: /run comparison|compare/i }).click(),
+    page.getByRole("button", { name: /analyze drift|run comparison|compare/i }).click(),
   ]);
   await page.waitForTimeout(1200);
 }
@@ -374,7 +374,7 @@ async function main() {
       await clickNav(page, "Settings");
       await page.waitForTimeout(700);
       await page.screenshot({ path: resolve(artifactsDir, "08-settings-apikeys.png"), fullPage: true });
-      await page.getByRole("button", { name: /new key/i }).click();
+      await page.getByRole("button", { name: /create key|new key/i }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "08-settings-apikeys-modal.png"), fullPage: true });
       await page.locator(".modal-close").first().click();
@@ -382,7 +382,7 @@ async function main() {
       await page.getByRole("tab", { name: "Webhooks" }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks.png"), fullPage: true });
-      await page.getByRole("button", { name: /new webhook/i }).click();
+      await page.getByRole("button", { name: /create webhook|new webhook/i }).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: resolve(artifactsDir, "09-settings-webhooks-modal.png"), fullPage: true });
       await page.locator(".modal-close").first().click();

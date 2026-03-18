@@ -2062,30 +2062,35 @@ code {
     min-width: min(82vw, 320px);
     z-index: 60;
     box-shadow: var(--shadow-lg);
+    border-right: 1px solid var(--sidebar-border);
   }
   .sidebar.mobile-open .sidebar-footer {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
+    padding-top: 14px;
+    padding-bottom: 18px;
   }
   .sidebar.mobile-open .user-chip {
     width: 100%;
-    justify-content: center;
-    padding: 12px 14px;
+    justify-content: flex-start;
+    padding: 14px;
+    border-radius: 18px;
   }
   .sidebar.mobile-open .logout-btn {
     width: 100%;
     justify-content: center;
-    min-height: 44px;
+    min-height: 46px;
     border-color: rgba(110, 216, 255, 0.26);
     background: rgba(17, 34, 49, 0.94);
+    border-radius: 16px;
   }
   .mobile-nav-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(2px);
+    background: rgba(10, 18, 28, 0.52);
+    backdrop-filter: blur(4px);
     z-index: 50;
   }
   .mobile-nav-toggle { display: inline-flex; }
@@ -2099,6 +2104,9 @@ code {
   .modal-xl { width: 100%; }
   .modal-body { padding: var(--space-4); }
   .filters-row { gap: var(--space-2); }
+  .topbar-slim {
+    min-height: 68px;
+  }
   .settings-empty-state-card {
     margin: 0 14px 14px;
     padding: 16px;

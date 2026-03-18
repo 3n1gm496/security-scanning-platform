@@ -1117,11 +1117,15 @@
           <div class="card-header">
             <div>
               <h2>API Keys</h2>
-              <p class="card-subtitle">Role-scoped credentials for CI pipelines, service integrations, and operator tooling.</p>
+              <p class="card-subtitle">Role-scoped credentials for CI pipelines, service integrations, and operator automation without exposing interactive sessions.</p>
             </div>
             <button class="btn-primary btn-sm" type="button" @click="openCreateKeyModal">+ New Key</button>
           </div>
-          <p class="section-hint">Manage API keys for programmatic platform access. Each key has a role and specific permissions.</p>
+          <div class="settings-context-strip">
+            <span class="settings-context-chip">Scoped access</span>
+            <span class="settings-context-chip">Automation ready</span>
+            <span class="settings-context-chip">Revoke on demand</span>
+          </div>
           <div class="table-wrap">
             <table class="soc-table">
               <thead><tr><th scope="col">Name</th><th scope="col">Prefix</th><th scope="col">Role</th><th scope="col">Created by</th><th scope="col">Created at</th><th scope="col">Expires</th><th scope="col" class="th-actions">Actions</th></tr></thead>
@@ -1157,7 +1161,11 @@
             </div>
             <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">+ New Webhook</button>
           </div>
-          <p class="section-hint">Receive real-time notifications for events such as scan completion or critical findings.</p>
+          <div class="settings-context-strip">
+            <span class="settings-context-chip">Event delivery</span>
+            <span class="settings-context-chip">Automation hooks</span>
+            <span class="settings-context-chip">Scan and finding signals</span>
+          </div>
           <div class="table-wrap" v-if="webhooks.length > 0">
             <table class="soc-table">
               <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Active</th><th scope="col" class="th-actions">Actions</th></tr></thead>
@@ -1196,6 +1204,11 @@
               <h2>Notification Preferences</h2>
               <p class="card-subtitle">Tune alert delivery, escalation noise, and operator summary cadence.</p>
             </div>
+          </div>
+          <div class="settings-context-strip settings-context-strip-wide">
+            <span class="settings-context-chip">Email delivery</span>
+            <span class="settings-context-chip">Severity-driven alerts</span>
+            <span class="settings-context-chip">Digest cadence</span>
           </div>
           <form class="settings-form" @submit.prevent="saveNotificationPrefs">
             <!-- Delivery -->

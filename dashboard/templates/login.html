@@ -55,6 +55,11 @@
             <strong>Scans, findings, analytics, and automation controls</strong>
           </div>
         </div>
+        <div class="login-auth-strip" aria-label="Authentication safeguards">
+          <span class="login-auth-pill">Role checks</span>
+          <span class="login-auth-pill">Audit trail</span>
+          <span class="login-auth-pill">Secure session</span>
+        </div>
       {% if error %}
         <p class="error">{{ error }}</p>
       {% endif %}
@@ -65,7 +70,7 @@
         <input type="password" name="password" required autocomplete="current-password">
       </label>
         <button type="submit">Authenticate</button>
-        <p class="login-form-note">Access is limited to authenticated operators. Use an account with the role needed for the workflows you manage.</p>
+        <p class="login-form-note">Access is limited to authenticated operators. Use an account with the role required for the scans, triage, and automation workflows you manage.</p>
       </form>
     </section>
   </main>

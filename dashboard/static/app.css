@@ -1758,7 +1758,7 @@ tr:last-child td { border-bottom: none; }
 .compare-summary-label { font-size: var(--font-md); font-weight: 600; margin-bottom: 2px; }
 .compare-summary-desc { font-size: var(--font-sm); color: var(--color-text-muted); }
 
-.compare-new .compare-summary-num { color: var(--color-critical); }
+.compare-new .compare-summary-num { color: var(--color-accent); }
 .compare-resolved .compare-summary-num { color: var(--color-success); }
 .compare-unchanged .compare-summary-num { color: var(--color-text-muted); }
 

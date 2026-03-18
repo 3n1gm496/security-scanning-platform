@@ -20,7 +20,7 @@ const seedMode = process.env.BROWSER_SMOKE_SEED_MODE || "normal";
 const defaultPort = seedMode === "edge" ? "18092" : "18091";
 const port = Number(process.env.BROWSER_SMOKE_PORT || defaultPort);
 const baseUrl = `http://127.0.0.1:${port}`;
-const dbPath = process.env.BROWSER_SMOKE_DB || "/tmp/security-dashboard-browser-smoke.db";
+const dbPath = process.env.BROWSER_SMOKE_DB || `/tmp/security-dashboard-browser-smoke-${seedMode}.db`;
 const artifactsDir = resolve(repoRoot, "artifacts", "browser-smoke");
 const localLibDir = resolve(repoRoot, ".local-playwright-libs", "extracted", "usr", "lib", "x86_64-linux-gnu");
 
@@ -126,6 +126,20 @@ async function waitForHash(page, hashPrefix, timeoutMs = 8000) {
     hashPrefix,
     { timeout: timeoutMs },
   );
+}
+
+async function waitForServerReady(url, timeoutMs = 15000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const res = await fetch(url, { redirect: "manual" });
+      if (res.ok || res.status === 302 || res.status === 307) return;
+    } catch {
+      // Keep polling until the timeout expires.
+    }
+    await new Promise((resolveReady) => setTimeout(resolveReady, 250));
+  }
+  throw new Error(`Timed out waiting for dashboard readiness at ${url}`);
 }
 
 async function clickAndWaitForPage(page, buttonPattern, expectedPage, timeoutMs = 10000) {
@@ -337,7 +351,7 @@ async function main() {
   });
 
   try {
-    await new Promise((resolveReady) => setTimeout(resolveReady, 1500));
+    await waitForServerReady(`${baseUrl}/login`);
     console.log("[browser-smoke] server ready");
 
     const browserEnv = { ...process.env };

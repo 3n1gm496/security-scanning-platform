@@ -1484,7 +1484,7 @@
             <span class="badge" :class="statusBadgeClass(selectedScan.status)">{{ statusLabel(selectedScan.status) }}</span>
             <h2 class="modal-title" id="scan-modal-title" :title="selectedScan.target_name">{{ formatModalTarget(selectedScan.target_name) }}</h2>
           </div>
-          <button type="button" class="modal-close" @click="closeScanDetail">&#x2715;</button>
+          <button type="button" class="modal-close" @click="closeScanDetail" aria-label="Close scan detail">&#x2715;</button>
         </div>
         <div class="modal-body">
           <div class="detail-grid">

@@ -964,7 +964,7 @@
           <div class="compare-setup-note">
             <span>Choose two scans for the same target to measure new, resolved, and unchanged exposure between runs.</span>
           </div>
-          <div class="compare-context-inline" v-if="compareContext.scanA && compareContext.scanB">
+          <div class="compare-context-inline" v-if="compareContext.scanA && compareContext.scanB && !compareResult">
             <div class="compare-context-inline-card" v-if="compareContext.scanA">
               <span class="panel-kicker">Baseline selected</span>
               <strong :title="compareContext.scanA.target_name">{{ compareContext.scanA.target_name }}</strong>

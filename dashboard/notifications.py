@@ -458,8 +458,7 @@ class NotificationPreferencesManager:
                     "WHERE critical_alerts = 1 AND preferred_channel = ?"
                 ),
                 "high_alerts": (
-                    "SELECT user_email FROM notification_preferences "
-                    "WHERE high_alerts = 1 AND preferred_channel = ?"
+                    "SELECT user_email FROM notification_preferences " "WHERE high_alerts = 1 AND preferred_channel = ?"
                 ),
                 "scan_summaries": (
                     "SELECT user_email FROM notification_preferences "

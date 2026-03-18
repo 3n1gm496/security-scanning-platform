@@ -183,7 +183,7 @@
               <span class="panel-kicker">Command posture</span>
               <h2 class="hero-title">Attack surface in focus</h2>
               <p class="hero-text">
-                Live scan pressure, exposed targets, and remediation load condensed for immediate operator triage.
+                Live scan pressure, exposed targets, and remediation load condensed for immediate triage.
               </p>
             </div>
             <div class="hero-live-row">
@@ -276,7 +276,7 @@
               <div>
                 <span class="panel-kicker">Watchlist</span>
                 <h2>Recent hot targets</h2>
-                <p class="card-subtitle">Newest targets with findings pressure, critical load, and queue state.</p>
+                <p class="card-subtitle">Newest targets with critical load and active queue pressure.</p>
               </div>
               <div class="card-actions">
                 <button class="btn-secondary btn-sm" @click="navigate('findings')">Review queue</button>
@@ -585,7 +585,7 @@
           <div class="filters-row">
             <div class="filter-group filter-search">
               <label class="filter-label" for="findings-filter-search">Search</label>
-              <input id="findings-filter-search" name="findings_search" type="text" v-model="findingsFilter.search" @input="debouncedLoadFindings" placeholder="Title, CVE, file..." class="filter-input">
+              <input id="findings-filter-search" name="findings_search" type="text" v-model="findingsFilter.search" @input="debouncedLoadFindings" placeholder="Title, CWE/CVE, file..." class="filter-input">
             </div>
             <div class="filter-group">
               <label class="filter-label" for="findings-filter-severity">Severity</label>
@@ -840,6 +840,7 @@
               <div v-if="!analyticsHasToolData" class="chart-empty-state">Tool coverage appears after multiple scanners contribute findings.</div>
               <canvas v-else ref="toolEffChart"></canvas>
             </div>
+            <p class="chart-hint">Read which scanners contribute the most finding volume and how intense their average signal remains.</p>
           </div>
           <div class="card chart-card">
             <div class="card-header"><div><span class="panel-kicker">Severity mix</span><h2>Findings by severity</h2><p class="card-subtitle">Current severity composition across the indexed finding corpus.</p></div></div>

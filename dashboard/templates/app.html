@@ -1191,8 +1191,8 @@
           <div v-else class="settings-empty-state-card">
             <div class="settings-empty-state-copy">
               <span class="panel-kicker">No outbound hooks</span>
-              <h3>Automate downstream response</h3>
-              <p>Create a webhook to forward scan and finding events into chatops, ticketing, or orchestration systems.</p>
+              <h3>Wire response into downstream tooling</h3>
+              <p>Create a webhook to forward scan and finding events into chatops, ticketing, or orchestration systems without adding alert fatigue to the operator view.</p>
             </div>
             <button class="btn-primary btn-sm" type="button" @click="openCreateWebhookModal">Create webhook</button>
           </div>
@@ -1202,30 +1202,30 @@
         <div v-if="settingsTab === 'notifications'" id="settings-panel-notifications" class="card settings-panel" role="tabpanel" tabindex="0" aria-labelledby="settings-tab-notifications">
           <div class="card-header">
             <div>
-              <h2>Notification Preferences</h2>
-              <p class="card-subtitle">Tune alert delivery, escalation noise, and operator summary cadence.</p>
+              <h2>Notification Operations</h2>
+              <p class="card-subtitle">Control delivery targets, escalation noise, and digest cadence for the operating team.</p>
             </div>
           </div>
           <div class="settings-context-strip settings-context-strip-wide">
-            <span class="settings-context-chip">Email delivery</span>
-            <span class="settings-context-chip">Severity-driven alerts</span>
+            <span class="settings-context-chip">Delivery target</span>
+            <span class="settings-context-chip">Severity escalation</span>
             <span class="settings-context-chip">Digest cadence</span>
           </div>
           <div class="settings-signal-grid">
             <div class="settings-signal-card">
               <span class="panel-kicker">Recipient</span>
-              <strong :title="notifPrefs.user_email || 'No recipient configured'">{{ notifPrefs.user_email || 'No recipient configured' }}</strong>
-              <span>{{ notifPrefs.user_email ? 'Delivery target for operator notifications.' : 'Add an address before enabling sustained alerting.' }}</span>
+              <strong :title="notifPrefs.user_email || 'No delivery target set'">{{ notifPrefs.user_email || 'No delivery target set' }}</strong>
+              <span>{{ notifPrefs.user_email ? 'Primary destination for operator-facing email alerts and summaries.' : 'Add an address before enabling sustained alerting.' }}</span>
             </div>
             <div class="settings-signal-card">
               <span class="panel-kicker">Alert posture</span>
-              <strong>{{ notifPrefs.critical_alerts ? 'Critical live' : 'Critical muted' }}</strong>
-              <span>{{ notifPrefs.high_alerts ? 'High severity alerts are included.' : 'Only critical escalation is active.' }}</span>
+              <strong>{{ notifPrefs.critical_alerts ? 'Critical escalation live' : 'Critical escalation muted' }}</strong>
+              <span>{{ notifPrefs.high_alerts ? 'High-severity findings are included in live alerting.' : 'Only critical escalation is active right now.' }}</span>
             </div>
             <div class="settings-signal-card">
               <span class="panel-kicker">Cadence</span>
-              <strong>{{ notifPrefs.weekly_digest ? 'Weekly digest on' : 'Digest off' }}</strong>
-              <span>{{ notifPrefs.scan_summaries ? 'Per-scan summaries are enabled.' : 'Only alert-driven mail is active.' }}</span>
+              <strong>{{ notifPrefs.weekly_digest ? 'Weekly digest active' : 'Digest disabled' }}</strong>
+              <span>{{ notifPrefs.scan_summaries ? 'Per-scan summaries stay enabled between digest cycles.' : 'Only alert-driven mail is active.' }}</span>
             </div>
           </div>
           <form class="settings-form" @submit.prevent="saveNotificationPrefs">
@@ -1284,7 +1284,7 @@
             </div>
 
             <div class="settings-actions">
-              <button type="submit" class="btn-primary">Save preferences</button>
+              <button type="submit" class="btn-primary">Save notification settings</button>
             </div>
           </form>
         </div>

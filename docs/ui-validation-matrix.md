@@ -164,3 +164,8 @@ After a green pass:
 
 This matrix does **not** claim the UI is perfect. It defines the evidence needed
 to say the validated workflows currently behave as expected.
+
+It should be read together with the repository verification baseline:
+- green smoke here is workflow evidence
+- green CI and Python tests validate broader runtime behavior
+- manual screenshot review still matters for polish and subtle visual regressions

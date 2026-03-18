@@ -39,7 +39,7 @@ The platform is designed to scan code repositories, local paths, live URLs, and 
 - automatic scan summary emails plus high/critical alert emails driven by notification preferences
 
 ### Current repository baseline
-- `631` Python tests green
+- `632` Python tests green
 - browser smoke validates two seed modes:
   - `normal` for mainline operator flows
   - `edge` for long-value handling, chart empty states, and no-drift compare cases
@@ -143,6 +143,12 @@ graph TD
 - workspaces directory for prepared scan inputs
 - Trivy cache directory and scanner cache state
 
+### Runtime boundaries
+
+- the **dashboard** owns auth, RBAC, CSRF, SPA delivery, APIs, exports, analytics, notifications, webhooks, and monitoring
+- the **orchestrator** owns target preparation, scanner execution, normalization, policy evaluation, and report persistence
+- **PostgreSQL** and **OWASP ZAP** remain optional supporting services rather than always-on core runtimes
+
 ### Architecture docs
 
 The maintained architecture references are:
@@ -237,6 +243,25 @@ curl -fsS -H "Authorization: Bearer $API_KEY" http://localhost:8080/metrics
 Note:
 - `/metrics` is authenticated
 - use `/api/health` and `/api/ready` for anonymous liveness/readiness checks
+
+---
+
+## Current verification baseline
+
+What is currently verified:
+- `632` Python tests are green from repo root
+- browser smoke is green in both `normal` and `edge` seed modes
+- GitHub Actions is green on the latest baseline, including Docker image builds and Trivy image scans
+- local Docker builds for both runtime images complete successfully
+- repository self-scan has been executed with local artifacts, virtualenvs, and generated workspaces excluded from the scan target
+
+What that means here:
+- core runtime code, main operator flows, image builds, and image vuln scans were exercised directly
+- the smoke harness validates behavior, screenshots, and several write flows rather than only rendering pages
+
+What it does not mean:
+- it is not a mathematical guarantee of zero bugs in every untested environment or dataset
+- findings in `demo/` or test-only code do not automatically represent risk in the main runtime
 
 ### Database path behavior
 
@@ -430,6 +455,17 @@ Engineering checklist:
 
 ---
 
+## Known accepted risks
+
+These are intentionally still open and should not be confused with regressions:
+- insecure fallback auth values still exist in `dashboard/app.py`
+- insecure fallback values still exist in `docker-compose.yml`
+- webhook cipher fallback behavior in `dashboard/webhooks.py` has not been reworked yet
+
+They are operationally visible and documented, but were consciously deferred rather than accidentally missed.
+
+---
+
 ## Documentation index
 
 - [docs/architecture.md](docs/architecture.md)
@@ -440,6 +476,7 @@ Engineering checklist:
 - [docs/gitlab-integration.md](docs/gitlab-integration.md)
 - [docs/ui-operations-guide.md](docs/ui-operations-guide.md)
 - [docs/development-and-verification.md](docs/development-and-verification.md)
+- [docs/ui-validation-matrix.md](docs/ui-validation-matrix.md)
 - [docs/ui-audit-matrix.md](docs/ui-audit-matrix.md)
 - [CHANGELOG.md](CHANGELOG.md)
 

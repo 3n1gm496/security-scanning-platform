@@ -26,6 +26,25 @@ The operator-facing experience is the dashboard SPA:
 
 ---
 
+## Runtime boundaries
+
+- **Dashboard-owned concerns**
+  - auth, RBAC, CSRF, sessions
+  - SPA delivery and operator-facing APIs
+  - scans/findings/analytics/compare/settings/export routes
+  - notifications, webhooks, monitoring, metrics
+- **Orchestrator-owned concerns**
+  - target preparation
+  - scanner routing and subprocess execution
+  - normalization
+  - policy evaluation
+  - artifact persistence
+- **Optional support services**
+  - PostgreSQL for externalized DB lifecycle
+  - OWASP ZAP for URL-target DAST on the internal network
+
+---
+
 ## Main components
 
 ### Dashboard service
@@ -177,6 +196,7 @@ Main concerns:
 QA for this layer is covered by:
 - Python tests for the APIs and backend behavior
 - browser smoke screenshots in `artifacts/browser-smoke/`
+- workflow-grade smoke coverage in both `normal` and `edge` seed modes
 
 ---
 

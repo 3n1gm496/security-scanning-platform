@@ -72,6 +72,24 @@ Notes:
 
 ---
 
+## Validation commands
+
+Use these when you want to confirm the repository baseline before or after an operational change:
+
+```bash
+PYTHONPATH=. ./venv/bin/pytest -q
+node --check dashboard/static/app.js
+BROWSER_SMOKE_SEED_MODE=normal node scripts/browser_smoke.mjs
+BROWSER_SMOKE_SEED_MODE=edge node scripts/browser_smoke.mjs
+```
+
+What green means here:
+- tests passed for dashboard and orchestrator code paths
+- both smoke seed modes exercised the main operator workflows
+- screenshots in `artifacts/browser-smoke/` reflect the latest smoke pass
+
+---
+
 ## Backups
 
 The project provides:
@@ -107,6 +125,13 @@ Restore behavior:
 - restores config contents without creating nested `config/config` paths
 - removes stale SQLite `-wal` and `-shm` sidecar files before restoring the main DB
 - accepts both current report archives and older archives that store files under a top-level `reports/` directory
+
+### Backup and restore caveats
+
+- a green backup run does not by itself validate the archive; periodically test a real restore path
+- if PostgreSQL is active through the Compose `postgres` hostname, scripts use container-side `pg_dump` / `pg_restore`
+- if you customize `DASHBOARD_DB_PATH`, `ORCH_DB_PATH`, or `REPORTS_DIR`, keep backup and restore expectations aligned with those values
+- reports and backups may contain sensitive findings data and should be handled like security artifacts
 
 ---
 

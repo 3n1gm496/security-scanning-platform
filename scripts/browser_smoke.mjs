@@ -396,7 +396,7 @@ async function main() {
     await page.fill("input[name='username']", "runtime");
     await page.fill("input[name='password']", "runtime-pass");
     await Promise.all([
-      page.waitForURL((url) => url.href === `${baseUrl}/`, { timeout: 15000 }),
+      page.waitForURL((url) => url.href.startsWith(`${baseUrl}/`) && !url.href.includes("/login"), { timeout: 15000 }),
       page.click("button[type='submit']"),
     ]);
 
@@ -734,7 +734,7 @@ async function main() {
       if (!uiNotifPrefs.weekly_digest || !uiNotifPrefs.scan_summaries) {
         throw new Error(`Notification toggles did not update in UI controls: ${JSON.stringify(uiNotifPrefs)}`);
       }
-      await page.getByRole("button", { name: /save preferences/i }).click();
+      await page.getByRole("button", { name: /save notification settings/i }).click();
       await waitForToast(page, /Preferences saved/i);
       const savedNotifPrefs = await page.evaluate(async () => {
         const res = await fetch("/api/notifications/preferences", { credentials: "same-origin" });

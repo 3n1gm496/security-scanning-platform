@@ -48,6 +48,7 @@ Responsibilities:
 
 Optional service:
 - enabled through the `postgres` profile
+- only needed when you want DB lifecycle outside shared SQLite
 
 ### `zap`
 
@@ -100,6 +101,12 @@ It also primes shared scanner tooling with:
 Security-focused build notes:
 - `trivy` is compiled from source in the build pipeline with the required patched dependency
 - `gitleaks` is compiled from source with a patched Go toolchain
+- `nuclei` is also compiled from source and intentionally not overwritten later by release-binary fetch steps
+
+Current CI/image expectations:
+- both runtime images build on GitHub Actions
+- both images are scanned with Trivy at `CRITICAL,HIGH`
+- a green image-scan result means the built images passed Trivy in CI, not just that the Dockerfiles parsed locally
 
 ---
 

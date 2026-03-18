@@ -1,5 +1,6 @@
 graph TD
     User[Operator Browser]
+    CI[GitHub / GitLab / External CI]
     SPA[Dashboard SPA<br/>Vue + Chart.js]
     FastAPI[FastAPI Dashboard<br/>app.py + routers]
     Auth[Auth / RBAC / CSRF]
@@ -7,6 +8,7 @@ graph TD
     DB[(SQLite or PostgreSQL)]
     ScanRunner[scan_runner.py]
     Orch[Orchestrator CLI<br/>main.py]
+    Optional[Optional Services<br/>PostgreSQL / OWASP ZAP]
     Compat[Compatibility Matrix]
     Cache[Scanner Cache]
     Normalizer[Normalizer]
@@ -14,7 +16,6 @@ graph TD
     Reports[Reports / Artifacts]
     Notify[Email Notifications]
     Webhooks[Webhook Delivery]
-    CI[GitHub / GitLab / External CI]
 
     Semgrep[Semgrep]
     Bandit[Bandit]
@@ -42,6 +43,8 @@ graph TD
     FastAPI --> Webhooks
 
     ScanRunner --> Orch
+    FastAPI --> Optional
+    Orch --> Optional
     Orch --> Compat
     Orch --> Cache
     Orch --> Normalizer
@@ -70,5 +73,6 @@ graph TD
     style FastAPI fill:#0d9488,stroke:#062f2d,color:#ffffff
     style DB fill:#f59e0b,stroke:#5b3b00,color:#111827
     style Orch fill:#111827,stroke:#93c5fd,color:#ffffff
+    style Optional fill:#1f2937,stroke:#94a3b8,color:#ffffff
     style Policy fill:#ef4444,stroke:#450a0a,color:#ffffff
     style Reports fill:#64748b,stroke:#0f172a,color:#ffffff

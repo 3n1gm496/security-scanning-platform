@@ -28,7 +28,7 @@ pytest -q
 ```
 
 Expected result:
-- full repository suite green from repo root (`631` tests in the current baseline)
+- full repository suite green from repo root (`632` tests in the current baseline)
 
 ### Frontend syntax check
 
@@ -56,6 +56,17 @@ The smoke flow:
 - starts the dashboard on a temporary port
 - exercises login, dashboard CTA navigation, scan filters, findings triage actions, analytics loading, compare, settings writes, theme persistence, mobile nav, modals, and logout
 - rewrites screenshots in `artifacts/browser-smoke/` so the directory reflects the latest run only
+
+### What green means here
+
+A green validation pass means:
+- the Python suite passed on the current repo baseline
+- both smoke seed modes completed successfully
+- operator-visible screenshots were regenerated from the latest run
+
+It does not mean:
+- every possible deployment environment has been exhaustively simulated
+- demo/test findings discovered by repository self-scan are automatically runtime vulnerabilities
 
 ---
 
@@ -129,6 +140,11 @@ Current CI baseline:
 - Docker image builds
 - Trivy image scans
 - reusable `Security Scan` workflow
+
+Current repository verification baseline:
+- `632` Python tests green
+- smoke `normal` + `edge` green
+- CI green on the latest validated mainline baseline
 
 Current `Security Scan` behavior:
 - remote platform scan when secrets exist

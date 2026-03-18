@@ -3044,8 +3044,8 @@ body::before {
 }
 
 [data-theme="light"] .threat-rail-card.critical {
-  border-color: rgba(255, 132, 132, 0.22);
-  box-shadow: 0 0 0 1px rgba(255, 132, 132, 0.05), 0 12px 26px rgba(255, 171, 171, 0.08);
+  border-color: rgba(255, 132, 132, 0.18);
+  box-shadow: 0 0 0 1px rgba(255, 132, 132, 0.04), 0 12px 26px rgba(255, 171, 171, 0.06);
 }
 
 .threat-rail-head,
@@ -3143,6 +3143,13 @@ body::before {
 [data-theme="light"] .settings-panel {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 249, 255, 0.92));
   box-shadow: 0 14px 34px rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="light"] .settings-panel {
+  background:
+    radial-gradient(circle at top right, rgba(52, 213, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(243, 248, 253, 0.94));
+  border-color: rgba(110, 136, 162, 0.16);
 }
 
 .chart-grid-dashboard {
@@ -4749,6 +4756,15 @@ textarea {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
+[data-theme="light"] .settings-empty-state-card {
+  border-style: solid;
+  border-color: rgba(116, 142, 168, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(52, 213, 255, 0.08), transparent 36%),
+    linear-gradient(180deg, rgba(255,255,255,0.94), rgba(244,249,255,0.9));
+  box-shadow: 0 16px 28px rgba(148, 163, 184, 0.1);
+}
+
 .settings-empty-state-copy {
   display: flex;
   flex-direction: column;
@@ -4788,6 +4804,14 @@ textarea {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
+[data-theme="light"] .settings-signal-card {
+  border-color: rgba(117, 143, 169, 0.15);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.96), rgba(245,249,254,0.92)),
+    radial-gradient(circle at top right, rgba(52, 213, 255, 0.09), transparent 42%);
+  box-shadow: 0 10px 22px rgba(148, 163, 184, 0.08);
+}
+
 .settings-signal-card strong {
   font-family: var(--font-display);
   font-size: 18px;
@@ -4812,6 +4836,10 @@ textarea {
 .settings-form {
   padding: 4px 20px 20px;
   max-width: 760px;
+}
+
+[data-theme="light"] .settings-form {
+  max-width: 820px;
 }
 
 .settings-section-heading {

@@ -1,6 +1,8 @@
 # API Reference
 
-This is a practical reference for the dashboard APIs exposed by the FastAPI service.
+This is a practical reference to the dashboard APIs exposed by the FastAPI service.
+It is intentionally not a line-by-line OpenAPI replacement; it documents the operator-
+facing routes and semantics that matter for the product and its tooling.
 
 All `/api/*` endpoints require authentication unless explicitly noted otherwise.
 
@@ -177,7 +179,9 @@ Routes:
 - `GET /scans`
 - `GET /findings`
 
-These serve the SPA entrypoint or server-side page aliases used by the operator UI.
+Notes:
+- these routes serve the SPA entrypoint or compatibility aliases into the same app shell
+- in-product navigation between pages is hash-routed on the client side rather than server-rendered per page
 
 Notes:
 - `analytics`, `compare`, and `settings` are hash-routed SPA states, not separate server routes

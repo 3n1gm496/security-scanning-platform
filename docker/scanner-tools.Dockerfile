@@ -5,8 +5,8 @@ ARG GITLEAKS_VERSION=8.30.0
 ARG SYFT_VERSION=1.42.2
 ARG NUCLEI_VERSION=3.7.1
 ARG GRYPE_VERSION=0.109.1
-ARG GO_VERSION=1.25.7
-ARG SEMGREP_VERSION=1.85.0
+ARG GO_VERSION=1.26.1
+ARG SEMGREP_VERSION=1.156.0
 ARG CHECKOV_VERSION=3.1.47
 
 FROM python:3.11-slim AS scanner-tools
@@ -51,15 +51,6 @@ RUN chmod 0755 /usr/local/bin/semgrep
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     /opt/scanner-venv/bin/pip install --no-cache-dir \
-      "opentelemetry-api==1.25.0" \
-      "opentelemetry-sdk==1.25.0" \
-      "opentelemetry-exporter-otlp-proto-http==1.25.0" \
-      "opentelemetry-exporter-otlp-proto-common==1.25.0" \
-      "opentelemetry-proto==1.25.0" \
-      "opentelemetry-instrumentation==0.46b0" \
-      "opentelemetry-instrumentation-requests==0.46b0" \
-      "opentelemetry-semantic-conventions==0.46b0" \
-      "opentelemetry-util-http==0.46b0" \
       "semgrep==${SEMGREP_VERSION}" && \
     /opt/scanner-venv/bin/pip install --no-cache-dir "checkov==${CHECKOV_VERSION}" && \
     /opt/scanner-venv/bin/pip install --no-cache-dir --upgrade --force-reinstall \
@@ -73,6 +64,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/root/go/pkg/mod \
     GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    GOBIN=/usr/local/bin CGO_ENABLED=0 go install "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v${NUCLEI_VERSION}"
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/root/go/pkg/mod \

@@ -38,14 +38,17 @@ security_scans.db
 # Data directories (large reports)
 data/reports/*
 !data/reports/.gitkeep
+data/reports-local/*
 data/cache/*
 !data/cache/.gitkeep
+data/cache-local/*
 data/tmp/*
 !data/tmp/.gitkeep
 data/backups/*
 !data/backups/.gitkeep
 data/workspaces/*
 !data/workspaces/.gitkeep
+data/workspaces-local/*
 
 # Logs
 *.log

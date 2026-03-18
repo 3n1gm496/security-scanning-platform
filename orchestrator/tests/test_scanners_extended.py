@@ -260,6 +260,52 @@ def test_trivy_image_with_ignore_unfixed(tmp_path, monkeypatch):
     assert "--ignore-unfixed" in seen[0]
 
 
+def test_bandit_uses_target_ini_and_excludes_local_artifacts(tmp_path, monkeypatch):
+    project = tmp_path / "repo"
+    (project / "data" / "workspaces").mkdir(parents=True)
+    (project / "data" / "workspaces-local").mkdir(parents=True)
+    (project / "data" / "reports").mkdir(parents=True)
+    (project / "data" / "reports-local").mkdir(parents=True)
+    (project / "data" / "cache").mkdir(parents=True)
+    (project / "data" / "cache-local").mkdir(parents=True)
+    (project / "venv").mkdir(parents=True)
+    (project / ".venv").mkdir(parents=True)
+    (project / "node_modules").mkdir(parents=True)
+    (project / ".git").mkdir(parents=True)
+    (project / ".bandit").write_text("[bandit]\n", encoding="utf-8")
+    output = tmp_path / "bandit.json"
+
+    monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: True)
+    seen = {}
+
+    def fake_run_command(cmd, cwd=None, timeout=None, env=None):
+        seen["cmd"] = cmd
+        output.write_text('{"results": [], "errors": []}', encoding="utf-8")
+        return (0, "", "")
+
+    monkeypatch.setattr("orchestrator.scanners.run_command", fake_run_command)
+    run_bandit(str(project), str(output))
+
+    cmd = seen["cmd"]
+    assert "--ini" in cmd
+    assert str(project / ".bandit") in cmd
+    assert "-x" in cmd
+    excluded = cmd[cmd.index("-x") + 1]
+    for expected in (
+        project / "data" / "workspaces",
+        project / "data" / "workspaces-local",
+        project / "data" / "reports",
+        project / "data" / "reports-local",
+        project / "data" / "cache",
+        project / "data" / "cache-local",
+        project / "venv",
+        project / ".venv",
+        project / "node_modules",
+        project / ".git",
+    ):
+        assert str(expected) in excluded
+
+
 def test_trivy_image_fatal_error_raises(tmp_path, monkeypatch):
     output = tmp_path / "out.json"
     monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: True)
@@ -551,6 +597,30 @@ def test_bandit_empty_output_fallback(tmp_path, monkeypatch):
     run_bandit("/tmp", str(output))
     data = json.loads(output.read_text())
     assert "results" in data
+
+
+def test_bandit_uses_target_ini_and_excludes_generated_dirs(tmp_path, monkeypatch):
+    output = tmp_path / "out.json"
+    repo = tmp_path / "repo"
+    (repo / "data" / "workspaces").mkdir(parents=True)
+    (repo / "data" / "reports").mkdir(parents=True)
+    (repo / ".bandit").write_text("[bandit]\n", encoding="utf-8")
+    seen = []
+    monkeypatch.setattr("orchestrator.scanners.command_exists", lambda name: True)
+
+    def fake_run_command(cmd, cwd=None, timeout=None, env=None):
+        seen.append(cmd)
+        output.write_text('{"results": [], "errors": []}', encoding="utf-8")
+        return (0, "", "")
+
+    monkeypatch.setattr("orchestrator.scanners.run_command", fake_run_command)
+    run_bandit(str(repo), str(output))
+    assert "--ini" in seen[0]
+    assert str(repo / ".bandit") in seen[0]
+    assert "-x" in seen[0]
+    exclude_arg = seen[0][seen[0].index("-x") + 1]
+    assert str(repo / "data" / "workspaces") in exclude_arg
+    assert str(repo / "data" / "reports") in exclude_arg
 
 
 # ---------------------------------------------------------------------------

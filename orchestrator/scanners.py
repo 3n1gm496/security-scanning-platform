@@ -408,9 +408,28 @@ def run_bandit(target_path: str, output_path: str) -> dict[str, Any]:
     """
     if not command_exists("bandit"):
         raise ScannerError("bandit not found in PATH — install it or disable the scanner in settings.yaml")
+    target_root = Path(target_path)
     # Use -o to write directly to file: avoids progress bar / rich output
     # polluting stdout which would break JSON parsing.
     command = ["bandit", "-f", "json", "-o", output_path, "-r", target_path]
+    bandit_ini = target_root / ".bandit"
+    if bandit_ini.exists():
+        command.extend(["--ini", str(bandit_ini)])
+    exclude_candidates = [
+        target_root / "data" / "workspaces",
+        target_root / "data" / "workspaces-local",
+        target_root / "data" / "reports",
+        target_root / "data" / "reports-local",
+        target_root / "data" / "cache",
+        target_root / "data" / "cache-local",
+        target_root / "venv",
+        target_root / ".venv",
+        target_root / "node_modules",
+        target_root / ".git",
+    ]
+    exclude_paths = [str(path) for path in exclude_candidates if path.exists()]
+    if exclude_paths:
+        command.extend(["-x", ",".join(exclude_paths)])
     code, stdout, stderr = run_command(command, timeout=3600, env=_scanner_subprocess_env())
     if code not in (0, 1):
         raise ScannerError(f"bandit execution failed: {stderr or stdout}")

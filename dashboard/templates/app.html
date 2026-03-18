@@ -387,9 +387,9 @@
         <div class="card workspace-intro-card workspace-intro-card-compact">
           <div class="workspace-intro">
             <div>
-              <span class="panel-kicker">Operations workspace</span>
+              <span class="panel-kicker">Queue console</span>
               <h2>Scan queue and execution flow</h2>
-              <p>Track live queue state, filter historical runs, and move into compare or detail workflows without losing operator context.</p>
+              <p>Track queue state, filter historical runs, and move into compare or detail workflows without losing operator context.</p>
             </div>
             <div class="workspace-intro-side workspace-intro-side-stack">
               <div class="workspace-metric-stack">
@@ -438,7 +438,7 @@
             </div>
             <div class="filter-actions">
               <button class="btn-secondary btn-sm" @click="resetScansFilter">Reset</button>
-              <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">+ New Scan</button>
+              <button class="btn-primary btn-sm" type="button" @click="openScanModalDialog">Launch scan</button>
             </div>
           </div>
           <div class="active-filter-row" v-if="scansActiveFilters.length > 0">
@@ -464,7 +464,7 @@
           <div class="card-header">
             <div>
               <h2>Scans <span class="count-badge">{{ scansTotal }}</span></h2>
-              <p class="card-subtitle">Execution queue with sortable status, policy outcome, and severity load per run.</p>
+              <p class="card-subtitle">Execution queue with sortable run state, policy outcome, and severity load per scan.</p>
             </div>
           </div>
           <div v-if="hasPendingScanUpdates" class="live-banner live-banner-info" role="status">
@@ -473,7 +473,7 @@
           </div>
           <!-- Toggle colonne visibili -->
           <div class="col-toggle-bar col-toggle-pad">
-            <span class="col-toggle-label">Columns:</span>
+            <span class="col-toggle-label">Visible columns</span>
             <button v-for="col in scanColumns" :key="col.key"
               class="col-toggle-btn" :class="{ active: col.visible }"
               @click="col.visible = !col.visible">{{ col.label }}</button>
@@ -513,9 +513,9 @@
                   </td>
                   <td v-if="colVisible('id')" @click="openScanDetail(scan)"><code class="id-code">{{ scan.id }}</code></td>
                   <td v-if="colVisible('target_name')" @click="openScanDetail(scan)" class="cell-wrap" :title="scan.target_name">
-                    <div class="table-primary-stack">
+                    <div class="table-primary-stack table-primary-stack-scan">
                       <strong class="table-primary">{{ scan.target_name }}</strong>
-                      <span class="table-meta">Run {{ String(scan.id).slice(0, 12) }}</span>
+                      <span class="table-meta">Run {{ String(scan.id).slice(0, 12) }} · {{ scan.target_type }}</span>
                     </div>
                   </td>
                   <td v-if="colVisible('target_type')" @click="openScanDetail(scan)"><span class="badge badge-neutral">{{ scan.target_type }}</span></td>
@@ -524,8 +524,13 @@
                   <td v-if="colVisible('findings_count')" @click="openScanDetail(scan)"><strong>{{ scan.findings_count }}</strong></td>
                   <td v-if="colVisible('critical_count')" @click="openScanDetail(scan)"><span v-if="scan.critical_count > 0" class="sev-pill sev-critical">{{ scan.critical_count }}</span><span v-else class="text-muted">—</span></td>
                   <td v-if="colVisible('high_count')" @click="openScanDetail(scan)"><span v-if="scan.high_count > 0" class="sev-pill sev-high">{{ scan.high_count }}</span><span v-else class="text-muted">—</span></td>
-                  <td v-if="colVisible('created_at')" @click="openScanDetail(scan)" class="cell-nowrap">{{ formatDate(scan.created_at) }}</td>
-                  <td @click.stop>
+                  <td v-if="colVisible('created_at')" @click="openScanDetail(scan)" class="cell-nowrap">
+                    <div class="table-primary-stack table-primary-stack-date">
+                      <strong class="table-primary">{{ formatDate(scan.created_at) }}</strong>
+                      <span class="table-meta">{{ statusLabel(scan.status) }}</span>
+                    </div>
+                  </td>
+                  <td @click.stop class="actions-stack-cell">
                     <button class="btn-icon-sm" type="button" @click="openScanDetail(scan)" title="Details" :aria-label="`View details for scan ${scan.id}`">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>

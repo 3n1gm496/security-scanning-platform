@@ -4148,13 +4148,13 @@ table.col-resizing * {
 }
 
 .workspace-intro-card-compact .workspace-intro h2 {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .workspace-intro-card-compact .workspace-intro p {
   margin-top: 4px;
-  font-size: 12px;
-  max-width: 64ch;
+  font-size: 11px;
+  max-width: 58ch;
 }
 
 .workspace-intro-card-compact .workspace-intro-side {
@@ -4164,15 +4164,15 @@ table.col-resizing * {
 .workspace-intro-side-stack {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  min-width: 240px;
+  gap: 8px;
+  min-width: 220px;
 }
 
 .workspace-metric-stack {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   border: 1px solid var(--color-border);
   border-radius: 16px;
   background: rgba(255,255,255,0.02);
@@ -4218,8 +4218,8 @@ textarea {
 .live-banner,
 .analytics-command-bar,
 .compare-bar {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
 }
 
 .filter-chip,
@@ -4236,7 +4236,13 @@ textarea {
 }
 
 .col-toggle-bar {
-  gap: 8px;
+  gap: 6px;
+  align-items: center;
+}
+
+.col-toggle-label {
+  color: var(--color-text-secondary);
+  letter-spacing: 0.1em;
 }
 
 .data-table-card .card-header {
@@ -4265,11 +4271,56 @@ textarea {
   font-size: 13px;
 }
 
+.soc-table-ops td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
 .table-primary-stack {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.table-primary-stack-scan .table-primary {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.table-primary-stack-scan .table-meta {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.table-primary-stack-date {
+  align-items: flex-start;
+}
+
+.table-primary-stack-date .table-primary {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.table-primary-stack-date .table-meta {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.soc-table-ops .badge-neutral,
+.soc-table-ops .badge,
+.soc-table-ops .sev-pill {
+  letter-spacing: 0.05em;
+}
+
+.actions-stack-cell {
+  white-space: nowrap;
+}
+
+.actions-stack-cell .btn-icon-sm + .btn-icon-sm {
+  margin-left: 6px;
 }
 
 .table-primary {

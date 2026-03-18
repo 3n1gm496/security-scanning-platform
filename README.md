@@ -39,8 +39,11 @@ The platform is designed to scan code repositories, local paths, live URLs, and 
 - automatic scan summary emails plus high/critical alert emails driven by notification preferences
 
 ### Current repository baseline
-- `627` Python tests green
-- browser smoke covers login, dashboard, scans, findings, analytics, compare, settings, modals, light theme, and mobile nav
+- `631` Python tests green
+- browser smoke validates two seed modes:
+  - `normal` for mainline operator flows
+  - `edge` for long-value handling, chart empty states, and no-drift compare cases
+- browser smoke covers login, dashboard CTA flows, scans, findings, analytics, compare, settings writes, modals, light theme, mobile nav, refresh, and logout
 - CI builds Docker images and scans them with Trivy
 - reusable `Security Scan` workflow supports either remote platform scan or local Gitleaks fallback
 
@@ -145,6 +148,7 @@ graph TD
 The maintained architecture references are:
 - [docs/architecture.md](docs/architecture.md)
 - [docs/architecture.mmd](docs/architecture.mmd)
+- [docs/ui-validation-matrix.md](docs/ui-validation-matrix.md) for workflow-grade UI validation coverage
 
 ---
 

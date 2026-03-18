@@ -162,6 +162,15 @@ class FindingsPaginator:
     def __init__(self, per_page: int = 50):
         self.per_page = min(per_page, 1000)
 
+    @staticmethod
+    def _table_exists(conn: Any, table_name: str) -> bool:
+        """Return whether the requested table exists."""
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        return row is not None
+
     def paginate(
         self,
         conn: Any,
@@ -192,15 +201,28 @@ class FindingsPaginator:
         Returns:
             Paginated findings with cursor
         """
-        allowed_sort_columns = {"id", "scan_id", "severity", "tool", "timestamp", "line", "target_name", "title"}
+        allowed_sort_columns = {
+            "id",
+            "scan_id",
+            "severity",
+            "tool",
+            "timestamp",
+            "line",
+            "target_name",
+            "title",
+            "mgmt_status",
+        }
         # Map legacy column aliases to actual schema column names
         _col_alias = {"created_at": "timestamp", "line_number": "line", "file_path": "file", "cve_id": "cve"}
         sort_by = _col_alias.get(sort_by, sort_by)
         safe_sort_by = sort_by if sort_by in allowed_sort_columns else "id"
         safe_sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
         has_cwe_column = self._findings_has_cwe_column(conn)
+        has_finding_states_table = self._table_exists(conn, "finding_states")
+        status_expr = "COALESCE(fs.status, 'new')" if has_finding_states_table else "'new'"
+        from_clause = "FROM findings f"
+        join_clause = "LEFT JOIN finding_states fs ON fs.finding_id = f.id" if has_finding_states_table else ""
 
-        use_status_join = status_filter is not None
         where_clauses, params = self._build_findings_filters(
             search=search,
             severity_filter=severity_filter,
@@ -209,43 +231,33 @@ class FindingsPaginator:
             status_filter=status_filter,
             target_filter=target_filter,
             has_cwe_column=has_cwe_column,
+            has_finding_states_table=has_finding_states_table,
         )
 
         # Cursor — use table-qualified column when JOIN is active
         if cursor:
             cursor_val = self._decode_cursor(cursor)
             op = ">" if safe_sort_order == "ASC" else "<"
-            col_ref = f"f.{safe_sort_by}" if use_status_join else safe_sort_by
+            col_ref = status_expr if safe_sort_by == "mgmt_status" else f"f.{safe_sort_by}"
             where_clauses.append(f"{col_ref} {op} ?")
             params.append(cursor_val)
 
         where_sql = " AND ".join(where_clauses)
 
-        # Build query — use JOIN only when status filter is active
-        if use_status_join:
-            query = _join_sql_clauses(
-                (
-                    "SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,"
-                    f" f.line, f.tool, f.cve, {'f.cwe' if has_cwe_column else 'NULL AS cwe'},"
-                    " f.fingerprint, f.timestamp,"
-                    " f.target_name, COALESCE(fs.status, 'new') AS triage_status"
-                ),
-                "FROM findings f",
-                "LEFT JOIN finding_states fs ON fs.finding_id = f.id",
-                f"WHERE {where_sql}",
-                f"ORDER BY f.{safe_sort_by} {safe_sort_order}",
-                "LIMIT ?",
-            )
-        else:
-            # Standard query without JOIN
-            query = _join_sql_clauses(
-                "SELECT id, scan_id, title, description, severity, file,",
-                f"line, tool, cve, {'cwe' if has_cwe_column else 'NULL AS cwe'}, fingerprint, timestamp, target_name",
-                "FROM findings",
-                f"WHERE {where_sql}",
-                f"ORDER BY {safe_sort_by} {safe_sort_order}",
-                "LIMIT ?",
-            )
+        sort_ref = status_expr if safe_sort_by == "mgmt_status" else f"f.{safe_sort_by}"
+        query = _join_sql_clauses(
+            (
+                "SELECT f.id, f.scan_id, f.title, f.description, f.severity, f.file,"
+                f" f.line, f.tool, f.cve, {'f.cwe' if has_cwe_column else 'NULL AS cwe'},"
+                " f.fingerprint, f.timestamp,"
+                f" f.target_name, {status_expr} AS mgmt_status, {status_expr} AS triage_status"
+            ),
+            from_clause,
+            join_clause,
+            f"WHERE {where_sql}",
+            f"ORDER BY {sort_ref} {safe_sort_order}",
+            "LIMIT ?",
+        )
         params.append(self.per_page + 1)
 
         # Total count query (same filters, no cursor/LIMIT)
@@ -257,21 +269,15 @@ class FindingsPaginator:
             status_filter=status_filter,
             target_filter=target_filter,
             has_cwe_column=has_cwe_column,
+            has_finding_states_table=has_finding_states_table,
         )
         count_where = " AND ".join(count_clauses)
-        if use_status_join:
-            count_query = _join_sql_clauses(
-                "SELECT COUNT(*) AS total",
-                "FROM findings f",
-                "LEFT JOIN finding_states fs ON fs.finding_id = f.id",
-                f"WHERE {count_where}",
-            )
-        else:
-            count_query = _join_sql_clauses(
-                "SELECT COUNT(*) AS total",
-                "FROM findings",
-                f"WHERE {count_where}",
-            )
+        count_query = _join_sql_clauses(
+            "SELECT COUNT(*) AS total",
+            from_clause,
+            join_clause,
+            f"WHERE {count_where}",
+        )
         total_count = conn.execute(count_query, count_params).fetchone()["total"]
 
         rows = conn.execute(query, params).fetchall()
@@ -313,6 +319,7 @@ class FindingsPaginator:
         status_filter: str | None = None,
         target_filter: str | None = None,
         has_cwe_column: bool = True,
+        has_finding_states_table: bool = True,
     ) -> tuple[list[str], list[Any]]:
         """Build findings WHERE clauses and parameters once for data/count queries."""
         where_clauses = ["1=1"]
@@ -347,8 +354,11 @@ class FindingsPaginator:
 
         normalized_status = _normalize_finding_status(status_filter)
         if normalized_status is not None:
-            where_clauses.append("COALESCE(fs.status, 'new') = ?")
-            params.append(normalized_status)
+            if has_finding_states_table:
+                where_clauses.append("COALESCE(fs.status, 'new') = ?")
+                params.append(normalized_status)
+            elif normalized_status != "new":
+                where_clauses.append("1=0")
 
         return where_clauses, params
 

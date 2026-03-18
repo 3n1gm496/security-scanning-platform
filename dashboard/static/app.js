@@ -1810,7 +1810,10 @@ createApp({
         params.set('sort_order', this.findingsSort.order);
         const result = await apiFetch(`/api/findings/paginated?${params}`);
 
-        this.findings = result.items || [];
+        this.findings = (result.items || []).map((item) => ({
+          ...item,
+          mgmt_status: item.mgmt_status || item.triage_status || 'new',
+        }));
         this.selectedFindings = this.selectedFindings.filter(id => this.findings.some(f => f.id === id));
         const pag = result.pagination || {};
         this.findingsTotal = pag.total_count ?? pag.count ?? this.findings.length;
@@ -1886,10 +1889,11 @@ createApp({
     async applyBulkStatus() {
       if (!this.bulkStatus || this.selectedFindings.length === 0) return;
       try {
-        await apiFetch('/api/findings/bulk/update-status', {
+        const params = new URLSearchParams({ status: this.bulkStatus });
+        await apiFetch(`/api/findings/bulk/update-status?${params.toString()}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ finding_ids: this.selectedFindings, status: this.bulkStatus }),
+          body: JSON.stringify({ finding_ids: this.selectedFindings }),
         });
         this.showToast(`Status updated for ${this.selectedFindings.length} findings`);
         this.selectedFindings = [];
@@ -2675,10 +2679,17 @@ createApp({
 
     async saveNotificationPrefs() {
       try {
+        const payload = {
+          critical_alerts: !!this.notifPrefs.critical_alerts,
+          high_alerts: !!this.notifPrefs.high_alerts,
+          scan_summaries: !!this.notifPrefs.scan_summaries,
+          weekly_digest: !!this.notifPrefs.weekly_digest,
+          preferred_channel: this.notifPrefs.preferred_channel || 'email',
+        };
         await apiFetch('/api/notifications/preferences', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.notifPrefs),
+          body: JSON.stringify(payload),
         });
         this.showToast('Preferences saved');
       } catch (e) {

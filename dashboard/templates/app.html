@@ -1295,8 +1295,8 @@
     <!-- ================================================================
          MODAL: FINDING DETAIL
     ================================================================ -->
-    <div class="modal-overlay" v-if="selectedFinding" @click.self="closeFindingModal" role="dialog" aria-modal="true" aria-labelledby="finding-modal-title">
-      <div class="modal modal-xl modal-shell-investigation" ref="findingModal" tabindex="-1">
+    <div class="modal-overlay" v-if="selectedFinding" @click.self="closeFindingModal" @keydown.esc.stop.prevent="closeFindingModal" role="dialog" aria-modal="true" aria-labelledby="finding-modal-title">
+      <div class="modal modal-xl modal-shell-investigation" ref="findingModal" tabindex="-1" @keydown.esc.stop.prevent="closeFindingModal">
         <div class="modal-header">
           <div class="modal-title-group">
             <span class="severity-badge" :class="'sev-' + (selectedFinding.severity || 'unknown').toLowerCase()">{{ selectedFinding.severity }}</span>
@@ -1477,8 +1477,8 @@
     <!-- ================================================================
          MODAL: SCAN DETAIL
     ================================================================ -->
-    <div class="modal-overlay" v-if="selectedScan" @click.self="closeScanDetail" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
-      <div class="modal modal-lg modal-shell-investigation" ref="scanDetailModal" tabindex="-1">
+    <div class="modal-overlay" v-if="selectedScan" @click.self="closeScanDetail" @keydown.esc.stop.prevent="closeScanDetail" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
+      <div class="modal modal-lg modal-shell-investigation" ref="scanDetailModal" tabindex="-1" @keydown.esc.stop.prevent="closeScanDetail">
         <div class="modal-header">
           <div class="modal-title-group">
             <span class="badge" :class="statusBadgeClass(selectedScan.status)">{{ statusLabel(selectedScan.status) }}</span>
@@ -1560,8 +1560,8 @@
     <!-- ================================================================
          MODAL: NEW SCAN
     ================================================================ -->
-    <div class="modal-overlay" v-if="showScanModal" @click.self="closeScanModal" role="dialog" aria-modal="true" aria-labelledby="new-scan-modal-title">
-      <div class="modal modal-sm modal-shell-form" ref="scanModal" tabindex="-1">
+    <div class="modal-overlay" v-if="showScanModal" @click.self="closeScanModal" @keydown.esc.stop.prevent="closeScanModal" role="dialog" aria-modal="true" aria-labelledby="new-scan-modal-title">
+      <div class="modal modal-sm modal-shell-form" ref="scanModal" tabindex="-1" @keydown.esc.stop.prevent="closeScanModal">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Scan orchestration</span>
@@ -1611,8 +1611,8 @@
     <!-- ================================================================
          MODAL: CREATE API KEY
     ================================================================ -->
-    <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="closeCreateKeyModal" role="dialog" aria-modal="true" aria-labelledby="new-key-modal-title">
-      <div class="modal modal-sm modal-shell-form" ref="createKeyModal" tabindex="-1">
+    <div class="modal-overlay" v-if="showCreateKeyModal" @click.self="closeCreateKeyModal" @keydown.esc.stop.prevent="closeCreateKeyModal" role="dialog" aria-modal="true" aria-labelledby="new-key-modal-title">
+      <div class="modal modal-sm modal-shell-form" ref="createKeyModal" tabindex="-1" @keydown.esc.stop.prevent="closeCreateKeyModal">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Access automation</span>
@@ -1661,8 +1661,8 @@
     <!-- ================================================================
          MODAL: CREATE WEBHOOK
     ================================================================ -->
-    <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="closeCreateWebhookModal" role="dialog" aria-modal="true" aria-labelledby="new-webhook-modal-title">
-      <div class="modal modal-sm modal-shell-form" ref="createWebhookModal" tabindex="-1">
+    <div class="modal-overlay" v-if="showCreateWebhookModal" @click.self="closeCreateWebhookModal" @keydown.esc.stop.prevent="closeCreateWebhookModal" role="dialog" aria-modal="true" aria-labelledby="new-webhook-modal-title">
+      <div class="modal modal-sm modal-shell-form" ref="createWebhookModal" tabindex="-1" @keydown.esc.stop.prevent="closeCreateWebhookModal">
         <div class="modal-header">
           <div class="modal-title-stack">
             <span class="panel-kicker">Outbound automation</span>

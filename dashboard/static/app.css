@@ -2062,6 +2062,10 @@ code {
 }
 
 @media (max-width: 768px) {
+  .topbar-slim {
+    position: relative;
+    z-index: 70;
+  }
   .sidebar { display: none; }
   .sidebar.mobile-open {
     display: flex;
@@ -2106,7 +2110,11 @@ code {
     backdrop-filter: blur(6px);
     z-index: 50;
   }
-  .mobile-nav-toggle { display: inline-flex; }
+  .mobile-nav-toggle {
+    display: inline-flex;
+    position: relative;
+    z-index: 71;
+  }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .page-content { padding: var(--space-4); gap: var(--space-4); }
   .topbar-slim { padding: 0 var(--space-4); }

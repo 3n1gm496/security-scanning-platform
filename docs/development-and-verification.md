@@ -28,7 +28,7 @@ pytest -q
 ```
 
 Expected result:
-- full repository suite green from repo root (`627` tests in the current baseline)
+- full repository suite green from repo root (`631` tests in the current baseline)
 
 ### Frontend syntax check
 
@@ -38,14 +38,23 @@ node --check dashboard/static/app.js
 
 ### Browser smoke
 
+Normal mode:
+
 ```bash
-node scripts/browser_smoke.mjs
+BROWSER_SMOKE_SEED_MODE=normal node scripts/browser_smoke.mjs
+```
+
+Edge mode:
+
+```bash
+BROWSER_SMOKE_SEED_MODE=edge node scripts/browser_smoke.mjs
 ```
 
 The smoke flow:
 - seeds a runtime database
+- supports both `normal` and `edge` seed modes
 - starts the dashboard on a temporary port
-- exercises login, navigation, compare, settings, theme toggle, modals, mobile nav, keyboard row activation, and `Escape`-driven modal close
+- exercises login, dashboard CTA navigation, scan filters, findings triage actions, analytics loading, compare, settings writes, theme persistence, mobile nav, modals, and logout
 - rewrites screenshots in `artifacts/browser-smoke/` so the directory reflects the latest run only
 
 ---
@@ -78,7 +87,8 @@ Look for:
 
 - `pytest -q` green
 - `node --check dashboard/static/app.js` green
-- `node scripts/browser_smoke.mjs` green
+- `BROWSER_SMOKE_SEED_MODE=normal node scripts/browser_smoke.mjs` green
+- `BROWSER_SMOKE_SEED_MODE=edge node scripts/browser_smoke.mjs` green
 - no obvious console/page errors in smoke output
 - no ugly overflow in smoke screenshots
 - docs updated if the change affects:
@@ -142,3 +152,4 @@ docker/scanner-tools.Dockerfile
 ```
 
 If the browser smoke changes in a meaningful way, keep the saved screenshots and README/docs aligned with the new flow.
+For the canonical per-component checklist, see `docs/ui-validation-matrix.md`.

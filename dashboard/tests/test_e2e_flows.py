@@ -184,6 +184,19 @@ class TestFindingsFlow:
         assert len(items) == 2
         assert all(f["severity"] == "CRITICAL" for f in items)
 
+    def test_paginated_findings_exposes_mgmt_status(self, auth_client):
+        finding_id = auth_client.get("/api/findings/paginated?per_page=1").json()["items"][0]["id"]
+        auth_client.patch(
+            f"/api/findings/{finding_id}/status",
+            data={"status_value": "acknowledged"},
+        )
+
+        resp = auth_client.get("/api/findings/paginated?status=acknowledged&per_page=10")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert items
+        assert all(item["mgmt_status"] == "acknowledged" for item in items)
+
     def test_filter_by_tool(self, auth_client):
         resp = auth_client.get("/api/findings/paginated?tool=semgrep&per_page=50")
         assert resp.status_code == 200
@@ -205,6 +218,50 @@ class TestFindingsFlow:
         resp = auth_client.get(f"/api/findings/{finding_id}/state")
         assert resp.status_code == 200
         assert resp.json()["status"] == "acknowledged"
+
+    def test_bulk_update_status_accepts_query_status_with_json_ids(self, auth_client):
+        resp = auth_client.get("/api/findings/paginated?per_page=2")
+        finding_ids = [item["id"] for item in resp.json()["items"]]
+
+        resp = auth_client.post(
+            "/api/findings/bulk/update-status?status=acknowledged",
+            json={"finding_ids": finding_ids},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["updated_count"] == 2
+        assert data["status"] == "acknowledged"
+
+        resp = auth_client.get("/api/findings/paginated?status=acknowledged&per_page=10")
+        returned_ids = {item["id"] for item in resp.json()["items"]}
+        assert set(finding_ids).issubset(returned_ids)
+
+    def test_bulk_update_status_accepts_legacy_body_status(self, auth_client):
+        resp = auth_client.get("/api/findings/paginated?per_page=2")
+        finding_ids = [item["id"] for item in resp.json()["items"]]
+
+        resp = auth_client.post(
+            "/api/findings/bulk/update-status",
+            json={"finding_ids": finding_ids, "status": "resolved"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["updated_count"] == 2
+        assert data["status"] == "resolved"
+
+    def test_findings_can_sort_by_management_status(self, auth_client):
+        resp = auth_client.get("/api/findings/paginated?per_page=3")
+        ids = [item["id"] for item in resp.json()["items"][:2]]
+        for finding_id in ids:
+            auth_client.patch(
+                f"/api/findings/{finding_id}/status",
+                data={"status_value": "resolved"},
+            )
+
+        resp = auth_client.get("/api/findings/paginated?sort_by=mgmt_status&sort_order=DESC&per_page=10")
+        assert resp.status_code == 200
+        statuses = [item["mgmt_status"] for item in resp.json()["items"]]
+        assert "resolved" in statuses
 
     def test_status_counts_reflects_triage(self, auth_client):
         # Triage one finding

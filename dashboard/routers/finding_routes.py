@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from auth import AuthContext, require_auth, require_permission
 from db import get_connection, list_findings
-from fastapi import APIRouter, Depends, Form, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query
 from fastapi.responses import Response
 from finding_management import (
     FindingStatus,
@@ -253,17 +253,26 @@ async def api_get_finding_comments(finding_id: int, auth: AuthContext = Depends(
     dependencies=[Depends(require_permission(Permission.FINDING_WRITE))],
 )
 async def api_bulk_update_status(
-    finding_ids: list[int],
-    status_value: str = Query(..., alias="status"),
+    finding_ids: list[int] | None = Body(None),
+    status_from_body: str | None = Body(None, alias="status"),
+    status_value: str | None = Query(None, alias="status"),
     auth: AuthContext = Depends(require_auth),
 ) -> dict:
     """Bulk update status for multiple findings."""
-    try:
-        finding_status = FindingStatus(status_value)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status_value}")
+    resolved_ids = finding_ids or []
+    resolved_status = status_value or status_from_body
 
-    result = bulk_update_status(finding_ids, finding_status, user=_actor(auth))
+    if not resolved_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="finding_ids is required")
+    if not resolved_status:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status is required")
+
+    try:
+        finding_status = FindingStatus(resolved_status)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {resolved_status}")
+
+    result = bulk_update_status(resolved_ids, finding_status, user=_actor(auth))
     return result
 
 

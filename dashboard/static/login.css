@@ -254,6 +254,37 @@ body::before {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.login-trust-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.login-trust-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.login-trust-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.login-trust-item strong {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
 .login-brand h2 {
   margin-top: 10px;
   font-size: 34px;

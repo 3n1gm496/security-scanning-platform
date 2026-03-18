@@ -452,17 +452,28 @@ class NotificationPreferencesManager:
         """Get all email subscribers for a specific alert type."""
         try:
             NotificationPreferencesManager._ensure_preferences_table(conn)
-            allowed_alert_types = {
-                "critical_alerts": "critical_alerts",
-                "high_alerts": "high_alerts",
-                "scan_summaries": "scan_summaries",
-                "weekly_digest": "weekly_digest",
+            allowed_alert_queries = {
+                "critical_alerts": (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE critical_alerts = 1 AND preferred_channel = ?"
+                ),
+                "high_alerts": (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE high_alerts = 1 AND preferred_channel = ?"
+                ),
+                "scan_summaries": (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE scan_summaries = 1 AND preferred_channel = ?"
+                ),
+                "weekly_digest": (
+                    "SELECT user_email FROM notification_preferences "
+                    "WHERE weekly_digest = 1 AND preferred_channel = ?"
+                ),
             }
-            alert_column = allowed_alert_types.get(alert_type)
-            if not alert_column:
+            query = allowed_alert_queries.get(alert_type)
+            if not query:
                 return []
 
-            query = "SELECT user_email FROM notification_preferences " f"WHERE {alert_column} AND preferred_channel = ?"
             rows = conn.execute(query, ("email",)).fetchall()
             return [row["user_email"] for row in rows]
         except Exception:

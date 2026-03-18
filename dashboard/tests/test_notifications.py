@@ -198,7 +198,7 @@ def test_get_subscribers_query_is_backend_portable():
     subscribers = NotificationPreferencesManager.get_subscribers_for_alerts(conn, "critical_alerts")
 
     assert subscribers == ["user@example.com"]
-    assert "critical_alerts AND preferred_channel = ?" in conn.query
+    assert "critical_alerts = 1 AND preferred_channel = ?" in conn.query
     assert conn.params == ("email",)
 
 

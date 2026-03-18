@@ -2415,8 +2415,8 @@ code {
 [data-theme="light"] {
   --color-bg: #edf4fa;
   --color-bg-alt: #e4edf6;
-  --color-surface: rgba(255, 255, 255, 0.88);
-  --color-surface-2: rgba(248, 251, 255, 0.94);
+  --color-surface: rgba(255, 255, 255, 0.92);
+  --color-surface-2: rgba(248, 251, 255, 0.97);
   --color-surface-3: rgba(255, 255, 255, 0.98);
   --color-border: rgba(85, 110, 132, 0.16);
   --color-border-strong: rgba(76, 108, 138, 0.24);
@@ -2605,6 +2605,7 @@ body::before {
 
 [data-theme="light"] .topbar-slim {
   background: rgba(243, 249, 255, 0.78);
+  box-shadow: 0 12px 24px rgba(148, 163, 184, 0.08);
 }
 
 .page-context {
@@ -2821,6 +2822,7 @@ body::before {
 
 [data-theme="light"] .hero-panel {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 251, 255, 0.9) 100%);
+  box-shadow: 0 14px 34px rgba(148, 163, 184, 0.12);
 }
 
 .hero-panel-primary {
@@ -2999,6 +3001,7 @@ body::before {
 [data-theme="light"] .threat-rail-card,
 [data-theme="light"] .hero-panel-compact {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(247, 251, 255, 0.9) 100%);
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.12);
 }
 
 .threat-rail-card.critical {
@@ -3095,6 +3098,14 @@ body::before {
   box-shadow: 0 12px 34px rgba(148, 163, 184, 0.18);
 }
 
+[data-theme="light"] .card,
+[data-theme="light"] .workspace-intro-card,
+[data-theme="light"] .compare-setup-card,
+[data-theme="light"] .settings-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 249, 255, 0.92));
+  box-shadow: 0 14px 34px rgba(148, 163, 184, 0.12);
+}
+
 .chart-grid-dashboard {
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
 }
@@ -3138,6 +3149,7 @@ body::before {
 
 [data-theme="light"] .filters-card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(246, 250, 255, 0.9) 100%);
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.1);
 }
 
 .filters-row {
@@ -3176,6 +3188,11 @@ textarea,
 [data-theme="light"] .filter-select,
 [data-theme="light"] .comment-input {
   background: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="light"] .signal-tile {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(243, 248, 253, 0.92));
+  box-shadow: 0 10px 22px rgba(148, 163, 184, 0.1);
 }
 
 input:focus,

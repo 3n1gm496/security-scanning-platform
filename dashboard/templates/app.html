@@ -560,14 +560,14 @@
       <!-- ================================================================
            PAGE: FINDINGS
       ================================================================ -->
-      <div v-if="currentPage === 'findings'" class="page-content">
-        <div class="card workspace-intro-card workspace-intro-card-compact">
-          <div class="workspace-intro">
-            <div>
-              <span class="panel-kicker">Operations workspace</span>
-              <h2>Finding triage and remediation queue</h2>
-              <p>Prioritize critical exposure, preserve analyst context, and export only the subset the current investigation actually needs.</p>
-            </div>
+        <div v-if="currentPage === 'findings'" class="page-content">
+          <div class="card workspace-intro-card workspace-intro-card-compact">
+            <div class="workspace-intro">
+              <div>
+                <span class="panel-kicker">Triage console</span>
+                <h2>Active findings queue</h2>
+                <p>Move quickly from severity signal to evidence, ownership state, and exportable investigation subsets without losing analyst context.</p>
+              </div>
             <div class="workspace-intro-side workspace-intro-side-stack">
               <div class="workspace-metric-stack">
                 <span class="workspace-metric-label">Visible findings</span>
@@ -644,7 +644,7 @@
           </div>
           <!-- Export bar -->
           <div class="export-bar">
-            <span class="export-label">Export:</span>
+            <span class="export-label">Investigation exports</span>
             <div class="export-actions">
               <button class="btn-export" @click="exportFindings('json')">JSON</button>
               <button class="btn-export" @click="exportFindings('csv')">CSV</button>
@@ -660,7 +660,7 @@
           <div class="card-header">
             <div>
               <h2>Findings <span class="count-badge">{{ findingsTotal }}</span></h2>
-              <p class="card-subtitle">Severity-first queue with tool, target, identifier and file evidence in a single triage surface.</p>
+              <p class="card-subtitle">Severity-first queue tuned for fast triage, evidence review, and management updates without losing target context.</p>
             </div>
             <div class="bulk-actions" v-if="selectedFindings.length > 0">
               <span class="bulk-count">{{ selectedFindings.length }} selected</span>
@@ -684,7 +684,7 @@
           </div>
           <!-- Toggle colonne visibili -->
           <div class="col-toggle-bar col-toggle-pad">
-            <span class="col-toggle-label">Columns:</span>
+            <span class="col-toggle-label">Visible columns</span>
             <button v-for="col in findingsColumns" :key="col.key"
               class="col-toggle-btn" :class="{ active: col.visible }"
               @click="col.visible = !col.visible">{{ col.label }}</button>
@@ -724,8 +724,18 @@
                     <span class="severity-badge" :class="'sev-' + (finding.severity || 'unknown').toLowerCase()">{{ finding.severity }}</span>
                   </td>
                   <td v-if="colVisibleF('tool')" @click="openFindingDetail(finding)" class="cell-nowrap"><span class="badge badge-neutral">{{ finding.tool }}</span></td>
-                  <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap" :title="finding.target_name">{{ finding.target_name }}</td>
-                  <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide finding-title" :title="finding.title">{{ finding.title }}</td>
+                  <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap">
+                    <div class="table-primary-stack table-primary-stack-target" :title="finding.target_name">
+                      <span class="table-primary">{{ finding.target_name }}</span>
+                      <span class="table-meta">Scan {{ String(finding.scan_id).slice(0, 8) }}</span>
+                    </div>
+                  </td>
+                  <td v-if="colVisibleF('title')" @click="openFindingDetail(finding)" class="cell-wrap-wide">
+                    <div class="table-primary-stack table-primary-stack-finding" :title="finding.title">
+                      <span class="table-primary finding-title">{{ finding.title }}</span>
+                      <span class="table-meta">{{ categoryLabel(finding.category) }}</span>
+                    </div>
+                  </td>
                   <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-nowrap">
                     <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop :title="finding.cve">{{ truncateCve(finding.cve) }}</a>
                     <a v-else-if="finding.cwe && isValidCwe(finding.cwe)" :href="cweUrl(finding.cwe)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop :title="finding.cwe">{{ finding.cwe }}</a>
@@ -733,10 +743,13 @@
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td v-if="colVisibleF('file')" @click="openFindingDetail(finding)" class="cell-wrap">
-                    <code v-if="finding.file" class="file-code" :title="finding.file">{{ finding.file }}</code>
+                    <div v-if="finding.file" class="table-primary-stack table-primary-stack-file" :title="finding.file">
+                      <code class="file-code">{{ finding.file }}</code>
+                      <span class="table-meta" v-if="finding.line">Line {{ finding.line }}</span>
+                    </div>
                     <span v-else class="text-muted">—</span>
                   </td>
-                  <td v-if="colVisibleF('status')" @click="openFindingDetail(finding)">
+                  <td v-if="colVisibleF('status')" @click="openFindingDetail(finding)" class="table-status-cell">
                     <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ findingStatusLabel(finding.mgmt_status) }}</span>
                   </td>
                   <td @click.stop>
@@ -1313,11 +1326,11 @@
                 </div>
               </div>
               <div class="detail-col">
-                <div class="detail-section" v-if="selectedFinding.description">
+                <div class="detail-section detail-section-editorial" v-if="selectedFinding.description">
                   <h3>Description</h3>
                   <p class="detail-text">{{ selectedFinding.description }}</p>
                 </div>
-                <div class="detail-section" v-if="selectedFinding.remediation">
+                <div class="detail-section detail-section-editorial detail-section-highlight" v-if="selectedFinding.remediation">
                   <h3>Recommended remediation</h3>
                   <p class="detail-text remediation-text" v-html="linkifyText(selectedFinding.remediation)"></p>
                 </div>

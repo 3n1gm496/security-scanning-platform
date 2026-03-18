@@ -4309,6 +4309,25 @@ textarea {
   text-transform: uppercase;
 }
 
+.table-primary-stack-target .table-primary,
+.table-primary-stack-finding .table-primary {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.table-primary-stack-target .table-meta,
+.table-primary-stack-finding .table-meta,
+.table-primary-stack-file .table-meta {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.table-primary-stack-finding {
+  gap: 3px;
+}
+
 .soc-table-ops .badge-neutral,
 .soc-table-ops .badge,
 .soc-table-ops .sev-pill {
@@ -4347,7 +4366,7 @@ textarea {
 }
 
 .finding-title {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .cell-wrap,
@@ -4366,6 +4385,10 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
+}
+
+.table-status-cell .status-pill {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .risk-ranking {
@@ -4672,6 +4695,15 @@ textarea {
   border-bottom: none;
 }
 
+.detail-section-editorial {
+  padding: 16px 0 18px;
+}
+
+.detail-section-highlight {
+  border-top: 1px solid var(--color-border-light);
+  margin-top: 4px;
+}
+
 .detail-row {
   gap: 16px;
 }
@@ -4702,6 +4734,7 @@ textarea {
 .input-hint {
   color: var(--color-text-secondary);
   font-size: 13px;
+  line-height: 1.7;
 }
 
 .comments-list {

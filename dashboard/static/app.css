@@ -4461,9 +4461,16 @@ textarea {
   letter-spacing: -0.01em;
 }
 
+.table-primary-stack-id .table-primary {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 .table-primary-stack-target .table-meta,
 .table-primary-stack-finding .table-meta,
-.table-primary-stack-file .table-meta {
+.table-primary-stack-file .table-meta,
+.table-primary-stack-id .table-meta {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -4485,6 +4492,16 @@ textarea {
 
 .actions-stack-cell .btn-icon-sm + .btn-icon-sm {
   margin-left: 6px;
+}
+
+.table-action-cell {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.table-tool-cell,
+.table-status-cell {
+  white-space: nowrap;
 }
 
 .table-primary {
@@ -4578,6 +4595,14 @@ textarea {
 
 .table-primary-stack-url .file-name-code {
   color: var(--color-text);
+}
+
+.webhook-events-cell {
+  min-width: 220px;
+}
+
+.webhook-events-cell .badge {
+  margin-bottom: 6px;
 }
 
 .cell-wrap-soft {

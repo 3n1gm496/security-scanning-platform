@@ -733,7 +733,7 @@
                   <td v-if="colVisibleF('severity')" @click="openFindingDetail(finding)">
                     <span class="severity-badge" :class="'sev-' + (finding.severity || 'unknown').toLowerCase()">{{ finding.severity }}</span>
                   </td>
-                  <td v-if="colVisibleF('tool')" @click="openFindingDetail(finding)" class="cell-nowrap"><span class="badge badge-neutral">{{ finding.tool }}</span></td>
+                  <td v-if="colVisibleF('tool')" @click="openFindingDetail(finding)" class="cell-nowrap table-tool-cell"><span class="badge badge-neutral" :title="finding.tool">{{ finding.tool }}</span></td>
                   <td v-if="colVisibleF('target')" @click="openFindingDetail(finding)" class="cell-wrap">
                     <div class="table-primary-stack table-primary-stack-target" :title="finding.target_name">
                       <span class="table-primary">{{ finding.target_name }}</span>
@@ -746,10 +746,13 @@
                       <span class="table-meta">{{ categoryLabel(finding.category) }}</span>
                     </div>
                   </td>
-                  <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-nowrap">
-                    <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop :title="finding.cve">{{ truncateCve(finding.cve) }}</a>
-                    <a v-else-if="finding.cwe && isValidCwe(finding.cwe)" :href="cweUrl(finding.cwe)" target="_blank" rel="noopener noreferrer" class="cve-link" @click.stop :title="finding.cwe">{{ finding.cwe }}</a>
-                    <span v-else-if="finding.cve || finding.cwe" class="text-muted" :title="finding.cve || finding.cwe">{{ truncateCve(finding.cve || finding.cwe) }}</span>
+                  <td v-if="colVisibleF('cve')" @click="openFindingDetail(finding)" class="cell-wrap cell-cve-id">
+                    <div v-if="finding.cve || finding.cwe" class="table-primary-stack table-primary-stack-id" :title="finding.cve || finding.cwe">
+                      <a v-if="finding.cve && isValidCve(finding.cve)" :href="cveUrl(finding.cve)" target="_blank" rel="noopener noreferrer" class="cve-link table-primary" @click.stop>{{ truncateCve(finding.cve) }}</a>
+                      <a v-else-if="finding.cwe && isValidCwe(finding.cwe)" :href="cweUrl(finding.cwe)" target="_blank" rel="noopener noreferrer" class="cve-link table-primary" @click.stop>{{ finding.cwe }}</a>
+                      <span v-else class="text-muted table-primary">{{ truncateCve(finding.cve || finding.cwe) }}</span>
+                      <span class="table-meta">{{ finding.cve ? 'CVE identifier' : 'CWE identifier' }}</span>
+                    </div>
                     <span v-else class="text-muted">—</span>
                   </td>
                   <td v-if="colVisibleF('file')" @click="openFindingDetail(finding)" class="cell-wrap">
@@ -763,7 +766,7 @@
                   <td v-if="colVisibleF('status')" @click="openFindingDetail(finding)" class="table-status-cell">
                     <span class="status-pill" :class="'status-' + (finding.mgmt_status || 'new')">{{ findingStatusLabel(finding.mgmt_status) }}</span>
                   </td>
-                  <td @click.stop>
+                  <td @click.stop class="table-action-cell">
                     <button class="btn-icon-sm" type="button" @click="openFindingDetail(finding)" title="Details" :aria-label="`View details for finding ${finding.id}`">
                       <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
@@ -1058,8 +1061,13 @@
                 <tbody>
                   <tr v-for="f in compareResult.new_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
-                    <td>{{ f.tool }}</td>
-                    <td class="cell-wrap-wide" :title="f.title">{{ f.title }}</td>
+                    <td class="cell-nowrap table-tool-cell"><span class="badge badge-neutral" :title="f.tool">{{ f.tool }}</span></td>
+                    <td class="cell-wrap-wide">
+                      <div class="table-primary-stack table-primary-stack-finding" :title="f.title">
+                        <span class="table-primary finding-title">{{ f.title }}</span>
+                        <span class="table-meta">{{ categoryLabel(f.category) }}</span>
+                      </div>
+                    </td>
                     <td class="cell-wrap">
                       <div v-if="f.file" class="table-primary-stack table-primary-stack-file" :title="f.file">
                         <code class="file-code file-name-code">{{ fileName(f.file) }}</code>
@@ -1084,8 +1092,13 @@
                 <tbody>
                   <tr v-for="f in compareResult.resolved_findings" :key="f.id">
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
-                    <td>{{ f.tool }}</td>
-                    <td class="cell-wrap-wide" :title="f.title">{{ f.title }}</td>
+                    <td class="cell-nowrap table-tool-cell"><span class="badge badge-neutral" :title="f.tool">{{ f.tool }}</span></td>
+                    <td class="cell-wrap-wide">
+                      <div class="table-primary-stack table-primary-stack-finding" :title="f.title">
+                        <span class="table-primary finding-title">{{ f.title }}</span>
+                        <span class="table-meta">{{ categoryLabel(f.category) }}</span>
+                      </div>
+                    </td>
                     <td class="cell-wrap">
                       <div v-if="f.file" class="table-primary-stack table-primary-stack-file" :title="f.file">
                         <code class="file-code file-name-code">{{ fileName(f.file) }}</code>
@@ -1167,7 +1180,7 @@
                   <td class="cell-wrap" :title="key.created_by || '—'">{{ key.created_by || '—' }}</td>
                   <td class="cell-nowrap">{{ formatDate(key.created_at) }}</td>
                   <td class="cell-nowrap">{{ key.expires_at ? formatDate(key.expires_at) : 'Never' }}</td>
-                  <td>
+                  <td class="table-action-cell">
                     <button class="btn-danger btn-sm" @click="revokeApiKey(key.prefix)">Revoke</button>
                   </td>
                 </tr>
@@ -1202,14 +1215,16 @@
                       <span class="table-meta" v-if="urlPath(wh.url)">{{ urlPath(wh.url) }}</span>
                     </div>
                   </td>
-                  <td><span class="badge badge-neutral u-mr-4" v-for="ev in (wh.events || '').split(',')" :key="ev">{{ ev.trim() }}</span></td>
-                  <td>
+                  <td class="webhook-events-cell">
+                    <span class="badge badge-neutral u-mr-4" v-for="ev in (wh.events || '').split(',')" :key="ev">{{ ev.trim() }}</span>
+                  </td>
+                  <td class="table-action-cell">
                     <label class="toggle-switch">
                       <input type="checkbox" :checked="wh.is_active" @change="toggleWebhook(wh.id, $event.target.checked)" :aria-label="`Toggle webhook ${wh.name}`">
                       <span class="toggle-slider"></span>
                     </label>
                   </td>
-                  <td>
+                  <td class="table-action-cell">
                     <button class="btn-danger btn-sm" @click="deleteWebhook(wh.id)">Delete</button>
                   </td>
                 </tr>

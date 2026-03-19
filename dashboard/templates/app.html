@@ -297,7 +297,12 @@
                     <td colspan="4" class="empty-state">No findings-bearing scans yet.</td>
                   </tr>
                   <tr v-for="scan in recentScans.slice(0, 6)" :key="scan.id" @click="openScanDetail(scan)" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)" class="row-clickable" tabindex="0">
-                    <td class="cell-wrap cell-watch-target" :title="scan.target_name">{{ scan.target_name }}</td>
+                    <td class="cell-wrap cell-watch-target">
+                      <div class="table-primary-stack table-primary-stack-scan" :title="scan.target_name">
+                        <span class="table-primary">{{ scan.target_name }}</span>
+                        <span class="table-meta">{{ scan.target_type || 'target' }}</span>
+                      </div>
+                    </td>
                     <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
                     <td>
                       <span class="metric-pill metric-pill-danger">{{ scan.critical_count || 0 }}</span>
@@ -367,7 +372,12 @@
                     <td colspan="6" class="empty-state">No findings-bearing scans yet.</td>
                   </tr>
                   <tr v-for="scan in recentScans" :key="scan.id" @click="openScanDetail(scan)" @keydown.enter.prevent="openScanDetail(scan)" @keydown.space.prevent="openScanDetail(scan)" class="row-clickable" tabindex="0">
-                    <td class="cell-wrap" :title="scan.target_name">{{ scan.target_name }}</td>
+                    <td class="cell-wrap">
+                      <div class="table-primary-stack table-primary-stack-scan" :title="scan.target_name">
+                        <span class="table-primary">{{ scan.target_name }}</span>
+                        <span class="table-meta">{{ scan.target_type || 'target' }}</span>
+                      </div>
+                    </td>
                     <td><span class="badge" :class="statusBadgeClass(scan.status)">{{ statusLabel(scan.status) }}</span></td>
                     <td><span class="metric-pill metric-pill-danger">{{ scan.critical_count || 0 }}</span></td>
                     <td><span class="metric-pill metric-pill-amber">{{ scan.high_count || 0 }}</span></td>
@@ -909,7 +919,7 @@
               <thead><tr><th scope="col">CWE</th><th scope="col">Findings</th><th scope="col">Distribution</th></tr></thead>
               <tbody>
                 <tr v-for="item in analyticsData.compliance.cwe_top" :key="item.cwe">
-                  <td><a :href="'https://cwe.mitre.org/data/definitions/' + item.cwe.replace('CWE-', '') + '.html'" target="_blank" rel="noopener noreferrer" class="cve-link">{{ item.cwe }}</a></td>
+                  <td><a :href="'https://cwe.mitre.org/data/definitions/' + item.cwe.replace('CWE-', '') + '.html'" target="_blank" rel="noopener noreferrer" class="cve-link" :title="item.cwe">{{ item.cwe }}</a></td>
                   <td><strong>{{ item.count }}</strong></td>
                   <td>
                     <div class="mini-bar-wrap">

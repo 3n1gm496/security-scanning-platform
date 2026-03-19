@@ -2978,6 +2978,21 @@ createApp({
       return `https://cwe.mitre.org/data/definitions/${String(cwe).replace(/^CWE-/i, '')}.html`;
     },
 
+    fileName(filePath) {
+      if (!filePath) return '';
+      const normalized = String(filePath).replace(/\\/g, '/');
+      const parts = normalized.split('/').filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : normalized;
+    },
+
+    fileDirectory(filePath) {
+      if (!filePath) return '';
+      const normalized = String(filePath).replace(/\\/g, '/');
+      const idx = normalized.lastIndexOf('/');
+      if (idx <= 0) return '';
+      return normalized.slice(0, idx + 1);
+    },
+
     // Truncate long CWE/OWASP strings for table display.
     // e.g. "CWE-22: Improper Limitation of a Pathname..." → "CWE-22"
     // e.g. "A01:2021 - Broken Access Control" → "A01:2021"

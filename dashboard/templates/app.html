@@ -744,7 +744,8 @@
                   </td>
                   <td v-if="colVisibleF('file')" @click="openFindingDetail(finding)" class="cell-wrap">
                     <div v-if="finding.file" class="table-primary-stack table-primary-stack-file" :title="finding.file">
-                      <code class="file-code">{{ finding.file }}</code>
+                      <code class="file-code file-name-code">{{ fileName(finding.file) }}</code>
+                      <span class="table-meta" v-if="fileDirectory(finding.file)">{{ fileDirectory(finding.file) }}</span>
                       <span class="table-meta" v-if="finding.line">Line {{ finding.line }}</span>
                     </div>
                     <span v-else class="text-muted">—</span>
@@ -1049,7 +1050,13 @@
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
                     <td>{{ f.tool }}</td>
                     <td class="cell-wrap-wide" :title="f.title">{{ f.title }}</td>
-                    <td class="cell-wrap"><code v-if="f.file" class="file-code" :title="f.file">{{ f.file }}</code><span v-else class="text-muted">—</span></td>
+                    <td class="cell-wrap">
+                      <div v-if="f.file" class="table-primary-stack table-primary-stack-file" :title="f.file">
+                        <code class="file-code file-name-code">{{ fileName(f.file) }}</code>
+                        <span class="table-meta" v-if="fileDirectory(f.file)">{{ fileDirectory(f.file) }}</span>
+                      </div>
+                      <span v-else class="text-muted">—</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -1069,7 +1076,13 @@
                     <td><span class="severity-badge" :class="'sev-' + (f.severity || 'unknown').toLowerCase()">{{ f.severity }}</span></td>
                     <td>{{ f.tool }}</td>
                     <td class="cell-wrap-wide" :title="f.title">{{ f.title }}</td>
-                    <td class="cell-wrap"><code v-if="f.file" class="file-code" :title="f.file">{{ f.file }}</code><span v-else class="text-muted">—</span></td>
+                    <td class="cell-wrap">
+                      <div v-if="f.file" class="table-primary-stack table-primary-stack-file" :title="f.file">
+                        <code class="file-code file-name-code">{{ fileName(f.file) }}</code>
+                        <span class="table-meta" v-if="fileDirectory(f.file)">{{ fileDirectory(f.file) }}</span>
+                      </div>
+                      <span v-else class="text-muted">—</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -1342,7 +1355,7 @@
                   </div>
                   <div class="detail-row" v-if="selectedFinding.file">
                     <span class="detail-key">File</span>
-                    <span class="detail-val"><code>{{ selectedFinding.file }}{{ selectedFinding.line ? ':' + selectedFinding.line : '' }}</code></span>
+                    <span class="detail-val"><code class="detail-code-wrap">{{ selectedFinding.file }}{{ selectedFinding.line ? ':' + selectedFinding.line : '' }}</code></span>
                   </div>
                   <div class="detail-row" v-if="selectedFinding.package">
                     <span class="detail-key">Package</span>

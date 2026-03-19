@@ -4524,12 +4524,43 @@ textarea {
   max-width: 360px;
 }
 
+.table-primary-stack-file {
+  min-width: 0;
+}
+
+.table-primary-stack-file .table-meta {
+  max-width: 100%;
+}
+
 .file-code {
   display: inline-block;
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
+}
+
+.file-name-code {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.table-primary-stack-file code.file-code {
+  max-width: 100%;
+}
+
+.table-primary-stack-file .table-meta {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-primary-stack-file .table-meta:last-child {
+  font-family: inherit;
+  letter-spacing: 0.02em;
 }
 
 .table-status-cell .status-pill {
@@ -4985,6 +5016,12 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
+}
+
+.detail-val .detail-code-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-text,

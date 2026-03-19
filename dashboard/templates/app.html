@@ -1151,10 +1151,10 @@
                   </td>
                 </tr>
                 <tr v-for="key in apiKeys" :key="key.prefix">
-                  <td>{{ key.name }}</td>
+                  <td class="cell-wrap-wide" :title="key.name">{{ key.name }}</td>
                   <td><code class="id-code" :title="`${key.prefix}...`">{{ key.prefix }}...</code></td>
                   <td><span class="badge" :class="key.role === 'admin' ? 'badge-danger' : key.role === 'operator' ? 'badge-warning' : 'badge-neutral'">{{ key.role }}</span></td>
-                  <td>{{ key.created_by || '—' }}</td>
+                  <td class="cell-wrap" :title="key.created_by || '—'">{{ key.created_by || '—' }}</td>
                   <td class="cell-nowrap">{{ formatDate(key.created_at) }}</td>
                   <td class="cell-nowrap">{{ key.expires_at ? formatDate(key.expires_at) : 'Never' }}</td>
                   <td>
@@ -1185,8 +1185,13 @@
               <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col">Active</th><th scope="col" class="th-actions">Actions</th></tr></thead>
               <tbody>
                 <tr v-for="wh in webhooks" :key="wh.id">
-                  <td>{{ wh.name }}</td>
-                  <td class="cell-wrap"><code class="file-code">{{ wh.url }}</code></td>
+                  <td class="cell-wrap-wide" :title="wh.name">{{ wh.name }}</td>
+                  <td class="cell-wrap">
+                    <div class="table-primary-stack table-primary-stack-url" :title="wh.url">
+                      <code class="file-code file-name-code">{{ urlHost(wh.url) }}</code>
+                      <span class="table-meta" v-if="urlPath(wh.url)">{{ urlPath(wh.url) }}</span>
+                    </div>
+                  </td>
                   <td><span class="badge badge-neutral u-mr-4" v-for="ev in (wh.events || '').split(',')" :key="ev">{{ ev.trim() }}</span></td>
                   <td>
                     <label class="toggle-switch">
@@ -1557,9 +1562,9 @@
                   </td>
                   <td>{{ tr.finding_count }}</td>
                   <td><span v-if="tr.cache_hit" class="badge badge-neutral" title="Result served from cache">cached</span><span v-else>&#8212;</span></td>
-                  <td class="cell-wrap" :title="tr.error || tr.stderr || ''">
-                    <span v-if="tr.error" style="color:var(--color-danger,#ef4444)">{{ tr.error }}</span>
-                    <span v-else-if="tr.cache_hit" style="opacity:0.6">cache hit</span>
+                  <td class="cell-wrap cell-wrap-soft" :title="tr.error || tr.stderr || ''">
+                    <span v-if="tr.error" class="table-note-soft table-note-soft-error">{{ tr.error }}</span>
+                    <span v-else-if="tr.cache_hit" class="table-note-soft table-note-soft-muted">cache hit</span>
                     <span v-else>&#8212;</span>
                   </td>
                 </tr>

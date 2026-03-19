@@ -2993,6 +2993,26 @@ createApp({
       return normalized.slice(0, idx + 1);
     },
 
+    urlHost(value) {
+      if (!value) return '';
+      try {
+        const url = new URL(String(value));
+        return url.host;
+      } catch (_) {
+        return String(value);
+      }
+    },
+
+    urlPath(value) {
+      if (!value) return '';
+      try {
+        const url = new URL(String(value));
+        return `${url.pathname || '/'}${url.search || ''}${url.hash || ''}`;
+      } catch (_) {
+        return '';
+      }
+    },
+
     // Truncate long CWE/OWASP strings for table display.
     // e.g. "CWE-22: Improper Limitation of a Pathname..." → "CWE-22"
     // e.g. "A01:2021 - Broken Access Control" → "A01:2021"

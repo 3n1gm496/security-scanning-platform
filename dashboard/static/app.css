@@ -4528,6 +4528,10 @@ textarea {
   min-width: 0;
 }
 
+.table-primary-stack-url {
+  min-width: 0;
+}
+
 .table-primary-stack-file .table-meta {
   max-width: 100%;
 }
@@ -4561,6 +4565,40 @@ textarea {
 .table-primary-stack-file .table-meta:last-child {
   font-family: inherit;
   letter-spacing: 0.02em;
+}
+
+.table-primary-stack-url .table-meta {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  letter-spacing: 0;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-primary-stack-url .file-name-code {
+  color: var(--color-text);
+}
+
+.cell-wrap-soft {
+  white-space: normal;
+}
+
+.table-note-soft {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.table-note-soft-error {
+  color: var(--color-danger, #ef4444);
+}
+
+.table-note-soft-muted {
+  opacity: 0.7;
 }
 
 .table-status-cell .status-pill {

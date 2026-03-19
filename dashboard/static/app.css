@@ -4497,6 +4497,7 @@ textarea {
 .table-action-cell {
   white-space: nowrap;
   width: 1%;
+  text-align: right;
 }
 
 .table-tool-cell,
@@ -4599,10 +4600,15 @@ textarea {
 
 .webhook-events-cell {
   min-width: 220px;
+  max-width: 320px;
 }
 
 .webhook-events-cell .badge {
   margin-bottom: 6px;
+}
+
+.cell-cve-id {
+  max-width: 190px;
 }
 
 .cell-wrap-soft {
